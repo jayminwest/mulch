@@ -4,6 +4,7 @@ import { readConfig, getExpertisePath } from "../utils/config.js";
 import {
   readExpertiseFile,
   writeExpertiseFile,
+  resolveRecordId,
 } from "../utils/expertise.js";
 import { getRecordSummary } from "../utils/format.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
@@ -12,10 +13,10 @@ export function registerDeleteCommand(program: Command): void {
   program
     .command("delete")
     .argument("<domain>", "expertise domain")
-    .argument("<identifier>", "record ID (mx-XXXXXX) or 1-based index")
+    .argument("<id>", "record ID (e.g. mx-abc123, abc123, or abc)")
     .description("Delete an expertise record")
     .action(
-      async (domain: string, identifier: string) => {
+      async (domain: string, id: string) => {
         const jsonMode = program.opts().json === true;
         try {
           const config = await readConfig();
@@ -40,52 +41,17 @@ export function registerDeleteCommand(program: Command): void {
           const filePath = getExpertisePath(domain);
           const records = await readExpertiseFile(filePath);
 
-          let targetIndex: number;
-
-          if (identifier.startsWith("mx-")) {
-            // ID-based lookup
-            const found = records.findIndex((r) => r.id === identifier);
-            if (found === -1) {
-              if (jsonMode) {
-                outputJsonError("delete", `Record with ID "${identifier}" not found in domain "${domain}".`);
-              } else {
-                console.error(
-                  chalk.red(`Error: record with ID "${identifier}" not found in domain "${domain}".`),
-                );
-              }
-              process.exitCode = 1;
-              return;
+          const resolved = resolveRecordId(records, id);
+          if (!resolved.ok) {
+            if (jsonMode) {
+              outputJsonError("delete", resolved.error);
+            } else {
+              console.error(chalk.red(`Error: ${resolved.error}`));
             }
-            targetIndex = found;
-          } else {
-            // Legacy 1-based index
-            const index = parseInt(identifier, 10);
-            if (isNaN(index) || index < 1) {
-              if (jsonMode) {
-                outputJsonError("delete", "Identifier must be a record ID (mx-XXXXXX) or a positive integer (1-based index).");
-              } else {
-                console.error(
-                  chalk.red("Error: identifier must be a record ID (mx-XXXXXX) or a positive integer (1-based index)."),
-                );
-              }
-              process.exitCode = 1;
-              return;
-            }
-            if (index > records.length) {
-              if (jsonMode) {
-                outputJsonError("delete", `Index ${index} out of range. Domain "${domain}" has ${records.length} record(s).`);
-              } else {
-                console.error(
-                  chalk.red(
-                    `Error: index ${index} out of range. Domain "${domain}" has ${records.length} record(s).`,
-                  ),
-                );
-              }
-              process.exitCode = 1;
-              return;
-            }
-            targetIndex = index - 1;
+            process.exitCode = 1;
+            return;
           }
+          const targetIndex = resolved.index;
 
           const deleted = records[targetIndex];
           records.splice(targetIndex, 1);
@@ -97,15 +63,13 @@ export function registerDeleteCommand(program: Command): void {
               command: "delete",
               domain,
               id: deleted.id ?? null,
-              index: targetIndex + 1,
               type: deleted.type,
               summary: getRecordSummary(deleted),
             });
           } else {
-            const idLabel = deleted.id ? ` (${deleted.id})` : "";
             console.log(
               chalk.green(
-                `✔ Deleted ${deleted.type} #${targetIndex + 1}${idLabel} from ${domain}: ${getRecordSummary(deleted)}`,
+                `✔ Deleted ${deleted.type} ${deleted.id ?? ""} from ${domain}: ${getRecordSummary(deleted)}`,
               ),
             );
           }

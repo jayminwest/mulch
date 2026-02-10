@@ -229,7 +229,7 @@ describe("prime command", () => {
     expect(output).toContain("<expertise>");
     expect(output).toContain("</expertise>");
     expect(output).toContain('<domain name="testing"');
-    expect(output).toContain('<convention classification="foundational">');
+    expect(output).toMatch(/<convention id="mx-[0-9a-f]+" classification="foundational">/);
     expect(output).toContain("Use vitest");
     expect(output).toContain("<resolution>Use streaming</resolution>");
   });
@@ -286,9 +286,9 @@ describe("prime command", () => {
     expect(output).toContain("Project Expertise (via Mulch)");
     expect(output).toContain("[testing]");
     expect(output).toContain("Conventions:");
-    expect(output).toContain("  - Use vitest");
+    expect(output).toMatch(/- \[mx-[0-9a-f]+\] Use vitest/);
     expect(output).toContain("Decisions:");
-    expect(output).toContain("  - Use ESM: Better tree-shaking");
+    expect(output).toMatch(/- \[mx-[0-9a-f]+\] Use ESM: Better tree-shaking/);
     // Should not contain markdown
     expect(output).not.toContain("##");
     expect(output).not.toContain("**");
@@ -562,11 +562,11 @@ describe("prime command", () => {
       const lastUpdated = await getFileModTime(filePath);
       const section = formatDomainExpertiseXml("testing", records, lastUpdated);
 
-      expect(section).toContain('<reference classification="foundational">');
+      expect(section).toMatch(/<reference id="mx-[0-9a-f]+" classification="foundational">/);
       expect(section).toContain("<name>config-file</name>");
       expect(section).toContain("<files>config.yaml</files>");
       expect(section).toContain("</reference>");
-      expect(section).toContain('<guide classification="tactical">');
+      expect(section).toMatch(/<guide id="mx-[0-9a-f]+" classification="tactical">/);
       expect(section).toContain("<name>setup-guide</name>");
       expect(section).toContain("</guide>");
     });
@@ -600,9 +600,9 @@ describe("prime command", () => {
       const section = formatDomainExpertisePlain("testing", records, lastUpdated);
 
       expect(section).toContain("References:");
-      expect(section).toContain("  - entry-point: Main entry (src/index.ts)");
+      expect(section).toMatch(/- \[mx-[0-9a-f]+\] entry-point: Main entry \(src\/index\.ts\)/);
       expect(section).toContain("Guides:");
-      expect(section).toContain("  - deploy-guide: How to deploy");
+      expect(section).toMatch(/- \[mx-[0-9a-f]+\] deploy-guide: How to deploy/);
     });
 
     it("MCP output includes reference and guide records", async () => {

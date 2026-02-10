@@ -8,6 +8,7 @@ import {
   readExpertiseFile,
   writeExpertiseFile,
   createExpertiseFile,
+  resolveRecordId,
 } from "../../src/utils/expertise.js";
 import { initMulchDir, writeConfig, getExpertisePath } from "../../src/utils/config.js";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
@@ -142,6 +143,94 @@ describe("appendRecord with ID generation", () => {
     await appendRecord(filePath, record);
     const records = await readExpertiseFile(filePath);
     expect(records[0].id).toBe("mx-aabbcc");
+  });
+});
+
+describe("resolveRecordId", () => {
+  const records: ExpertiseRecord[] = [
+    {
+      id: "mx-aabbcc",
+      type: "convention",
+      content: "First",
+      classification: "foundational",
+      recorded_at: new Date().toISOString(),
+    },
+    {
+      id: "mx-ddeeff",
+      type: "pattern",
+      name: "test-pattern",
+      description: "Second",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+    },
+    {
+      id: "mx-aabb11",
+      type: "failure",
+      description: "Third",
+      resolution: "Fix it",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+    },
+  ];
+
+  it("resolves full ID (mx-aabbcc)", () => {
+    const result = resolveRecordId(records, "mx-aabbcc");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.index).toBe(0);
+      expect(result.record.id).toBe("mx-aabbcc");
+    }
+  });
+
+  it("resolves bare hash (aabbcc)", () => {
+    const result = resolveRecordId(records, "aabbcc");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.index).toBe(0);
+    }
+  });
+
+  it("resolves unique prefix (dde)", () => {
+    const result = resolveRecordId(records, "dde");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.index).toBe(1);
+      expect(result.record.id).toBe("mx-ddeeff");
+    }
+  });
+
+  it("resolves unique prefix with mx- (mx-dde)", () => {
+    const result = resolveRecordId(records, "mx-dde");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.index).toBe(1);
+    }
+  });
+
+  it("returns error for ambiguous prefix (aabb)", () => {
+    const result = resolveRecordId(records, "aabb");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Ambiguous");
+      expect(result.error).toContain("mx-aabbcc");
+      expect(result.error).toContain("mx-aabb11");
+    }
+  });
+
+  it("returns error for non-existent ID", () => {
+    const result = resolveRecordId(records, "mx-999999");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("not found");
+    }
+  });
+
+  it("returns error for non-existent prefix", () => {
+    const result = resolveRecordId(records, "zzz");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("not found");
+    }
   });
 });
 

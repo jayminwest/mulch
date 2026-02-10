@@ -1,6 +1,6 @@
 {
   "name": "mulch-cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Let your agents grow 🌱 — structured expertise files that accumulate over time, live in git, work with any agent",
   "type": "module",
   "bin": {

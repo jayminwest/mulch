@@ -155,6 +155,57 @@ export function findDuplicate(
   return null;
 }
 
+export type ResolveResult =
+  | { ok: true; index: number; record: ExpertiseRecord }
+  | { ok: false; error: string };
+
+/**
+ * Resolve an identifier to a record within a domain.
+ * Accepts: full ID (mx-abc123), bare hash (abc123), or prefix (abc / mx-abc).
+ * Returns the unique matching record or an error if not found / ambiguous.
+ */
+export function resolveRecordId(
+  records: ExpertiseRecord[],
+  identifier: string,
+): ResolveResult {
+  // Normalize: strip mx- prefix if present to get the hash part
+  const hash = identifier.startsWith("mx-")
+    ? identifier.slice(3)
+    : identifier;
+
+  // Try exact match first
+  const exactIndex = records.findIndex((r) => r.id === `mx-${hash}`);
+  if (exactIndex !== -1) {
+    return { ok: true, index: exactIndex, record: records[exactIndex] };
+  }
+
+  // Try prefix match
+  const matches: Array<{ index: number; record: ExpertiseRecord }> = [];
+  for (let i = 0; i < records.length; i++) {
+    const rid = records[i].id;
+    if (rid && rid.startsWith(`mx-${hash}`)) {
+      matches.push({ index: i, record: records[i] });
+    }
+  }
+
+  if (matches.length === 1) {
+    return { ok: true, index: matches[0].index, record: matches[0].record };
+  }
+
+  if (matches.length > 1) {
+    const ids = matches.map((m) => m.record.id).join(", ");
+    return {
+      ok: false,
+      error: `Ambiguous identifier "${identifier}" matches ${matches.length} records: ${ids}. Use more characters to disambiguate.`,
+    };
+  }
+
+  return {
+    ok: false,
+    error: `Record "${identifier}" not found. Run \`mulch query\` to see record IDs.`,
+  };
+}
+
 export function searchRecords(
   records: ExpertiseRecord[],
   query: string,

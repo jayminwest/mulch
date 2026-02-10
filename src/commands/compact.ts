@@ -5,6 +5,7 @@ import {
   readExpertiseFile,
   writeExpertiseFile,
   generateRecordId,
+  resolveRecordId,
 } from "../utils/expertise.js";
 import { recordSchema } from "../schemas/record-schema.js";
 import type {
@@ -19,7 +20,7 @@ const Ajv = _Ajv.default ?? _Ajv;
 interface CompactCandidate {
   domain: string;
   type: RecordType;
-  records: Array<{ index: number; id: string | undefined; summary: string; recorded_at: string }>;
+  records: Array<{ id: string | undefined; summary: string; recorded_at: string }>;
 }
 
 function findCandidates(
@@ -29,13 +30,12 @@ function findCandidates(
   shelfLife: { tactical: number; observational: number },
 ): CompactCandidate[] {
   // Group records by type
-  const byType = new Map<RecordType, Array<{ index: number; record: ExpertiseRecord }>>();
-  for (let i = 0; i < records.length; i++) {
-    const r = records[i];
+  const byType = new Map<RecordType, ExpertiseRecord[]>();
+  for (const r of records) {
     if (!byType.has(r.type)) {
       byType.set(r.type, []);
     }
-    byType.get(r.type)!.push({ index: i + 1, record: r });
+    byType.get(r.type)!.push(r);
   }
 
   const candidates: CompactCandidate[] = [];
@@ -44,12 +44,12 @@ function findCandidates(
     if (group.length < 2) continue;
 
     // Include groups where at least one record is stale or the group is large (3+)
-    const hasStale = group.some((g) => {
-      if (g.record.classification === "foundational") return false;
-      const ageMs = now.getTime() - new Date(g.record.recorded_at).getTime();
+    const hasStale = group.some((r) => {
+      if (r.classification === "foundational") return false;
+      const ageMs = now.getTime() - new Date(r.recorded_at).getTime();
       const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-      if (g.record.classification === "tactical") return ageDays > shelfLife.tactical;
-      if (g.record.classification === "observational") return ageDays > shelfLife.observational;
+      if (r.classification === "tactical") return ageDays > shelfLife.tactical;
+      if (r.classification === "observational") return ageDays > shelfLife.observational;
       return false;
     });
 
@@ -57,11 +57,10 @@ function findCandidates(
       candidates.push({
         domain,
         type,
-        records: group.map((g) => ({
-          index: g.index,
-          id: g.record.id,
-          summary: getRecordSummary(g.record),
-          recorded_at: g.record.recorded_at,
+        records: group.map((r) => ({
+          id: r.id,
+          summary: getRecordSummary(r),
+          recorded_at: r.recorded_at,
         })),
       });
     }
@@ -70,25 +69,17 @@ function findCandidates(
   return candidates;
 }
 
-function resolveRecordIndices(
+function resolveRecordIds(
   records: ExpertiseRecord[],
   identifiers: string[],
 ): number[] {
   const indices: number[] = [];
   for (const id of identifiers) {
-    if (id.startsWith("mx-")) {
-      const found = records.findIndex((r) => r.id === id);
-      if (found === -1) {
-        throw new Error(`Record with ID "${id}" not found.`);
-      }
-      indices.push(found);
-    } else {
-      const idx = parseInt(id, 10);
-      if (isNaN(idx) || idx < 1 || idx > records.length) {
-        throw new Error(`Invalid index "${id}". Must be 1-${records.length}.`);
-      }
-      indices.push(idx - 1);
+    const result = resolveRecordId(records, id);
+    if (!result.ok) {
+      throw new Error(result.error);
     }
+    indices.push(result.index);
   }
   return indices;
 }
@@ -100,7 +91,7 @@ export function registerCompactCommand(program: Command): void {
     .description("Compact records: analyze candidates or apply a compaction")
     .option("--analyze", "show compaction candidates")
     .option("--apply", "apply a compaction (replace records with summary)")
-    .option("--records <ids>", "comma-separated record IDs or indices to compact")
+    .option("--records <ids>", "comma-separated record IDs to compact")
     .option("--type <type>", "record type for the replacement")
     .option("--name <name>", "name for replacement (pattern/reference/guide)")
     .option("--title <title>", "title for replacement (decision)")
@@ -175,8 +166,7 @@ async function handleAnalyze(jsonMode: boolean): Promise<void> {
   for (const c of allCandidates) {
     console.log(chalk.cyan(`${c.domain}/${c.type}`) + ` (${c.records.length} records)`);
     for (const r of c.records) {
-      const idLabel = r.id ? ` ${r.id}` : "";
-      console.log(`  #${r.index}${idLabel}: ${r.summary}`);
+      console.log(`  ${r.id ?? "(no id)"}: ${r.summary}`);
     }
     console.log();
   }
@@ -221,7 +211,7 @@ async function handleApply(
 
   let indicesToRemove: number[];
   try {
-    indicesToRemove = resolveRecordIndices(records, identifiers);
+    indicesToRemove = resolveRecordIds(records, identifiers);
   } catch (err) {
     const msg = (err as Error).message;
     if (jsonMode) {

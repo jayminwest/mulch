@@ -6,6 +6,7 @@ import { readConfig, getExpertisePath } from "../utils/config.js";
 import {
   readExpertiseFile,
   writeExpertiseFile,
+  resolveRecordId,
 } from "../utils/expertise.js";
 import { recordSchema } from "../schemas/record-schema.js";
 import type { Classification } from "../schemas/record.js";
@@ -15,7 +16,7 @@ export function registerEditCommand(program: Command): void {
   program
     .command("edit")
     .argument("<domain>", "expertise domain")
-    .argument("<identifier>", "record ID (mx-XXXXXX) or 1-based index")
+    .argument("<id>", "record ID (e.g. mx-abc123, abc123, or abc)")
     .description("Edit an existing expertise record")
     .addOption(
       new Option(
@@ -35,7 +36,7 @@ export function registerEditCommand(program: Command): void {
     .action(
       async (
         domain: string,
-        identifier: string,
+        id: string,
         options: Record<string, unknown>,
       ) => {
         const jsonMode = program.opts().json === true;
@@ -62,52 +63,17 @@ export function registerEditCommand(program: Command): void {
           const filePath = getExpertisePath(domain);
           const records = await readExpertiseFile(filePath);
 
-          let targetIndex: number;
-
-          if (identifier.startsWith("mx-")) {
-            // ID-based lookup
-            const found = records.findIndex((r) => r.id === identifier);
-            if (found === -1) {
-              if (jsonMode) {
-                outputJsonError("edit", `Record with ID "${identifier}" not found in domain "${domain}".`);
-              } else {
-                console.error(
-                  chalk.red(`Error: record with ID "${identifier}" not found in domain "${domain}".`),
-                );
-              }
-              process.exitCode = 1;
-              return;
+          const resolved = resolveRecordId(records, id);
+          if (!resolved.ok) {
+            if (jsonMode) {
+              outputJsonError("edit", resolved.error);
+            } else {
+              console.error(chalk.red(`Error: ${resolved.error}`));
             }
-            targetIndex = found;
-          } else {
-            // Legacy 1-based index
-            const index = parseInt(identifier, 10);
-            if (isNaN(index) || index < 1) {
-              if (jsonMode) {
-                outputJsonError("edit", "Identifier must be a record ID (mx-XXXXXX) or a positive integer (1-based index).");
-              } else {
-                console.error(
-                  chalk.red("Error: identifier must be a record ID (mx-XXXXXX) or a positive integer (1-based index)."),
-                );
-              }
-              process.exitCode = 1;
-              return;
-            }
-            if (index > records.length) {
-              if (jsonMode) {
-                outputJsonError("edit", `Index ${index} out of range. Domain "${domain}" has ${records.length} record(s).`);
-              } else {
-                console.error(
-                  chalk.red(
-                    `Error: index ${index} out of range. Domain "${domain}" has ${records.length} record(s).`,
-                  ),
-                );
-              }
-              process.exitCode = 1;
-              return;
-            }
-            targetIndex = index - 1;
+            process.exitCode = 1;
+            return;
           }
+          const targetIndex = resolved.index;
 
           const record = { ...records[targetIndex] };
 
@@ -212,15 +178,13 @@ export function registerEditCommand(program: Command): void {
               command: "edit",
               domain,
               id: record.id ?? null,
-              index: targetIndex + 1,
               type: record.type,
               record,
             });
           } else {
-            const idLabel = record.id ? ` (${record.id})` : "";
             console.log(
               chalk.green(
-                `\u2714 Updated ${record.type} #${targetIndex + 1}${idLabel} in ${domain}`,
+                `\u2714 Updated ${record.type} ${record.id ?? ""} in ${domain}`,
               ),
             );
           }

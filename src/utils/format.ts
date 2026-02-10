@@ -51,11 +51,15 @@ function formatRecordMeta(r: ExpertiseRecord, full: boolean): string {
   return " " + parts.join(" ") + formatLinks(r);
 }
 
+function idTag(r: ExpertiseRecord): string {
+  return r.id ? `[${r.id}] ` : "";
+}
+
 function formatConventions(records: ConventionRecord[], full = false): string {
   if (records.length === 0) return "";
   const lines = ["### Conventions"];
   for (const r of records) {
-    lines.push(`- ${r.content}${formatRecordMeta(r, full)}`);
+    lines.push(`- ${idTag(r)}${r.content}${formatRecordMeta(r, full)}`);
   }
   return lines.join("\n");
 }
@@ -64,7 +68,7 @@ function formatPatterns(records: PatternRecord[], full = false): string {
   if (records.length === 0) return "";
   const lines = ["### Patterns"];
   for (const r of records) {
-    let line = `- **${r.name}**: ${r.description}`;
+    let line = `- ${idTag(r)}**${r.name}**: ${r.description}`;
     if (r.files && r.files.length > 0) {
       line += ` (${r.files.join(", ")})`;
     }
@@ -78,7 +82,7 @@ function formatFailures(records: FailureRecord[], full = false): string {
   if (records.length === 0) return "";
   const lines = ["### Known Failures"];
   for (const r of records) {
-    lines.push(`- ${r.description}${formatRecordMeta(r, full)}`);
+    lines.push(`- ${idTag(r)}${r.description}${formatRecordMeta(r, full)}`);
     lines.push(`  → ${r.resolution}`);
   }
   return lines.join("\n");
@@ -88,7 +92,7 @@ function formatDecisions(records: DecisionRecord[], full = false): string {
   if (records.length === 0) return "";
   const lines = ["### Decisions"];
   for (const r of records) {
-    lines.push(`- **${r.title}**: ${r.rationale}${formatRecordMeta(r, full)}`);
+    lines.push(`- ${idTag(r)}**${r.title}**: ${r.rationale}${formatRecordMeta(r, full)}`);
   }
   return lines.join("\n");
 }
@@ -97,7 +101,7 @@ function formatReferences(records: ReferenceRecord[], full = false): string {
   if (records.length === 0) return "";
   const lines = ["### References"];
   for (const r of records) {
-    let line = `- **${r.name}**: ${r.description}`;
+    let line = `- ${idTag(r)}**${r.name}**: ${r.description}`;
     if (r.files && r.files.length > 0) {
       line += ` (${r.files.join(", ")})`;
     }
@@ -111,7 +115,7 @@ function formatGuides(records: GuideRecord[], full = false): string {
   if (records.length === 0) return "";
   const lines = ["### Guides"];
   for (const r of records) {
-    lines.push(`- **${r.name}**: ${r.description}${formatRecordMeta(r, full)}`);
+    lines.push(`- ${idTag(r)}**${r.name}**: ${r.description}${formatRecordMeta(r, full)}`);
   }
   return lines.join("\n");
 }
@@ -143,25 +147,30 @@ export function getRecordSummary(record: ExpertiseRecord): string {
   }
 }
 
+function compactId(r: ExpertiseRecord): string {
+  return r.id ? ` (${r.id})` : "";
+}
+
 function compactLine(r: ExpertiseRecord): string {
   const links = formatLinks(r);
+  const id = compactId(r);
   switch (r.type) {
     case "convention":
-      return `- [convention] ${truncate(r.content)}${links}`;
+      return `- [convention] ${truncate(r.content)}${id}${links}`;
     case "pattern": {
       const files = r.files && r.files.length > 0 ? ` (${r.files.join(", ")})` : "";
-      return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${links}`;
+      return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${id}${links}`;
     }
     case "failure":
-      return `- [failure] ${truncate(r.description)} → ${truncate(r.resolution)}${links}`;
+      return `- [failure] ${truncate(r.description)} → ${truncate(r.resolution)}${id}${links}`;
     case "decision":
-      return `- [decision] ${r.title}: ${truncate(r.rationale)}${links}`;
+      return `- [decision] ${r.title}: ${truncate(r.rationale)}${id}${links}`;
     case "reference": {
       const refFiles = r.files && r.files.length > 0 ? `: ${r.files.join(", ")}` : `: ${truncate(r.description)}`;
-      return `- [reference] ${r.name}${refFiles}${links}`;
+      return `- [reference] ${r.name}${refFiles}${id}${links}`;
     }
     case "guide":
-      return `- [guide] ${r.name}: ${truncate(r.description)}${links}`;
+      return `- [guide] ${r.name}: ${truncate(r.description)}${id}${links}`;
   }
 }
 
@@ -320,7 +329,9 @@ export function formatDomainExpertiseXml(
   lines.push(`<domain name="${xmlEscape(domain)}" entries="${records.length}"${updatedStr}>`);
 
   for (const r of records) {
-    lines.push(`  <${r.type} classification="${r.classification}">`);
+    const idAttr = r.id ? ` id="${xmlEscape(r.id)}"` : "";
+    lines.push(`  <${r.type}${idAttr} classification="${r.classification}">`);
+
     switch (r.type) {
       case "convention":
         lines.push(`    ${xmlEscape(r.content)}`);
@@ -413,14 +424,16 @@ export function formatDomainExpertisePlain(
   if (conventions.length > 0) {
     lines.push("Conventions:");
     for (const r of conventions) {
-      lines.push(`  - ${r.content}${formatLinks(r)}`);
+      const id = r.id ? `[${r.id}] ` : "";
+      lines.push(`  - ${id}${r.content}${formatLinks(r)}`);
     }
     lines.push("");
   }
   if (patterns.length > 0) {
     lines.push("Patterns:");
     for (const r of patterns) {
-      let line = `  - ${r.name}: ${r.description}`;
+      const id = r.id ? `[${r.id}] ` : "";
+      let line = `  - ${id}${r.name}: ${r.description}`;
       if (r.files && r.files.length > 0) {
         line += ` (${r.files.join(", ")})`;
       }
@@ -432,7 +445,8 @@ export function formatDomainExpertisePlain(
   if (failures.length > 0) {
     lines.push("Known Failures:");
     for (const r of failures) {
-      lines.push(`  - ${r.description}${formatLinks(r)}`);
+      const id = r.id ? `[${r.id}] ` : "";
+      lines.push(`  - ${id}${r.description}${formatLinks(r)}`);
       lines.push(`    Fix: ${r.resolution}`);
     }
     lines.push("");
@@ -440,7 +454,8 @@ export function formatDomainExpertisePlain(
   if (decisions.length > 0) {
     lines.push("Decisions:");
     for (const r of decisions) {
-      lines.push(`  - ${r.title}: ${r.rationale}${formatLinks(r)}`);
+      const id = r.id ? `[${r.id}] ` : "";
+      lines.push(`  - ${id}${r.title}: ${r.rationale}${formatLinks(r)}`);
     }
     lines.push("");
   }
@@ -455,7 +470,8 @@ export function formatDomainExpertisePlain(
   if (references.length > 0) {
     lines.push("References:");
     for (const r of references) {
-      let line = `  - ${r.name}: ${r.description}`;
+      const id = r.id ? `[${r.id}] ` : "";
+      let line = `  - ${id}${r.name}: ${r.description}`;
       if (r.files && r.files.length > 0) {
         line += ` (${r.files.join(", ")})`;
       }
@@ -467,7 +483,8 @@ export function formatDomainExpertisePlain(
   if (guides.length > 0) {
     lines.push("Guides:");
     for (const r of guides) {
-      lines.push(`  - ${r.name}: ${r.description}${formatLinks(r)}`);
+      const id = r.id ? `[${r.id}] ` : "";
+      lines.push(`  - ${id}${r.name}: ${r.description}${formatLinks(r)}`);
     }
     lines.push("");
   }
