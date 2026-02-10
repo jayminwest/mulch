@@ -23,7 +23,9 @@ function isStale(
   }
 
   const recordedAt = new Date(record.recorded_at);
-  const ageInDays = (now.getTime() - recordedAt.getTime()) / (1000 * 60 * 60 * 24);
+  const ageInDays = Math.floor(
+    (now.getTime() - recordedAt.getTime()) / (1000 * 60 * 60 * 24),
+  );
 
   if (classification === "tactical") {
     return ageInDays > shelfLife.tactical;

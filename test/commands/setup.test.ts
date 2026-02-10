@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -8,6 +8,10 @@ import {
   recipes,
   CURSOR_RULE_CONTENT,
   CLAUDE_HOOK_COMMAND,
+  MULCH_HOOK_SECTION,
+  installGitHook,
+  checkGitHook,
+  removeGitHook,
 } from "../../src/commands/setup.js";
 
 describe("setup command", () => {
@@ -318,6 +322,122 @@ describe("setup command", () => {
       const filePath = join(tmpDir, ".aider.conf.md");
       const content = await readFile(filePath, "utf-8");
       expect(content).not.toContain("<!-- mulch:start -->");
+    });
+  });
+
+  // ── Git hooks ─────────────────────────────────────────────
+
+  describe("git hooks", () => {
+    it("installs pre-commit hook", async () => {
+      await mkdir(join(tmpDir, ".git", "hooks"), { recursive: true });
+      const result = await installGitHook(tmpDir);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Installed");
+
+      const hookPath = join(tmpDir, ".git", "hooks", "pre-commit");
+      expect(existsSync(hookPath)).toBe(true);
+
+      const content = await readFile(hookPath, "utf-8");
+      expect(content).toContain("#!/bin/sh");
+      expect(content).toContain("mulch validate");
+    });
+
+    it("makes hook executable", async () => {
+      await mkdir(join(tmpDir, ".git", "hooks"), { recursive: true });
+      await installGitHook(tmpDir);
+
+      const hookPath = join(tmpDir, ".git", "hooks", "pre-commit");
+      const fileStat = await stat(hookPath);
+      // Check that owner execute bit is set
+      // eslint-disable-next-line no-bitwise
+      expect(fileStat.mode & 0o755).toBe(0o755);
+    });
+
+    it("appends to existing pre-commit hook", async () => {
+      const hooksDir = join(tmpDir, ".git", "hooks");
+      await mkdir(hooksDir, { recursive: true });
+
+      const hookPath = join(hooksDir, "pre-commit");
+      const existingContent = "#!/bin/sh\n\necho 'existing hook'\n";
+      await writeFile(hookPath, existingContent, "utf-8");
+
+      const result = await installGitHook(tmpDir);
+      expect(result.success).toBe(true);
+
+      const content = await readFile(hookPath, "utf-8");
+      expect(content).toContain("echo 'existing hook'");
+      expect(content).toContain("mulch validate");
+    });
+
+    it("is idempotent", async () => {
+      await mkdir(join(tmpDir, ".git", "hooks"), { recursive: true });
+      await installGitHook(tmpDir);
+      const result = await installGitHook(tmpDir);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("already installed");
+
+      const hookPath = join(tmpDir, ".git", "hooks", "pre-commit");
+      const content = await readFile(hookPath, "utf-8");
+      // Only one marker
+      const markerCount = content.split("# mulch:start").length - 1;
+      expect(markerCount).toBe(1);
+    });
+
+    it("check reports success after install", async () => {
+      await mkdir(join(tmpDir, ".git", "hooks"), { recursive: true });
+      await installGitHook(tmpDir);
+
+      const result = await checkGitHook(tmpDir);
+      expect(result.success).toBe(true);
+    });
+
+    it("check reports failure when hook is missing", async () => {
+      await mkdir(join(tmpDir, ".git", "hooks"), { recursive: true });
+      const result = await checkGitHook(tmpDir);
+      expect(result.success).toBe(false);
+    });
+
+    it("remove strips mulch section", async () => {
+      const hooksDir = join(tmpDir, ".git", "hooks");
+      await mkdir(hooksDir, { recursive: true });
+
+      const hookPath = join(hooksDir, "pre-commit");
+      const existingContent = "#!/bin/sh\n\necho 'existing hook'\n";
+      await writeFile(hookPath, existingContent, "utf-8");
+
+      await installGitHook(tmpDir);
+      const result = await removeGitHook(tmpDir);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Removed mulch section");
+
+      const content = await readFile(hookPath, "utf-8");
+      expect(content).toContain("echo 'existing hook'");
+      expect(content).not.toContain("# mulch:start");
+    });
+
+    it("remove deletes file if only mulch content", async () => {
+      await mkdir(join(tmpDir, ".git", "hooks"), { recursive: true });
+      await installGitHook(tmpDir);
+
+      const result = await removeGitHook(tmpDir);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("file deleted");
+
+      const hookPath = join(tmpDir, ".git", "hooks", "pre-commit");
+      expect(existsSync(hookPath)).toBe(false);
+    });
+
+    it("fails gracefully when not a git repo", async () => {
+      // tmpDir has no .git directory since we only created .mulch
+      // First remove any .git dir that might exist
+      const gitDir = join(tmpDir, ".git");
+      if (existsSync(gitDir)) {
+        await rm(gitDir, { recursive: true, force: true });
+      }
+
+      const result = await installGitHook(tmpDir);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("Not a git repository");
     });
   });
 });

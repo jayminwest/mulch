@@ -18,6 +18,25 @@ mulch record <domain> --type <convention|pattern|failure|decision> --description
 \`\`\`
 
 Run \`mulch status\` to see available domains and expertise health.
+
+### Session Completion Checklist
+
+1. Record learnings:
+   \`\`\`bash
+   mulch record <domain> --type <convention|pattern|failure|decision> --description "..."
+   \`\`\`
+2. Validate records:
+   \`\`\`bash
+   mulch validate
+   \`\`\`
+3. Commit changes:
+   \`\`\`bash
+   git add .mulch/ && git commit -m "Update expertise"
+   \`\`\`
+4. Push to share:
+   \`\`\`bash
+   git push
+   \`\`\`
 `;
 
 function getSnippet(provider: string | undefined): string {
@@ -44,6 +63,25 @@ mulch record <domain> --type <convention|pattern|failure|decision> --description
 \`\`\`
 
 Run \`mulch status\` to check domain health and entry counts.
+
+### Session Completion Checklist
+
+1. Record learnings:
+   \`\`\`bash
+   mulch record <domain> --type <convention|pattern|failure|decision> --description "..."
+   \`\`\`
+2. Validate records:
+   \`\`\`bash
+   mulch validate
+   \`\`\`
+3. Commit changes:
+   \`\`\`bash
+   git add .mulch/ && git commit -m "Update expertise"
+   \`\`\`
+4. Push to share:
+   \`\`\`bash
+   git push
+   \`\`\`
 `;
   }
 

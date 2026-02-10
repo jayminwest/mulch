@@ -8,6 +8,30 @@ const MULCH_DIR = ".mulch";
 const CONFIG_FILE = "mulch.config.yaml";
 const EXPERTISE_DIR = "expertise";
 
+export const GITATTRIBUTES_LINE =
+  ".mulch/expertise/*.jsonl merge=union";
+
+export const MULCH_README = `# .mulch/
+
+This directory is managed by [mulch](https://github.com/jayminwest/mulch) — a structured expertise layer for coding agents.
+
+## Key Commands
+
+- \`mulch init\`      — Initialize a .mulch directory
+- \`mulch add\`       — Add a new domain
+- \`mulch record\`    — Record an expertise entry
+- \`mulch query\`     — Query expertise entries
+- \`mulch prime\`     — Output a priming prompt for an agent
+- \`mulch status\`    — Show domain statistics
+- \`mulch validate\`  — Validate all entries against the schema
+- \`mulch prune\`     — Remove expired entries
+
+## Structure
+
+- \`mulch.config.yaml\` — Configuration file
+- \`expertise/\`        — JSONL files, one per domain
+`;
+
 export function getMulchDir(cwd: string = process.cwd()): string {
   return join(cwd, MULCH_DIR);
 }
@@ -52,4 +76,25 @@ export async function initMulchDir(
   await mkdir(mulchDir, { recursive: true });
   await mkdir(expertiseDir, { recursive: true });
   await writeConfig({ ...DEFAULT_CONFIG }, cwd);
+
+  // Create or append .gitattributes with merge=union for JSONL files
+  const gitattributesPath = join(cwd, ".gitattributes");
+  let existing = "";
+  try {
+    existing = await readFile(gitattributesPath, "utf-8");
+  } catch {
+    // File doesn't exist yet — will create it
+  }
+  if (!existing.includes(GITATTRIBUTES_LINE)) {
+    const separator = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+    await writeFile(
+      gitattributesPath,
+      existing + separator + GITATTRIBUTES_LINE + "\n",
+      "utf-8",
+    );
+  }
+
+  // Create .mulch/README.md
+  const readmePath = join(mulchDir, "README.md");
+  await writeFile(readmePath, MULCH_README, "utf-8");
 }

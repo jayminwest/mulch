@@ -123,6 +123,32 @@ describe("onboard command", () => {
     }
   });
 
+  it("snippet includes session completion checklist", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await runOnboard({ stdout: true, cwd: tmpDir });
+
+      const output = (stdoutSpy.mock.calls[0] as string[])[0];
+      expect(output).toContain("Session Completion");
+      expect(output).toContain("mulch validate");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+  });
+
+  it("claude snippet includes session completion checklist", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await runOnboard({ stdout: true, provider: "claude", cwd: tmpDir });
+
+      const output = (stdoutSpy.mock.calls[0] as string[])[0];
+      expect(output).toContain("Session Completion");
+      expect(output).toContain("mulch validate");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+  });
+
   it("snippet contains all essential commands", async () => {
     const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {

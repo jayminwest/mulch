@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,6 +9,8 @@ import {
   getConfigPath,
   getExpertiseDir,
   readConfig,
+  GITATTRIBUTES_LINE,
+  MULCH_README,
 } from "../../src/utils/config.js";
 
 describe("init command", () => {
@@ -55,5 +57,52 @@ describe("init command", () => {
   it("checks that .mulch/ already exists", () => {
     // Before init, directory should not exist
     expect(existsSync(getMulchDir(tmpDir))).toBe(false);
+  });
+
+  it("creates .gitattributes with merge=union for JSONL files", async () => {
+    await initMulchDir(tmpDir);
+
+    const content = await readFile(join(tmpDir, ".gitattributes"), "utf-8");
+    expect(content).toContain(GITATTRIBUTES_LINE);
+  });
+
+  it("appends to existing .gitattributes without overwriting", async () => {
+    const existing = "*.png binary\n";
+    await writeFile(join(tmpDir, ".gitattributes"), existing, "utf-8");
+
+    await initMulchDir(tmpDir);
+
+    const content = await readFile(join(tmpDir, ".gitattributes"), "utf-8");
+    expect(content).toContain("*.png binary");
+    expect(content).toContain(GITATTRIBUTES_LINE);
+  });
+
+  it("does not duplicate gitattributes line on second init", async () => {
+    await initMulchDir(tmpDir);
+    await initMulchDir(tmpDir);
+
+    const content = await readFile(join(tmpDir, ".gitattributes"), "utf-8");
+    const occurrences = content.split(GITATTRIBUTES_LINE).length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it("creates .mulch/README.md", async () => {
+    await initMulchDir(tmpDir);
+
+    const readmePath = join(getMulchDir(tmpDir), "README.md");
+    expect(existsSync(readmePath)).toBe(true);
+  });
+
+  it("README.md contains repo URL and key commands", async () => {
+    await initMulchDir(tmpDir);
+
+    const content = await readFile(
+      join(getMulchDir(tmpDir), "README.md"),
+      "utf-8",
+    );
+    expect(content).toContain("https://github.com/jayminwest/mulch");
+    expect(content).toContain("mulch record");
+    expect(content).toContain("mulch query");
+    expect(content).toContain("mulch prime");
   });
 });

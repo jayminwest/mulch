@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, chmod, unlink, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
@@ -25,6 +25,96 @@ function isProvider(value: string): value is Provider {
 interface RecipeResult {
   success: boolean;
   message: string;
+}
+
+// ────────────────────────────────────────────────────────────
+// Git hook helpers
+// ────────────────────────────────────────────────────────────
+
+const HOOK_MARKER_START = "# mulch:start";
+const HOOK_MARKER_END = "# mulch:end";
+
+const MULCH_HOOK_SECTION = `${HOOK_MARKER_START}
+# Run mulch validate before committing
+if command -v mulch >/dev/null 2>&1; then
+  mulch validate
+  if [ $? -ne 0 ]; then
+    echo "mulch validate failed. Commit aborted."
+    exit 1
+  fi
+fi
+${HOOK_MARKER_END}`;
+
+async function installGitHook(cwd: string): Promise<RecipeResult> {
+  const gitDir = join(cwd, ".git");
+  if (!existsSync(gitDir)) {
+    return { success: false, message: "Not a git repository — .git directory not found." };
+  }
+
+  const hooksDir = join(gitDir, "hooks");
+  await mkdir(hooksDir, { recursive: true });
+
+  const hookPath = join(hooksDir, "pre-commit");
+  let content = "";
+
+  if (existsSync(hookPath)) {
+    content = await readFile(hookPath, "utf-8");
+    if (content.includes(HOOK_MARKER_START)) {
+      return { success: true, message: "Git pre-commit hook already installed." };
+    }
+  }
+
+  if (content) {
+    content = content.trimEnd() + "\n\n" + MULCH_HOOK_SECTION + "\n";
+  } else {
+    content = "#!/bin/sh\n\n" + MULCH_HOOK_SECTION + "\n";
+  }
+
+  await writeFile(hookPath, content, "utf-8");
+  await chmod(hookPath, 0o755);
+
+  return { success: true, message: "Installed mulch pre-commit git hook." };
+}
+
+async function checkGitHook(cwd: string): Promise<RecipeResult> {
+  const hookPath = join(cwd, ".git", "hooks", "pre-commit");
+  if (!existsSync(hookPath)) {
+    return { success: false, message: "Git pre-commit hook not found." };
+  }
+
+  const content = await readFile(hookPath, "utf-8");
+  if (!content.includes(HOOK_MARKER_START)) {
+    return { success: false, message: "Git pre-commit hook exists but has no mulch section." };
+  }
+
+  return { success: true, message: "Git pre-commit hook is installed." };
+}
+
+async function removeGitHook(cwd: string): Promise<RecipeResult> {
+  const hookPath = join(cwd, ".git", "hooks", "pre-commit");
+  if (!existsSync(hookPath)) {
+    return { success: true, message: "Git pre-commit hook not found; nothing to remove." };
+  }
+
+  const content = await readFile(hookPath, "utf-8");
+  if (!content.includes(HOOK_MARKER_START)) {
+    return { success: true, message: "No mulch section in pre-commit hook; nothing to remove." };
+  }
+
+  const startIdx = content.indexOf(HOOK_MARKER_START);
+  const endIdx = content.indexOf(HOOK_MARKER_END);
+  const before = content.substring(0, startIdx);
+  const after = content.substring(endIdx + HOOK_MARKER_END.length);
+  const cleaned = (before + after).replace(/\n{3,}/g, "\n\n").trim();
+
+  // If only the shebang (or nothing) remains, delete the file
+  if (!cleaned || cleaned === "#!/bin/sh") {
+    await unlink(hookPath);
+    return { success: true, message: "Removed mulch pre-commit hook (file deleted)." };
+  }
+
+  await writeFile(hookPath, cleaned + "\n", "utf-8");
+  return { success: true, message: "Removed mulch section from pre-commit hook." };
 }
 
 // ────────────────────────────────────────────────────────────
@@ -252,7 +342,6 @@ const cursorRecipe: ProviderRecipe = {
     if (!existsSync(rulePath)) {
       return { success: true, message: "Cursor rule not found; nothing to remove." };
     }
-    const { unlink } = await import("node:fs/promises");
     await unlink(rulePath);
     return { success: true, message: "Removed Cursor rule file." };
   },
@@ -456,6 +545,10 @@ export {
   CURSOR_RULE_CONTENT,
   CODEX_SECTION,
   CLAUDE_HOOK_COMMAND,
+  MULCH_HOOK_SECTION,
+  installGitHook,
+  checkGitHook,
+  removeGitHook,
 };
 
 export type { Provider, ProviderRecipe };
@@ -465,11 +558,12 @@ export type { Provider, ProviderRecipe };
 export function registerSetupCommand(program: Command): void {
   program
     .command("setup")
-    .argument("<provider>", `agent provider (${SUPPORTED_PROVIDERS.join(", ")})`)
+    .argument("[provider]", `agent provider (${SUPPORTED_PROVIDERS.join(", ")})`)
     .description("Set up mulch integration for a specific agent provider")
     .option("--check", "verify provider integration is installed")
     .option("--remove", "remove provider integration")
-    .action(async (provider: string, options: { check?: boolean; remove?: boolean }) => {
+    .option("--hooks", "install a pre-commit git hook running mulch validate")
+    .action(async (provider: string | undefined, options: { check?: boolean; remove?: boolean; hooks?: boolean }) => {
       // Verify .mulch/ exists
       const mulchDir = getMulchDir();
       if (!existsSync(mulchDir)) {
@@ -479,6 +573,40 @@ export function registerSetupCommand(program: Command): void {
         process.exitCode = 1;
         return;
       }
+
+      if (!provider && !options.hooks) {
+        console.error(
+          chalk.red("Error: specify a provider or use --hooks."),
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      // Handle --hooks
+      if (options.hooks) {
+        const cwd = process.cwd();
+        let hookResult: RecipeResult;
+        if (options.check) {
+          hookResult = await checkGitHook(cwd);
+        } else if (options.remove) {
+          hookResult = await removeGitHook(cwd);
+        } else {
+          hookResult = await installGitHook(cwd);
+        }
+
+        if (hookResult.success) {
+          console.log(chalk.green(`\u2714 ${hookResult.message}`));
+        } else {
+          console.error(chalk.red(`\u2716 ${hookResult.message}`));
+          process.exitCode = 1;
+        }
+
+        // If no provider, stop here
+        if (!provider) return;
+      }
+
+      // Handle provider
+      if (!provider) return;
 
       if (!isProvider(provider)) {
         console.error(
@@ -491,37 +619,39 @@ export function registerSetupCommand(program: Command): void {
         return;
       }
 
-      const recipe = recipes[provider];
+      {
+        const recipe = recipes[provider];
 
-      if (options.check) {
-        const result = await recipe.check(process.cwd());
-        if (result.success) {
-          console.log(chalk.green(`\u2714 ${result.message}`));
-        } else {
-          console.log(chalk.yellow(`\u2716 ${result.message}`));
-          process.exitCode = 1;
+        if (options.check) {
+          const result = await recipe.check(process.cwd());
+          if (result.success) {
+            console.log(chalk.green(`\u2714 ${result.message}`));
+          } else {
+            console.log(chalk.yellow(`\u2716 ${result.message}`));
+            process.exitCode = 1;
+          }
+          return;
         }
-        return;
-      }
 
-      if (options.remove) {
-        const result = await recipe.remove(process.cwd());
+        if (options.remove) {
+          const result = await recipe.remove(process.cwd());
+          if (result.success) {
+            console.log(chalk.green(`\u2714 ${result.message}`));
+          } else {
+            console.error(chalk.red(`Error: ${result.message}`));
+            process.exitCode = 1;
+          }
+          return;
+        }
+
+        // Default: install
+        const result = await recipe.install(process.cwd());
         if (result.success) {
           console.log(chalk.green(`\u2714 ${result.message}`));
         } else {
           console.error(chalk.red(`Error: ${result.message}`));
           process.exitCode = 1;
         }
-        return;
-      }
-
-      // Default: install
-      const result = await recipe.install(process.cwd());
-      if (result.success) {
-        console.log(chalk.green(`\u2714 ${result.message}`));
-      } else {
-        console.error(chalk.red(`Error: ${result.message}`));
-        process.exitCode = 1;
       }
     });
 }
