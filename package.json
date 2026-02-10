@@ -1,0 +1,50 @@
+{
+  "name": "mulch-cli",
+  "version": "0.1.0",
+  "description": "Growing Expertise for Coding Agents — structured expertise files that accumulate over time, live in git, work with any agent",
+  "type": "module",
+  "bin": {
+    "mulch": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "expertise",
+    "knowledge-management",
+    "cli",
+    "developer-tools"
+  ],
+  "author": "Jaymin West",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jayminwest/mulch.git"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.2.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
