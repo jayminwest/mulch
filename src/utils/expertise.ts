@@ -40,6 +40,14 @@ export async function getFileModTime(filePath: string): Promise<Date | null> {
   }
 }
 
+export async function writeExpertiseFile(
+  filePath: string,
+  records: ExpertiseRecord[],
+): Promise<void> {
+  const content = records.map((r) => JSON.stringify(r)).join("\n") + (records.length > 0 ? "\n" : "");
+  await writeFile(filePath, content, "utf-8");
+}
+
 export function countRecords(records: ExpertiseRecord[]): number {
   return records.length;
 }

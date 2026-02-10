@@ -324,6 +324,30 @@ Not all knowledge ages the same way:
 
 `mulch prune` uses these classifications to keep expertise files focused.
 
+### No mocks in tests — ever
+
+Mulch's test suite uses real filesystems, real JSONL files, and real CLI invocations. Mocks are banned entirely — no `jest.mock()`, no `vi.mock()`, no stub implementations, no fake filesystems.
+
+**Why:**
+- Mocks test your assumptions about interfaces, not your actual code. A mocked filesystem that returns `{ success: true }` tells you nothing about whether your JSONL append actually works.
+- Mulch is a file-management CLI. The entire value proposition is that it correctly reads, writes, validates, and organizes files. Mocking the filesystem is mocking the product.
+- Integration-style tests catch real bugs — encoding issues, path resolution edge cases, permission errors, JSONL parse failures on malformed lines. Mocks hide all of these.
+- Tests that use real temp directories and real CLI calls serve as executable documentation. A new contributor can read the test and understand exactly what the tool does.
+
+**In practice:** Tests create real temp directories, run real `mulch` commands, and assert against real file contents. Setup and teardown handle directory creation and cleanup. This is slightly slower than mocked unit tests and dramatically more useful.
+
+### Strict typechecking and linting — no exceptions
+
+TypeScript strict mode is enabled with zero escape hatches. ESLint runs with zero warnings tolerated. There are no `// @ts-ignore`, no `// @ts-expect-error`, no `// eslint-disable`, no `any` types, no suppressed warnings. The CI pipeline treats warnings as errors.
+
+**Why:**
+- A tool that manages structured data for other tools must be structurally sound itself. If Mulch's own codebase can't maintain type safety, why would anyone trust it to validate expertise schemas?
+- Warnings accumulate. One `@ts-ignore` becomes twenty. One `any` type propagates through three call sites. Zero tolerance prevents the rot from starting.
+- Strict types catch real bugs in a CLI tool — `string | undefined` flowing into a file path, missing fields on parsed JSONL records, incorrect option types from Commander.js. These are exactly the bugs that ship silently without strict checking.
+- This is a portfolio piece. The code quality is part of the product.
+
+**In practice:** `tsconfig.json` uses `"strict": true` with all additional strict flags enabled. ESLint is configured to error on all rules (no `"warn"` severity). CI fails on any diagnostic. If a type is genuinely complex, the fix is a proper type definition — not a suppression comment.
+
 ### Convergence detection
 
 Two novel metrics from KotaDB:
@@ -373,10 +397,10 @@ If two agents record conflicting expertise for the same domain (one says "use LI
 
 ## Next Steps
 
-1. **Agent integration (`mulch setup` + `mulch prime`)**: This is how agents actually discover and use expertise. Without it, Mulch is invisible to agents. Implement the setup recipes for Claude and Cursor first, then expand. Copied directly from Beads' proven pattern.
-2. **JSONL record schema**: Define the JSON schema for each record type (convention, pattern, failure, decision). This is the foundational design decision — everything else builds on it. Start by extracting and generalizing from KotaDB's production schemas.
-3. **CLI scaffold**: `mulch init`, `mulch add`, `mulch record`, `mulch query`, `mulch validate`, `mulch setup`, `mulch prime`, `mulch onboard` — the core commands.
-4. **Schema validation**: `mulch validate` enforces structure, size governance, and required fields. This is what separates Mulch from "just a directory of JSONL files."
-5. **Dogfood**: Use Mulch to manage KotaDB's own expertise, replacing the current `.claude/agents/experts/` structure. If it can't replace the real thing, the design is wrong.
-6. **Cross-project test**: Try Mulch on a second, structurally different project to validate that the schema generalizes.
+1. **Dogfood immediately**: Use Mulch on its own development — `mulch init` in this repo, record expertise about the CLI's own patterns, conventions, and decisions as they emerge. This is the highest-priority next step. If the tool isn't useful for building itself, the design is wrong. Every session developing Mulch should end with `mulch record` calls capturing what was learned. This also stress-tests the schema, the CLI ergonomics, and the recording workflow under real conditions before anyone else tries it.
+2. **Agent integration (`mulch setup` + `mulch prime`)**: This is how agents actually discover and use expertise. Without it, Mulch is invisible to agents. Implement the setup recipes for Claude and Cursor first, then expand. Copied directly from Beads' proven pattern.
+3. **JSONL record schema**: Define the JSON schema for each record type (convention, pattern, failure, decision). This is the foundational design decision — everything else builds on it. Start by extracting and generalizing from KotaDB's production schemas.
+4. **CLI scaffold**: `mulch init`, `mulch add`, `mulch record`, `mulch query`, `mulch validate`, `mulch setup`, `mulch prime`, `mulch onboard` — the core commands.
+5. **Schema validation**: `mulch validate` enforces structure, size governance, and required fields. This is what separates Mulch from "just a directory of JSONL files."
+6. **Cross-project test**: Try Mulch on a second, structurally different project (KotaDB, replacing `.claude/agents/experts/`) to validate that the schema generalizes. If it can't replace the real thing, iterate.
 7. **Ship**: Publish to npm. A `npx mulch init` that works in any project.
