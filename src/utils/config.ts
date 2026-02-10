@@ -23,7 +23,7 @@ This directory is managed by [mulch](https://github.com/jayminwest/mulch) — a 
 - \`mulch record\`    — Record an expertise entry
 - \`mulch edit\`      — Edit an existing record
 - \`mulch query\`     — Query expertise entries
-- \`mulch prime\`     — Output a priming prompt for an agent
+- \`mulch prime [domain]\` — Output a priming prompt (optionally scoped to one domain)
 - \`mulch status\`    — Show domain statistics
 - \`mulch validate\`  — Validate all entries against the schema
 - \`mulch prune\`     — Remove expired entries

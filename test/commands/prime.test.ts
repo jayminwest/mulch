@@ -291,6 +291,145 @@ describe("prime command", () => {
     expect(output).not.toContain("**");
   });
 
+  describe("domain argument scoping", () => {
+    it("outputs only the specified domain when domain arg is given", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      // Simulate scoping to just "testing"
+      const config = await readConfig(tmpDir);
+      const targetDomains = ["testing"];
+      expect(config.domains).toContain("testing");
+      expect(config.domains).toContain("architecture");
+
+      const sections: string[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        const lastUpdated = await getFileModTime(filePath);
+        sections.push(formatDomainExpertise(domain, records, lastUpdated));
+      }
+
+      const output = formatPrimeOutput(sections);
+      expect(output).toContain("## testing");
+      expect(output).toContain("Use vitest");
+      expect(output).not.toContain("## architecture");
+      expect(output).not.toContain("Use ESM");
+    });
+
+    it("validates domain exists in config", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing"] },
+        tmpDir,
+      );
+      const config = await readConfig(tmpDir);
+      const domainArg = "nonexistent";
+
+      expect(config.domains.includes(domainArg)).toBe(false);
+    });
+
+    it("domain scoping works with --mcp format", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      // Scope to just "architecture" in MCP mode
+      const targetDomains = ["architecture"];
+      const domains: { domain: string; entry_count: number; records: unknown[] }[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        domains.push({ domain, entry_count: records.length, records });
+      }
+
+      const output = formatMcpOutput(domains);
+      const parsed = JSON.parse(output);
+      expect(parsed.domains).toHaveLength(1);
+      expect(parsed.domains[0].domain).toBe("architecture");
+    });
+
+    it("domain scoping works with --format xml", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      // Scope to just "testing" in XML mode
+      const targetDomains = ["testing"];
+      const sections: string[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        const lastUpdated = await getFileModTime(filePath);
+        sections.push(formatDomainExpertiseXml(domain, records, lastUpdated));
+      }
+
+      const output = formatPrimeOutputXml(sections);
+      expect(output).toContain('<domain name="testing"');
+      expect(output).not.toContain('<domain name="architecture"');
+    });
+  });
+
   it("formats domain with all record types", async () => {
     await writeConfig(
       { ...DEFAULT_CONFIG, domains: ["fulltest"] },

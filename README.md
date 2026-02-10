@@ -17,6 +17,7 @@ mulch record database --type failure \
   --resolution "Always run VACUUM outside transaction boundaries"
 mulch query database                                  # See accumulated expertise
 mulch prime                                           # Get full context for agent injection
+mulch prime database                                  # Get context for one domain only
 ```
 
 ## How It Works
@@ -52,7 +53,7 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 | `mulch add <domain>` | Add a new expertise domain |
 | `mulch record <domain> --type <type>` | Record an expertise entry |
 | `mulch query [domain]` | Query expertise (use `--all` for all domains) |
-| `mulch prime` | Output AI-optimized expertise context |
+| `mulch prime [domain]` | Output AI-optimized expertise context (optionally scoped) |
 | `mulch status` | Show expertise freshness and counts |
 | `mulch validate` | Schema validation across all files |
 | `mulch setup <provider>` | Install provider-specific hooks |

@@ -25,6 +25,7 @@ export function registerPrimeCommand(program: Command): void {
   program
     .command("prime")
     .description("Generate a priming prompt from expertise records")
+    .argument("[domain]", "optional domain to scope output to")
     .option("--full", "include full record details (classification, evidence)")
     .option("--mcp", "output in MCP-compatible JSON format")
     .addOption(
@@ -33,16 +34,28 @@ export function registerPrimeCommand(program: Command): void {
         .default("markdown"),
     )
     .option("--export <path>", "export output to a file")
-    .action(async (options: PrimeOptions) => {
+    .action(async (domainArg: string | undefined, options: PrimeOptions) => {
       try {
         const config = await readConfig();
         const format = options.format ?? "markdown";
+
+        if (domainArg && !config.domains.includes(domainArg)) {
+          console.error(
+            `Error: Domain "${domainArg}" not found in config. Available domains: ${config.domains.join(", ")}`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const targetDomains = domainArg
+          ? [domainArg]
+          : config.domains;
 
         let output: string;
 
         if (options.mcp) {
           const domains: McpDomain[] = [];
-          for (const domain of config.domains) {
+          for (const domain of targetDomains) {
             const filePath = getExpertisePath(domain);
             const records = await readExpertiseFile(filePath);
             domains.push({ domain, entry_count: records.length, records });
@@ -50,7 +63,7 @@ export function registerPrimeCommand(program: Command): void {
           output = formatMcpOutput(domains);
         } else {
           const domainSections: string[] = [];
-          for (const domain of config.domains) {
+          for (const domain of targetDomains) {
             const filePath = getExpertisePath(domain);
             const records = await readExpertiseFile(filePath);
             const lastUpdated = await getFileModTime(filePath);
