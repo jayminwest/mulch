@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "0fdd8d8ff3f9",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/commands/onboard.ts",
+    "src/commands/setup.ts",
+    "src/utils/index.ts",
+    "src/utils/markers.ts",
+    "test/commands/onboard.test.ts",
+    "test/utils/markers.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0f/dd8d8ff3f9/0/metadata.json",
+      "transcript": "/0f/dd8d8ff3f9/0/full.jsonl",
+      "context": "/0f/dd8d8ff3f9/0/context.md",
+      "content_hash": "/0f/dd8d8ff3f9/0/content_hash.txt",
+      "prompt": "/0f/dd8d8ff3f9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 53,
+    "cache_creation_tokens": 91349,
+    "cache_read_tokens": 3723001,
+    "output_tokens": 1292,
+    "api_call_count": 47
+  }
+}
