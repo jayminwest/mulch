@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "fbc103606cfd",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "package.json",
+    "src/cli.ts",
+    "src/commands/doctor.ts",
+    "src/commands/update.ts",
+    "src/utils/index.ts",
+    "src/utils/version.ts",
+    "test/commands/update.test.ts",
+    "test/utils/version.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fb/c103606cfd/0/metadata.json",
+      "transcript": "/fb/c103606cfd/0/full.jsonl",
+      "context": "/fb/c103606cfd/0/context.md",
+      "content_hash": "/fb/c103606cfd/0/content_hash.txt",
+      "prompt": "/fb/c103606cfd/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 38,
+    "cache_creation_tokens": 40257,
+    "cache_read_tokens": 1589022,
+    "output_tokens": 1764,
+    "api_call_count": 32
+  }
+}
