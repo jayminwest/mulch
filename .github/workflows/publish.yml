@@ -20,8 +20,8 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
-      - run: npm test
       - run: npm run build
+      - run: npm test
 
       - name: Check if version changed
         id: version-check
