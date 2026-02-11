@@ -19,13 +19,14 @@ import { registerSyncCommand } from "./commands/sync.js";
 import { registerDeleteCommand } from "./commands/delete.js";
 import { registerLearnCommand } from "./commands/learn.js";
 import { registerCompactCommand } from "./commands/compact.js";
+import { registerUpdateCommand } from "./commands/update.js";
 
 const program = new Command();
 
 program
   .name("mulch")
   .description("Let your agents grow 🌱")
-  .version("0.2.2")
+  .version("0.2.3")
   .option("--json", "output as structured JSON");
 
 registerInitCommand(program);
@@ -46,5 +47,6 @@ registerSyncCommand(program);
 registerDeleteCommand(program);
 registerLearnCommand(program);
 registerCompactCommand(program);
+registerUpdateCommand(program);
 
 program.parse();

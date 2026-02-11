@@ -46,3 +46,9 @@ export {
   removeMarkerSection,
   wrapInMarkers,
 } from "./markers.js";
+
+export {
+  getCurrentVersion,
+  getLatestVersion,
+  compareSemver,
+} from "./version.js";

@@ -17,6 +17,7 @@ import { recordSchema } from "../schemas/record-schema.js";
 import type { MulchConfig } from "../schemas/config.js";
 import type { ExpertiseRecord } from "../schemas/record.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
+import { getCurrentVersion, getLatestVersion, compareSemver } from "../utils/version.js";
 
 interface DoctorCheck {
   name: string;
@@ -204,6 +205,22 @@ async function checkGovernance(config: MulchConfig, cwd?: string): Promise<Docto
   return { name: "governance", status: "pass", message: "All domains within governance limits", fixable: false, details: [] };
 }
 
+async function checkUpdateAvailable(): Promise<DoctorCheck> {
+  const current = getCurrentVersion();
+  const latest = getLatestVersion();
+
+  if (latest === null) {
+    return { name: "update", status: "pass", message: `Version ${current} (unable to check registry)`, fixable: false, details: [] };
+  }
+
+  const cmp = compareSemver(current, latest);
+  if (cmp >= 0) {
+    return { name: "update", status: "pass", message: `Version ${current} is up to date`, fixable: false, details: [] };
+  }
+
+  return { name: "update", status: "warn", message: `Update available: ${current} → ${latest}`, fixable: false, details: [`Run \`mulch update\` to update`] };
+}
+
 async function applyFixes(checks: DoctorCheck[], config: MulchConfig, cwd?: string): Promise<string[]> {
   const fixed: string[] = [];
 
@@ -343,6 +360,7 @@ export function registerDoctorCommand(program: Command): void {
       checks.push(await checkOrphanedDomains(config));
       checks.push(await checkDuplicates(config));
       checks.push(await checkGovernance(config));
+      checks.push(await checkUpdateAvailable());
 
       const summary = {
         pass: checks.filter((c) => c.status === "pass").length,
