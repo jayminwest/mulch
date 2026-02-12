@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "bb3cbc7fa994",
+  "session_id": "ea4edda6-6aba-4daf-9e3f-3d8f93f52079",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-12T15:50:11.896867Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "test/utils/expertise.test.ts",
+    "test/utils/lock.test.ts"
+  ],
+  "agent": "Claude Code",
+  "token_usage": {
+    "input_tokens": 46,
+    "cache_creation_tokens": 41588,
+    "cache_read_tokens": 1737988,
+    "output_tokens": 2074,
+    "api_call_count": 36
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-12T15:50:11.882045Z",
+    "agent_lines": 0,
+    "human_added": 63,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 63,
+    "agent_percentage": 0
+  }
+}

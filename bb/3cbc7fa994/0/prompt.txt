@@ -1,0 +1,59 @@
+run bd ready and mulch prime and begin work. delegate to teammates as you go to help conserve your context also. Point them to mulch.
+
+---
+
+<teammate-message teammate_id="atomic-writes" color="blue" summary="Atomic JSONL writes implemented, all 345 tests pass">
+Task #1 complete: Implemented atomic JSONL writes in `src/utils/expertise.ts`.
+
+**What changed** (file: `/Users/jayminwest/Projects/mulch/src/utils/expertise.ts`):
+
+1. **Added imports**: `rename` and `unlink` from `node:fs/promises` (line 1)
+
+2. **Updated `writeExpertiseFile()`** (lines 72-90) to use temp-file + rename pattern:
+   - Writes content to `${filePath}.tmp.${process.pid}` first
+   - Uses `fs.rename()` to atomically move it to the final path (atomic on POSIX when on the same filesystem)
+   - On rename failure: cleans up the temp file (best-effort) in a try/catch, then re-throws the error
+
+3. **Left `appendRecord()` and `createExpertiseFile()` as-is**: 
+   - `appendFile` for a single JSONL line is already safe
+   - `createExpertiseFile` writes an empty string, no risk of corruption
+
+**Test results**: All 345 tests pass across 25 test files. Build succeeds cleanly.
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="atomic-writes" color="blue">
+{"type":"idle_notification","from":"atomic-writes","timestamp":"2026-02-12T15:40:59.921Z","idleReason":"available"}
+</teammate-message>
+
+<teammate-message teammate_id="atomic-writes" color="blue">
+{"type":"idle_notification","from":"atomic-writes","timestamp":"2026-02-12T15:41:03.342Z","idleReason":"available"}
+</teammate-message>
+
+---
+
+<teammate-message teammate_id="file-locking" color="green" summary="File-level locking complete, all 345 tests pass">
+Task #2 (file-level locking) is complete. Here's what I changed:
+
+**New file created:**
+- `/Users/jayminwest/Projects/mulch/src/utils/lock.ts` — Exports `withFileLock<T>(filePath, fn)` that:
+  - Creates `${filePath}.lock` using `O_CREAT | O_EXCL` (atomic exclusive create)
+  - Retries every 50ms for up to 5 seconds on EEXIST
+  - Detects stale locks older than 30 seconds and removes them
+  - Always cleans up the lock file in a `finally` block
+  - No new npm dependencies — uses only Node.js built-in `fs` primitives
+
+**Commands wired with locking (6 files modified):**
+1. `src/commands/record.ts` — wrapped the read→(dedup check→upsert/append) block
+2. `src/commands/edit.ts` — wrapped the read→modify→write block
+3. `src/commands/delete.ts` — wrapped the read→splice→write block
+4. `src/commands/compact.ts` — wrapped handleApply's read→filter→write block
+5. `src/commands/prune.ts` — wrapped per-domain read→filter→write loop
+6. `src/commands/doctor.ts` — wrapped all three fix cases (jsonl-integrity, schema-validation, stale-records)
+
+**Results:**
+- `npm run build` passes cleanly
+- All 345 tests pass (25 test files)
+- No new dependencies added
+</teammate-message>
