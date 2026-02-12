@@ -1,0 +1,13 @@
+let's add a changelog to this proj. scout out what this would look like and then report back with a plan
+
+---
+
+yeah go ahead
+
+---
+
+record this new changelog in mulch and expected behavior for using it for future agents
+
+---
+
+commit and push changelog
