@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   readExpertiseFile,
   appendRecord,
+  writeExpertiseFile,
   filterByType,
   countRecords,
   createExpertiseFile,
@@ -177,6 +178,54 @@ describe("expertise utils", () => {
       ];
       const matches = searchRecords(records, "foo.ts");
       expect(matches).toHaveLength(1);
+    });
+  });
+
+  describe("writeExpertiseFile (atomic writes)", () => {
+    it("writes records via temp file + rename (no temp file left behind)", async () => {
+      const filePath = join(tmpDir, "atomic.jsonl");
+      await createExpertiseFile(filePath);
+
+      const records = [makeConvention("first"), makeConvention("second")];
+      await writeExpertiseFile(filePath, records);
+
+      // Verify content was written correctly
+      const result = await readExpertiseFile(filePath);
+      expect(result).toHaveLength(2);
+
+      // Verify no temp files left behind
+      const files = await readdir(tmpDir);
+      const tmpFiles = files.filter((f) => f.includes(".tmp."));
+      expect(tmpFiles).toHaveLength(0);
+    });
+
+    it("writes empty file atomically", async () => {
+      const filePath = join(tmpDir, "empty-atomic.jsonl");
+      await createExpertiseFile(filePath);
+      await writeExpertiseFile(filePath, []);
+
+      const content = await readFile(filePath, "utf-8");
+      expect(content).toBe("");
+
+      const files = await readdir(tmpDir);
+      const tmpFiles = files.filter((f) => f.includes(".tmp."));
+      expect(tmpFiles).toHaveLength(0);
+    });
+
+    it("produces valid JSONL that round-trips through read", async () => {
+      const filePath = join(tmpDir, "roundtrip.jsonl");
+      await createExpertiseFile(filePath);
+
+      const records = [
+        makeConvention("Use single quotes"),
+        makePattern("atomic-pattern"),
+      ];
+      await writeExpertiseFile(filePath, records);
+
+      const result = await readExpertiseFile(filePath);
+      expect(result).toHaveLength(2);
+      expect((result[0] as { content: string }).content).toBe("Use single quotes");
+      expect((result[1] as { name: string }).name).toBe("atomic-pattern");
     });
   });
 });

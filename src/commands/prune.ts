@@ -2,6 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { readConfig, getExpertisePath } from "../utils/config.js";
 import { readExpertiseFile, writeExpertiseFile } from "../utils/expertise.js";
+import { withFileLock } from "../utils/lock.js";
 import type { ExpertiseRecord, Classification } from "../schemas/record.js";
 import { outputJson } from "../utils/json-output.js";
 
@@ -54,35 +55,42 @@ export function registerPruneCommand(program: Command): void {
 
       for (const domain of config.domains) {
         const filePath = getExpertisePath(domain);
-        const records = await readExpertiseFile(filePath);
 
-        if (records.length === 0) {
-          continue;
-        }
+        const domainResult = await withFileLock(filePath, async () => {
+          const records = await readExpertiseFile(filePath);
 
-        const kept: ExpertiseRecord[] = [];
-        let pruned = 0;
-
-        for (const record of records) {
-          if (isStale(record, now, shelfLife)) {
-            pruned++;
-          } else {
-            kept.push(record);
+          if (records.length === 0) {
+            return null;
           }
-        }
 
-        if (pruned > 0) {
-          results.push({
-            domain,
-            before: records.length,
-            pruned,
-            after: kept.length,
-          });
-          totalPruned += pruned;
+          const kept: ExpertiseRecord[] = [];
+          let pruned = 0;
 
-          if (!options.dryRun) {
-            await writeExpertiseFile(filePath, kept);
+          for (const record of records) {
+            if (isStale(record, now, shelfLife)) {
+              pruned++;
+            } else {
+              kept.push(record);
+            }
           }
+
+          if (pruned > 0) {
+            if (!options.dryRun) {
+              await writeExpertiseFile(filePath, kept);
+            }
+            return {
+              domain,
+              before: records.length,
+              pruned,
+              after: kept.length,
+            };
+          }
+          return null;
+        });
+
+        if (domainResult) {
+          results.push(domainResult);
+          totalPruned += domainResult.pruned;
         }
       }
 

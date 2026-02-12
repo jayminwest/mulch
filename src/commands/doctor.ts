@@ -12,6 +12,7 @@ import {
   findDuplicate,
   createExpertiseFile,
 } from "../utils/expertise.js";
+import { withFileLock } from "../utils/lock.js";
 import { isStale } from "./prune.js";
 import { recordSchema } from "../schemas/record-schema.js";
 import type { MulchConfig } from "../schemas/config.js";
@@ -232,29 +233,31 @@ async function applyFixes(checks: DoctorCheck[], config: MulchConfig, cwd?: stri
         // Remove invalid JSON lines
         for (const domain of config.domains) {
           const filePath = getExpertisePath(domain, cwd);
-          let content: string;
-          try {
-            content = await readFile(filePath, "utf-8");
-          } catch {
-            continue;
-          }
-          const lines = content.split("\n");
-          const valid: string[] = [];
-          let removed = 0;
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.length === 0) continue;
+          await withFileLock(filePath, async () => {
+            let content: string;
             try {
-              JSON.parse(trimmed);
-              valid.push(trimmed);
+              content = await readFile(filePath, "utf-8");
             } catch {
-              removed++;
+              return;
             }
-          }
-          if (removed > 0) {
-            await fsWriteFile(filePath, valid.map((l) => l).join("\n") + (valid.length > 0 ? "\n" : ""), "utf-8");
-            fixed.push(`Removed ${removed} invalid JSON line(s) from ${domain}`);
-          }
+            const lines = content.split("\n");
+            const valid: string[] = [];
+            let removed = 0;
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.length === 0) continue;
+              try {
+                JSON.parse(trimmed);
+                valid.push(trimmed);
+              } catch {
+                removed++;
+              }
+            }
+            if (removed > 0) {
+              await fsWriteFile(filePath, valid.map((l) => l).join("\n") + (valid.length > 0 ? "\n" : ""), "utf-8");
+              fixed.push(`Removed ${removed} invalid JSON line(s) from ${domain}`);
+            }
+          });
         }
         break;
       }
@@ -264,13 +267,15 @@ async function applyFixes(checks: DoctorCheck[], config: MulchConfig, cwd?: stri
         const validate = ajv.compile(recordSchema);
         for (const domain of config.domains) {
           const filePath = getExpertisePath(domain, cwd);
-          const records = await readExpertiseFile(filePath);
-          const valid = records.filter((r) => validate(r));
-          const removed = records.length - valid.length;
-          if (removed > 0) {
-            await writeExpertiseFile(filePath, valid);
-            fixed.push(`Removed ${removed} invalid record(s) from ${domain}`);
-          }
+          await withFileLock(filePath, async () => {
+            const records = await readExpertiseFile(filePath);
+            const valid = records.filter((r) => validate(r));
+            const removed = records.length - valid.length;
+            if (removed > 0) {
+              await writeExpertiseFile(filePath, valid);
+              fixed.push(`Removed ${removed} invalid record(s) from ${domain}`);
+            }
+          });
         }
         break;
       }
@@ -280,13 +285,15 @@ async function applyFixes(checks: DoctorCheck[], config: MulchConfig, cwd?: stri
         const shelfLife = config.classification_defaults.shelf_life;
         for (const domain of config.domains) {
           const filePath = getExpertisePath(domain, cwd);
-          const records = await readExpertiseFile(filePath);
-          const kept = records.filter((r) => !isStale(r, now, shelfLife));
-          const pruned = records.length - kept.length;
-          if (pruned > 0) {
-            await writeExpertiseFile(filePath, kept);
-            fixed.push(`Pruned ${pruned} stale record(s) from ${domain}`);
-          }
+          await withFileLock(filePath, async () => {
+            const records = await readExpertiseFile(filePath);
+            const kept = records.filter((r) => !isStale(r, now, shelfLife));
+            const pruned = records.length - kept.length;
+            if (pruned > 0) {
+              await writeExpertiseFile(filePath, kept);
+              fixed.push(`Pruned ${pruned} stale record(s) from ${domain}`);
+            }
+          });
         }
         break;
       }

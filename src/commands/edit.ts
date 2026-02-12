@@ -8,6 +8,7 @@ import {
   writeExpertiseFile,
   resolveRecordId,
 } from "../utils/expertise.js";
+import { withFileLock } from "../utils/lock.js";
 import { recordSchema } from "../schemas/record-schema.js";
 import type { Classification } from "../schemas/record.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
@@ -61,133 +62,135 @@ export function registerEditCommand(program: Command): void {
           }
 
           const filePath = getExpertisePath(domain);
-          const records = await readExpertiseFile(filePath);
+          await withFileLock(filePath, async () => {
+            const records = await readExpertiseFile(filePath);
 
-          const resolved = resolveRecordId(records, id);
-          if (!resolved.ok) {
-            if (jsonMode) {
-              outputJsonError("edit", resolved.error);
-            } else {
-              console.error(chalk.red(`Error: ${resolved.error}`));
+            const resolved = resolveRecordId(records, id);
+            if (!resolved.ok) {
+              if (jsonMode) {
+                outputJsonError("edit", resolved.error);
+              } else {
+                console.error(chalk.red(`Error: ${resolved.error}`));
+              }
+              process.exitCode = 1;
+              return;
             }
-            process.exitCode = 1;
-            return;
-          }
-          const targetIndex = resolved.index;
+            const targetIndex = resolved.index;
 
-          const record = { ...records[targetIndex] };
+            const record = { ...records[targetIndex] };
 
-          // Apply updates based on record type
-          if (options.classification) {
-            record.classification = options.classification as Classification;
-          }
-          if (typeof options.relatesTo === "string") {
-            record.relates_to = options.relatesTo
-              .split(",")
-              .map((id: string) => id.trim())
-              .filter(Boolean);
-          }
-          if (typeof options.supersedes === "string") {
-            record.supersedes = options.supersedes
-              .split(",")
-              .map((id: string) => id.trim())
-              .filter(Boolean);
-          }
+            // Apply updates based on record type
+            if (options.classification) {
+              record.classification = options.classification as Classification;
+            }
+            if (typeof options.relatesTo === "string") {
+              record.relates_to = options.relatesTo
+                .split(",")
+                .map((id: string) => id.trim())
+                .filter(Boolean);
+            }
+            if (typeof options.supersedes === "string") {
+              record.supersedes = options.supersedes
+                .split(",")
+                .map((id: string) => id.trim())
+                .filter(Boolean);
+            }
 
-          switch (record.type) {
-            case "convention":
-              if (options.content) {
-                record.content = options.content as string;
-              }
-              break;
-            case "pattern":
-              if (options.name) {
-                record.name = options.name as string;
-              }
-              if (options.description) {
-                record.description = options.description as string;
-              }
-              if (typeof options.files === "string") {
-                record.files = (options.files as string).split(",");
-              }
-              break;
-            case "failure":
-              if (options.description) {
-                record.description = options.description as string;
-              }
-              if (options.resolution) {
-                record.resolution = options.resolution as string;
-              }
-              break;
-            case "decision":
-              if (options.title) {
-                record.title = options.title as string;
-              }
-              if (options.rationale) {
-                record.rationale = options.rationale as string;
-              }
-              break;
-            case "reference":
-              if (options.name) {
-                record.name = options.name as string;
-              }
-              if (options.description) {
-                record.description = options.description as string;
-              }
-              if (typeof options.files === "string") {
-                record.files = (options.files as string).split(",");
-              }
-              break;
-            case "guide":
-              if (options.name) {
-                record.name = options.name as string;
-              }
-              if (options.description) {
-                record.description = options.description as string;
-              }
-              break;
-          }
+            switch (record.type) {
+              case "convention":
+                if (options.content) {
+                  record.content = options.content as string;
+                }
+                break;
+              case "pattern":
+                if (options.name) {
+                  record.name = options.name as string;
+                }
+                if (options.description) {
+                  record.description = options.description as string;
+                }
+                if (typeof options.files === "string") {
+                  record.files = (options.files as string).split(",");
+                }
+                break;
+              case "failure":
+                if (options.description) {
+                  record.description = options.description as string;
+                }
+                if (options.resolution) {
+                  record.resolution = options.resolution as string;
+                }
+                break;
+              case "decision":
+                if (options.title) {
+                  record.title = options.title as string;
+                }
+                if (options.rationale) {
+                  record.rationale = options.rationale as string;
+                }
+                break;
+              case "reference":
+                if (options.name) {
+                  record.name = options.name as string;
+                }
+                if (options.description) {
+                  record.description = options.description as string;
+                }
+                if (typeof options.files === "string") {
+                  record.files = (options.files as string).split(",");
+                }
+                break;
+              case "guide":
+                if (options.name) {
+                  record.name = options.name as string;
+                }
+                if (options.description) {
+                  record.description = options.description as string;
+                }
+                break;
+            }
 
-          // Validate the updated record
-          const ajv = new Ajv();
-          const validate = ajv.compile(recordSchema);
-          if (!validate(record)) {
-            const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
-            if (jsonMode) {
-              outputJsonError("edit", `Updated record failed schema validation: ${errors.join("; ")}`);
-            } else {
-              console.error(
-                chalk.red("Error: updated record failed schema validation:"),
-              );
-              for (const err of validate.errors ?? []) {
+            // Validate the updated record
+            const ajv = new Ajv();
+            const validate = ajv.compile(recordSchema);
+            if (!validate(record)) {
+              const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
+              if (jsonMode) {
+                outputJsonError("edit", `Updated record failed schema validation: ${errors.join("; ")}`);
+              } else {
                 console.error(
-                  chalk.red(`  ${err.instancePath} ${err.message}`),
+                  chalk.red("Error: updated record failed schema validation:"),
                 );
+                for (const err of validate.errors ?? []) {
+                  console.error(
+                    chalk.red(`  ${err.instancePath} ${err.message}`),
+                  );
+                }
               }
+              process.exitCode = 1;
+              return;
             }
-            process.exitCode = 1;
-            return;
-          }
 
-          records[targetIndex] = record;
-          await writeExpertiseFile(filePath, records);
+            records[targetIndex] = record;
+            await writeExpertiseFile(filePath, records);
 
-          if (jsonMode) {
-            outputJson({
-              success: true,
-              command: "edit",
-              domain,
-              id: record.id ?? null,
-              type: record.type,
-              record,
-            });
-          } else {
-            console.log(
-              chalk.green(
-                `\u2714 Updated ${record.type} ${record.id ?? ""} in ${domain}`,
-              ),
-            );
-          }
+            if (jsonMode) {
+              outputJson({
+                success: true,
+                command: "edit",
+                domain,
+                id: record.id ?? null,
+                type: record.type,
+                record,
+              });
+            } else {
+              console.log(
+                chalk.green(
+                  `\u2714 Updated ${record.type} ${record.id ?? ""} in ${domain}`,
+                ),
+              );
+            }
+          });
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === "ENOENT") {
             if (jsonMode) {

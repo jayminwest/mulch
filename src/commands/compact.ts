@@ -7,6 +7,7 @@ import {
   generateRecordId,
   resolveRecordId,
 } from "../utils/expertise.js";
+import { withFileLock } from "../utils/lock.js";
 import { recordSchema } from "../schemas/record-schema.js";
 import type {
   ExpertiseRecord,
@@ -206,156 +207,158 @@ async function handleApply(
   }
 
   const filePath = getExpertisePath(domain);
-  const records = await readExpertiseFile(filePath);
-  const identifiers = (options.records as string).split(",").map((s) => s.trim()).filter(Boolean);
+  await withFileLock(filePath, async () => {
+    const records = await readExpertiseFile(filePath);
+    const identifiers = (options.records as string).split(",").map((s) => s.trim()).filter(Boolean);
 
-  let indicesToRemove: number[];
-  try {
-    indicesToRemove = resolveRecordIds(records, identifiers);
-  } catch (err) {
-    const msg = (err as Error).message;
-    if (jsonMode) {
-      outputJsonError("compact", msg);
-    } else {
-      console.error(chalk.red(`Error: ${msg}`));
+    let indicesToRemove: number[];
+    try {
+      indicesToRemove = resolveRecordIds(records, identifiers);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (jsonMode) {
+        outputJsonError("compact", msg);
+      } else {
+        console.error(chalk.red(`Error: ${msg}`));
+      }
+      process.exitCode = 1;
+      return;
     }
-    process.exitCode = 1;
-    return;
-  }
 
-  if (indicesToRemove.length < 2) {
-    const msg = "Compaction requires at least 2 records.";
-    if (jsonMode) {
-      outputJsonError("compact", msg);
-    } else {
-      console.error(chalk.red(`Error: ${msg}`));
+    if (indicesToRemove.length < 2) {
+      const msg = "Compaction requires at least 2 records.";
+      if (jsonMode) {
+        outputJsonError("compact", msg);
+      } else {
+        console.error(chalk.red(`Error: ${msg}`));
+      }
+      process.exitCode = 1;
+      return;
     }
-    process.exitCode = 1;
-    return;
-  }
 
-  // Build replacement record
-  const recordType = (options.type as RecordType | undefined) ?? records[indicesToRemove[0]].type;
-  const recordedAt = new Date().toISOString();
-  const compactedFrom = indicesToRemove.map((i) => records[i].id).filter(Boolean) as string[];
+    // Build replacement record
+    const recordType = (options.type as RecordType | undefined) ?? records[indicesToRemove[0]].type;
+    const recordedAt = new Date().toISOString();
+    const compactedFrom = indicesToRemove.map((i) => records[i].id).filter(Boolean) as string[];
 
-  let replacement: ExpertiseRecord;
+    let replacement: ExpertiseRecord;
 
-  switch (recordType) {
-    case "convention": {
-      const content = (options.content as string | undefined) ?? (options.description as string | undefined);
-      if (!content) {
-        const msg = "Replacement convention requires --content or --description.";
+    switch (recordType) {
+      case "convention": {
+        const content = (options.content as string | undefined) ?? (options.description as string | undefined);
+        if (!content) {
+          const msg = "Replacement convention requires --content or --description.";
+          if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
+          process.exitCode = 1;
+          return;
+        }
+        replacement = { type: "convention", content, classification: "foundational", recorded_at: recordedAt };
+        break;
+      }
+      case "pattern": {
+        const name = options.name as string | undefined;
+        const description = options.description as string | undefined;
+        if (!name || !description) {
+          const msg = "Replacement pattern requires --name and --description.";
+          if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
+          process.exitCode = 1;
+          return;
+        }
+        replacement = { type: "pattern", name, description, classification: "foundational", recorded_at: recordedAt };
+        break;
+      }
+      case "failure": {
+        const description = options.description as string | undefined;
+        const resolution = options.resolution as string | undefined;
+        if (!description || !resolution) {
+          const msg = "Replacement failure requires --description and --resolution.";
+          if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
+          process.exitCode = 1;
+          return;
+        }
+        replacement = { type: "failure", description, resolution, classification: "foundational", recorded_at: recordedAt };
+        break;
+      }
+      case "decision": {
+        const title = options.title as string | undefined;
+        const rationale = options.rationale as string | undefined;
+        if (!title || !rationale) {
+          const msg = "Replacement decision requires --title and --rationale.";
+          if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
+          process.exitCode = 1;
+          return;
+        }
+        replacement = { type: "decision", title, rationale, classification: "foundational", recorded_at: recordedAt };
+        break;
+      }
+      case "reference": {
+        const name = options.name as string | undefined;
+        const description = options.description as string | undefined;
+        if (!name || !description) {
+          const msg = "Replacement reference requires --name and --description.";
+          if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
+          process.exitCode = 1;
+          return;
+        }
+        replacement = { type: "reference", name, description, classification: "foundational", recorded_at: recordedAt };
+        break;
+      }
+      case "guide": {
+        const name = options.name as string | undefined;
+        const description = options.description as string | undefined;
+        if (!name || !description) {
+          const msg = "Replacement guide requires --name and --description.";
+          if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
+          process.exitCode = 1;
+          return;
+        }
+        replacement = { type: "guide", name, description, classification: "foundational", recorded_at: recordedAt };
+        break;
+      }
+      default: {
+        const msg = `Unknown record type "${recordType}".`;
         if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
         process.exitCode = 1;
         return;
       }
-      replacement = { type: "convention", content, classification: "foundational", recorded_at: recordedAt };
-      break;
     }
-    case "pattern": {
-      const name = options.name as string | undefined;
-      const description = options.description as string | undefined;
-      if (!name || !description) {
-        const msg = "Replacement pattern requires --name and --description.";
-        if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
-        process.exitCode = 1;
-        return;
-      }
-      replacement = { type: "pattern", name, description, classification: "foundational", recorded_at: recordedAt };
-      break;
+
+    // Add supersedes links to the compacted-from records
+    if (compactedFrom.length > 0) {
+      replacement.supersedes = compactedFrom;
     }
-    case "failure": {
-      const description = options.description as string | undefined;
-      const resolution = options.resolution as string | undefined;
-      if (!description || !resolution) {
-        const msg = "Replacement failure requires --description and --resolution.";
-        if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
-        process.exitCode = 1;
-        return;
-      }
-      replacement = { type: "failure", description, resolution, classification: "foundational", recorded_at: recordedAt };
-      break;
-    }
-    case "decision": {
-      const title = options.title as string | undefined;
-      const rationale = options.rationale as string | undefined;
-      if (!title || !rationale) {
-        const msg = "Replacement decision requires --title and --rationale.";
-        if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
-        process.exitCode = 1;
-        return;
-      }
-      replacement = { type: "decision", title, rationale, classification: "foundational", recorded_at: recordedAt };
-      break;
-    }
-    case "reference": {
-      const name = options.name as string | undefined;
-      const description = options.description as string | undefined;
-      if (!name || !description) {
-        const msg = "Replacement reference requires --name and --description.";
-        if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
-        process.exitCode = 1;
-        return;
-      }
-      replacement = { type: "reference", name, description, classification: "foundational", recorded_at: recordedAt };
-      break;
-    }
-    case "guide": {
-      const name = options.name as string | undefined;
-      const description = options.description as string | undefined;
-      if (!name || !description) {
-        const msg = "Replacement guide requires --name and --description.";
-        if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
-        process.exitCode = 1;
-        return;
-      }
-      replacement = { type: "guide", name, description, classification: "foundational", recorded_at: recordedAt };
-      break;
-    }
-    default: {
-      const msg = `Unknown record type "${recordType}".`;
+
+    // Validate replacement
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+    replacement.id = generateRecordId(replacement);
+    if (!validate(replacement)) {
+      const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
+      const msg = `Replacement record failed validation: ${errors.join("; ")}`;
       if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
       process.exitCode = 1;
       return;
     }
-  }
 
-  // Add supersedes links to the compacted-from records
-  if (compactedFrom.length > 0) {
-    replacement.supersedes = compactedFrom;
-  }
+    // Remove old records and append replacement
+    const removeSet = new Set(indicesToRemove);
+    const remaining = records.filter((_, i) => !removeSet.has(i));
+    remaining.push(replacement);
+    await writeExpertiseFile(filePath, remaining);
 
-  // Validate replacement
-  const ajv = new Ajv();
-  const validate = ajv.compile(recordSchema);
-  replacement.id = generateRecordId(replacement);
-  if (!validate(replacement)) {
-    const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
-    const msg = `Replacement record failed validation: ${errors.join("; ")}`;
-    if (jsonMode) { outputJsonError("compact", msg); } else { console.error(chalk.red(`Error: ${msg}`)); }
-    process.exitCode = 1;
-    return;
-  }
-
-  // Remove old records and append replacement
-  const removeSet = new Set(indicesToRemove);
-  const remaining = records.filter((_, i) => !removeSet.has(i));
-  remaining.push(replacement);
-  await writeExpertiseFile(filePath, remaining);
-
-  if (jsonMode) {
-    outputJson({
-      success: true,
-      command: "compact",
-      action: "applied",
-      domain,
-      removed: indicesToRemove.length,
-      replacement,
-    });
-  } else {
-    console.log(
-      chalk.green(`\u2714 Compacted ${indicesToRemove.length} ${recordType} records into 1 in ${domain}`),
-    );
-  }
+    if (jsonMode) {
+      outputJson({
+        success: true,
+        command: "compact",
+        action: "applied",
+        domain,
+        removed: indicesToRemove.length,
+        replacement,
+      });
+    } else {
+      console.log(
+        chalk.green(`\u2714 Compacted ${indicesToRemove.length} ${recordType} records into 1 in ${domain}`),
+      );
+    }
+  });
 }

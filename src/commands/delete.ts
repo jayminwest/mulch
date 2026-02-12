@@ -6,6 +6,7 @@ import {
   writeExpertiseFile,
   resolveRecordId,
 } from "../utils/expertise.js";
+import { withFileLock } from "../utils/lock.js";
 import { getRecordSummary } from "../utils/format.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
 
@@ -39,40 +40,42 @@ export function registerDeleteCommand(program: Command): void {
           }
 
           const filePath = getExpertisePath(domain);
-          const records = await readExpertiseFile(filePath);
+          await withFileLock(filePath, async () => {
+            const records = await readExpertiseFile(filePath);
 
-          const resolved = resolveRecordId(records, id);
-          if (!resolved.ok) {
-            if (jsonMode) {
-              outputJsonError("delete", resolved.error);
-            } else {
-              console.error(chalk.red(`Error: ${resolved.error}`));
+            const resolved = resolveRecordId(records, id);
+            if (!resolved.ok) {
+              if (jsonMode) {
+                outputJsonError("delete", resolved.error);
+              } else {
+                console.error(chalk.red(`Error: ${resolved.error}`));
+              }
+              process.exitCode = 1;
+              return;
             }
-            process.exitCode = 1;
-            return;
-          }
-          const targetIndex = resolved.index;
+            const targetIndex = resolved.index;
 
-          const deleted = records[targetIndex];
-          records.splice(targetIndex, 1);
-          await writeExpertiseFile(filePath, records);
+            const deleted = records[targetIndex];
+            records.splice(targetIndex, 1);
+            await writeExpertiseFile(filePath, records);
 
-          if (jsonMode) {
-            outputJson({
-              success: true,
-              command: "delete",
-              domain,
-              id: deleted.id ?? null,
-              type: deleted.type,
-              summary: getRecordSummary(deleted),
-            });
-          } else {
-            console.log(
-              chalk.green(
-                `✔ Deleted ${deleted.type} ${deleted.id ?? ""} from ${domain}: ${getRecordSummary(deleted)}`,
-              ),
-            );
-          }
+            if (jsonMode) {
+              outputJson({
+                success: true,
+                command: "delete",
+                domain,
+                id: deleted.id ?? null,
+                type: deleted.type,
+                summary: getRecordSummary(deleted),
+              });
+            } else {
+              console.log(
+                chalk.green(
+                  `✔ Deleted ${deleted.type} ${deleted.id ?? ""} from ${domain}: ${getRecordSummary(deleted)}`,
+                ),
+              );
+            }
+          });
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === "ENOENT") {
             if (jsonMode) {

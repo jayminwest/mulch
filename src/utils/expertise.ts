@@ -1,4 +1,4 @@
-import { readFile, appendFile, writeFile, stat } from "node:fs/promises";
+import { readFile, appendFile, writeFile, stat, rename, unlink } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import type { ExpertiseRecord } from "../schemas/record.js";
 
@@ -79,7 +79,14 @@ export async function writeExpertiseFile(
     }
   }
   const content = records.map((r) => JSON.stringify(r)).join("\n") + (records.length > 0 ? "\n" : "");
-  await writeFile(filePath, content, "utf-8");
+  const tmpPath = `${filePath}.tmp.${process.pid}`;
+  await writeFile(tmpPath, content, "utf-8");
+  try {
+    await rename(tmpPath, filePath);
+  } catch (err) {
+    try { await unlink(tmpPath); } catch { /* best-effort cleanup */ }
+    throw err;
+  }
 }
 
 export function countRecords(records: ExpertiseRecord[]): number {

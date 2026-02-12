@@ -9,6 +9,7 @@ import {
   writeExpertiseFile,
   findDuplicate,
 } from "../utils/expertise.js";
+import { withFileLock } from "../utils/lock.js";
 import { recordSchema } from "../schemas/record-schema.js";
 import type {
   ExpertiseRecord,
@@ -322,71 +323,73 @@ export function registerRecordCommand(program: Command): void {
         }
 
         const filePath = getExpertisePath(domain);
-        const existing = await readExpertiseFile(filePath);
-        const dup = findDuplicate(existing, record);
+        await withFileLock(filePath, async () => {
+          const existing = await readExpertiseFile(filePath);
+          const dup = findDuplicate(existing, record);
 
-        if (dup && !options.force) {
-          const isNamed =
-            record.type === "pattern" || record.type === "decision" ||
-            record.type === "reference" || record.type === "guide";
+          if (dup && !options.force) {
+            const isNamed =
+              record.type === "pattern" || record.type === "decision" ||
+              record.type === "reference" || record.type === "guide";
 
-          if (isNamed) {
-            // Upsert: replace in place
-            existing[dup.index] = record;
-            await writeExpertiseFile(filePath, existing);
+            if (isNamed) {
+              // Upsert: replace in place
+              existing[dup.index] = record;
+              await writeExpertiseFile(filePath, existing);
+              if (jsonMode) {
+                outputJson({
+                  success: true,
+                  command: "record",
+                  action: "updated",
+                  domain,
+                  type: recordType,
+                  index: dup.index + 1,
+                  record,
+                });
+              } else {
+                console.log(
+                  chalk.green(
+                    `\u2714 Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`,
+                  ),
+                );
+              }
+            } else {
+              // Exact match: skip
+              if (jsonMode) {
+                outputJson({
+                  success: true,
+                  command: "record",
+                  action: "skipped",
+                  domain,
+                  type: recordType,
+                  index: dup.index + 1,
+                });
+              } else {
+                console.log(
+                  chalk.yellow(
+                    `Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
+                  ),
+                );
+              }
+            }
+          } else {
+            await appendRecord(filePath, record);
             if (jsonMode) {
               outputJson({
                 success: true,
                 command: "record",
-                action: "updated",
+                action: "created",
                 domain,
                 type: recordType,
-                index: dup.index + 1,
                 record,
               });
             } else {
               console.log(
-                chalk.green(
-                  `\u2714 Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`,
-                ),
-              );
-            }
-          } else {
-            // Exact match: skip
-            if (jsonMode) {
-              outputJson({
-                success: true,
-                command: "record",
-                action: "skipped",
-                domain,
-                type: recordType,
-                index: dup.index + 1,
-              });
-            } else {
-              console.log(
-                chalk.yellow(
-                  `Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
-                ),
+                chalk.green(`\u2714 Recorded ${recordType} in ${domain}`),
               );
             }
           }
-        } else {
-          await appendRecord(filePath, record);
-          if (jsonMode) {
-            outputJson({
-              success: true,
-              command: "record",
-              action: "created",
-              domain,
-              type: recordType,
-              record,
-            });
-          } else {
-            console.log(
-              chalk.green(`\u2714 Recorded ${recordType} in ${domain}`),
-            );
-          }
-        }
+        });
       },
     );
 }
