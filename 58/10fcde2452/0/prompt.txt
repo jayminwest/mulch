@@ -1,0 +1,9 @@
+I feel like "mulch prime --full" isn't working properly, looks like it's still truncating results. Verify and track in beads if it's an issue
+
+---
+
+yes fix it
+
+---
+
+commit and push

@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.2",
+  "checkpoint_id": "5810fcde2452",
+  "session_id": "3b175102-e193-4372-aa05-f3628a8de2a7",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-12T18:42:19.031586Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/commands/prime.ts"
+  ],
+  "agent": "Claude Code",
+  "transcript_identifier_at_start": "d8c9ae1d-59a9-4249-a150-c7299b317d60",
+  "token_usage": {
+    "input_tokens": 31,
+    "cache_creation_tokens": 32525,
+    "cache_read_tokens": 1055211,
+    "output_tokens": 379,
+    "api_call_count": 25
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-12T18:42:19.016319Z",
+    "agent_lines": 0,
+    "human_added": 63,
+    "human_modified": 2,
+    "human_removed": 0,
+    "total_committed": 65,
+    "agent_percentage": 0
+  }
+}
