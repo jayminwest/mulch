@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, readFile, stat } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, stat, symlink, lstat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { withFileLock } from "../../src/utils/lock.js";
@@ -84,6 +85,30 @@ describe("withFileLock", () => {
     // Should succeed despite existing lock (it's stale)
     const result = await withFileLock(filePath, async () => "acquired");
     expect(result).toBe("acquired");
+  });
+
+  it("handles symlink lock files without following the symlink target", async () => {
+    const filePath = join(tmpDir, "test.jsonl");
+    const lockPath = `${filePath}.lock`;
+    const targetFile = join(tmpDir, "target-file.txt");
+    await writeFile(filePath, "", "utf-8");
+    await writeFile(targetFile, "important data", "utf-8");
+
+    // Create a symlink lock pointing to a different file
+    await symlink(targetFile, lockPath);
+
+    // Back-date the symlink's own mtime to make it "stale"
+    const thirtyOneSecondsAgo = new Date(Date.now() - 31_000);
+    const { lutimes } = await import("node:fs/promises");
+    await lutimes(lockPath, thirtyOneSecondsAgo, thirtyOneSecondsAgo);
+
+    // withFileLock should treat the stale symlink lock correctly
+    const result = await withFileLock(filePath, async () => "acquired");
+    expect(result).toBe("acquired");
+
+    // The target file should not have been affected
+    const targetContent = await readFile(targetFile, "utf-8");
+    expect(targetContent).toBe("important data");
   });
 
   it("times out when lock is held and not stale", async () => {

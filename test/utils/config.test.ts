@@ -12,6 +12,7 @@ import {
   getConfigPath,
   getExpertiseDir,
   getExpertisePath,
+  validateDomainName,
 } from "../../src/utils/config.js";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
 import type { MulchConfig } from "../../src/schemas/config.js";
@@ -86,6 +87,67 @@ describe("config utils", () => {
 
     it("throws when config file does not exist", async () => {
       await expect(readConfig(tmpDir)).rejects.toThrow();
+    });
+  });
+
+  describe("validateDomainName", () => {
+    it("accepts simple alphanumeric names", () => {
+      expect(() => validateDomainName("cli")).not.toThrow();
+      expect(() => validateDomainName("testing")).not.toThrow();
+      expect(() => validateDomainName("architecture")).not.toThrow();
+    });
+
+    it("accepts names with hyphens and underscores", () => {
+      expect(() => validateDomainName("my-domain")).not.toThrow();
+      expect(() => validateDomainName("my_domain")).not.toThrow();
+      expect(() => validateDomainName("front-end")).not.toThrow();
+    });
+
+    it("accepts names starting with digits", () => {
+      expect(() => validateDomainName("3d-rendering")).not.toThrow();
+    });
+
+    it("rejects path traversal attempts", () => {
+      expect(() => validateDomainName("../../etc/passwd")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("../secrets")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("foo/../../bar")).toThrow(/Invalid domain name/);
+    });
+
+    it("rejects names with slashes", () => {
+      expect(() => validateDomainName("foo/bar")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("/absolute")).toThrow(/Invalid domain name/);
+    });
+
+    it("rejects names with dots", () => {
+      expect(() => validateDomainName("my.domain")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName(".hidden")).toThrow(/Invalid domain name/);
+    });
+
+    it("rejects empty string", () => {
+      expect(() => validateDomainName("")).toThrow(/Invalid domain name/);
+    });
+
+    it("rejects names starting with hyphen or underscore", () => {
+      expect(() => validateDomainName("-leading")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("_leading")).toThrow(/Invalid domain name/);
+    });
+
+    it("rejects names with spaces or special characters", () => {
+      expect(() => validateDomainName("my domain")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("domain;rm -rf")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("$(whoami)")).toThrow(/Invalid domain name/);
+    });
+  });
+
+  describe("getExpertisePath with validation", () => {
+    it("returns path for valid domain", () => {
+      expect(getExpertisePath("testing", "/some/path")).toBe(
+        "/some/path/.mulch/expertise/testing.jsonl",
+      );
+    });
+
+    it("rejects path traversal via domain name", () => {
+      expect(() => getExpertisePath("../../etc/passwd", "/some/path")).toThrow(/Invalid domain name/);
     });
   });
 

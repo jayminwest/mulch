@@ -181,6 +181,29 @@ describe("expertise utils", () => {
     });
   });
 
+  describe("writeExpertiseFile (temp file uniqueness)", () => {
+    it("concurrent writes use unique temp files and all succeed", async () => {
+      const filePath = join(tmpDir, "concurrent.jsonl");
+      await createExpertiseFile(filePath);
+
+      // Run multiple concurrent writes — each should use a unique temp file
+      const writes = Array.from({ length: 5 }, (_, i) =>
+        writeExpertiseFile(filePath, [makeConvention(`write-${i}`)]),
+      );
+
+      await expect(Promise.all(writes)).resolves.toBeDefined();
+
+      // Verify no temp files left behind
+      const files = await readdir(tmpDir);
+      const tmpFiles = files.filter((f) => f.includes(".tmp."));
+      expect(tmpFiles).toHaveLength(0);
+
+      // File should contain valid records from the last write
+      const result = await readExpertiseFile(filePath);
+      expect(result).toHaveLength(1);
+    });
+  });
+
   describe("writeExpertiseFile (atomic writes)", () => {
     it("writes records via temp file + rename (no temp file left behind)", async () => {
       const filePath = join(tmpDir, "atomic.jsonl");
