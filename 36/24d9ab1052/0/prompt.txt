@@ -1,0 +1,5 @@
+investigate the open PR and evaluate if we should merge it
+
+---
+
+Let's add some tests to it but then yeah we can merge
