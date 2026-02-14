@@ -7,6 +7,7 @@ export interface Evidence {
   date?: string;
   issue?: string;
   file?: string;
+  bead?: string;
 }
 
 interface BaseRecord {
