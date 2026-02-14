@@ -465,4 +465,100 @@ describe("record command", () => {
 
     expect(validate(record)).toBe(true);
   });
+
+  it("record with evidence.bead validates against schema", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "pattern",
+      name: "test-pattern",
+      description: "Pattern with bead evidence",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      evidence: {
+        bead: "beads-abc123",
+      },
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record with evidence.bead is stored and read back correctly", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const record: ExpertiseRecord = {
+      type: "failure",
+      description: "Bug found in feature X",
+      resolution: "Fixed by updating logic",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      evidence: {
+        bead: "beads-xyz789",
+      },
+    };
+    await appendRecord(filePath, record);
+
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+    expect(records[0].evidence?.bead).toBe("beads-xyz789");
+  });
+
+  it("record with evidence.bead and other evidence fields validates", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "Multi-evidence test",
+      classification: "foundational",
+      recorded_at: new Date().toISOString(),
+      evidence: {
+        commit: "abc123def",
+        issue: "#42",
+        file: "src/test.ts",
+        bead: "beads-999",
+      },
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record with only evidence.bead (no other evidence fields) validates", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "decision",
+      title: "Use new approach",
+      rationale: "Better performance",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      evidence: {
+        bead: "beads-solo",
+      },
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record without evidence.bead still validates (backward compat)", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "pattern",
+      name: "old-pattern",
+      description: "Pattern without bead",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      evidence: {
+        commit: "abc123",
+        file: "src/old.ts",
+      },
+    };
+
+    expect(validate(record)).toBe(true);
+  });
 });

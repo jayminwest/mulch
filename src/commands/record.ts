@@ -45,6 +45,7 @@ export function registerRecordCommand(program: Command): void {
     .option("--evidence-commit <commit>", "evidence: commit hash")
     .option("--evidence-issue <issue>", "evidence: issue reference")
     .option("--evidence-file <file>", "evidence: file path")
+    .option("--evidence-bead <bead>", "evidence: bead ID")
     .option("--relates-to <ids>", "comma-separated record IDs this relates to")
     .option("--supersedes <ids>", "comma-separated record IDs this supersedes")
     .option("--force", "force recording even if duplicate exists")
@@ -80,7 +81,7 @@ export function registerRecordCommand(program: Command): void {
 
         // Build evidence if any evidence option is provided
         let evidence: Evidence | undefined;
-        if (options.evidenceCommit || options.evidenceIssue || options.evidenceFile) {
+        if (options.evidenceCommit || options.evidenceIssue || options.evidenceFile || options.evidenceBead) {
           evidence = {};
           if (options.evidenceCommit)
             evidence.commit = options.evidenceCommit as string;
@@ -88,6 +89,8 @@ export function registerRecordCommand(program: Command): void {
             evidence.issue = options.evidenceIssue as string;
           if (options.evidenceFile)
             evidence.file = options.evidenceFile as string;
+          if (options.evidenceBead)
+            evidence.bead = options.evidenceBead as string;
         }
 
         const tags =
