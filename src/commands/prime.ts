@@ -128,8 +128,8 @@ export function registerPrimeCommand(program: Command): void {
 
         targetDomains = targetDomains.filter(d => !excluded.includes(d));
 
-        // Resolve changed files for --context filtering
-        let changedFiles: string[] | undefined;
+        // Resolve changed files for --context or --files filtering
+        let filesToFilter: string[] | undefined;
         if (options.context) {
           const cwd = process.cwd();
           if (!isGitRepo(cwd)) {
@@ -151,6 +151,8 @@ export function registerPrimeCommand(program: Command): void {
             }
             return;
           }
+        } else if (options.files && options.files.length > 0) {
+          filesToFilter = options.files;
         }
 
         // Determine budget settings

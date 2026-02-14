@@ -1147,6 +1147,48 @@ describe("prime command", () => {
   });
 
   describe("context filtering", () => {
+    it("--files option filters records by specified files", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["cli"] },
+        tmpDir,
+      );
+      const filePath = getExpertisePath("cli", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "Use ESM imports",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(filePath, {
+        type: "pattern",
+        name: "cli-entry",
+        description: "Main CLI entry",
+        files: ["src/cli.ts"],
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(filePath, {
+        type: "pattern",
+        name: "db-access",
+        description: "Database access layer",
+        files: ["src/db/index.ts"],
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      const allRecords = await readExpertiseFile(filePath);
+      const filtered = filterByContext(allRecords, ["src/cli.ts"]);
+      const lastUpdated = await getFileModTime(filePath);
+      const section = formatDomainExpertise("cli", filtered, lastUpdated);
+      const output = formatPrimeOutput([section]);
+
+      expect(output).toContain("Use ESM imports");
+      expect(output).toContain("cli-entry");
+      expect(output).not.toContain("db-access");
+    });
+
     it("fileMatchesAny matches exact paths", () => {
       expect(fileMatchesAny("src/cli.ts", ["src/cli.ts"])).toBe(true);
       expect(fileMatchesAny("src/cli.ts", ["src/other.ts"])).toBe(false);
