@@ -745,6 +745,26 @@ describe("processStdinRecords", () => {
     expect(recordedAt.getTime()).toBeLessThanOrEqual(after.getTime());
   });
 
+  it("defaults classification to tactical if missing", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const record = {
+      type: "convention",
+      content: "Use vitest",
+      // no classification
+    };
+
+    const result = await processStdinRecords("testing", false, false, JSON.stringify(record), tmpDir);
+
+    expect(result.created).toBe(1);
+    expect(result.errors).toHaveLength(0);
+
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+    expect(records[0].classification).toBe("tactical");
+  });
+
   it("throws error for invalid domain", async () => {
     const record = {
       type: "convention",

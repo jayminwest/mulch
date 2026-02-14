@@ -58,9 +58,14 @@ export async function processStdinRecords(
   for (let i = 0; i < inputRecords.length; i++) {
     const record = inputRecords[i];
 
-    // Ensure recorded_at is set
-    if (typeof record === "object" && record !== null && !("recorded_at" in record)) {
-      (record as Record<string, unknown>).recorded_at = new Date().toISOString();
+    // Ensure recorded_at and classification are set
+    if (typeof record === "object" && record !== null) {
+      if (!("recorded_at" in record)) {
+        (record as Record<string, unknown>).recorded_at = new Date().toISOString();
+      }
+      if (!("classification" in record)) {
+        (record as Record<string, unknown>).classification = "tactical";
+      }
     }
 
     if (!validate(record)) {
@@ -130,8 +135,7 @@ export function registerRecordCommand(program: Command): void {
     .description("Record an expertise record")
     .addOption(
       new Option("--type <type>", "record type")
-        .choices(["convention", "pattern", "failure", "decision", "reference", "guide"])
-        .makeOptionMandatory(),
+        .choices(["convention", "pattern", "failure", "decision", "reference", "guide"]),
     )
     .addOption(
       new Option("--classification <classification>", "classification level")
@@ -229,6 +233,19 @@ export function registerRecordCommand(program: Command): void {
               chalk.red(
                 `Available domains: ${config.domains.join(", ") || "(none)"}`,
               ),
+            );
+          }
+          process.exitCode = 1;
+          return;
+        }
+
+        // Validate --type is provided for non-stdin mode
+        if (!options.type) {
+          if (jsonMode) {
+            outputJsonError("record", "--type is required (convention, pattern, failure, decision, reference, guide)");
+          } else {
+            console.error(
+              chalk.red("Error: --type is required (convention, pattern, failure, decision, reference, guide)"),
             );
           }
           process.exitCode = 1;
