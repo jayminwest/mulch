@@ -17,6 +17,7 @@ export const recordSchema = {
         date: { type: "string" },
         issue: { type: "string" },
         file: { type: "string" },
+        bead: { type: "string" },
       },
       additionalProperties: false,
     },
