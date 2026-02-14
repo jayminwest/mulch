@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { createInterface } from "node:readline";
 import { readConfig, getExpertisePath } from "../utils/config.js";
 import {
   readExpertiseFile,
@@ -29,6 +30,7 @@ function findCandidates(
   records: ExpertiseRecord[],
   now: Date,
   shelfLife: { tactical: number; observational: number },
+  minGroupSize: number = 3,
 ): CompactCandidate[] {
   // Group records by type
   const byType = new Map<RecordType, ExpertiseRecord[]>();
@@ -44,7 +46,7 @@ function findCandidates(
   for (const [type, group] of byType) {
     if (group.length < 2) continue;
 
-    // Include groups where at least one record is stale or the group is large (3+)
+    // Include groups where at least one record is stale or the group is large enough
     const hasStale = group.some((r) => {
       if (r.classification === "foundational") return false;
       const ageMs = now.getTime() - new Date(r.recorded_at).getTime();
@@ -54,7 +56,7 @@ function findCandidates(
       return false;
     });
 
-    if (hasStale || group.length >= 3) {
+    if (hasStale || group.length >= minGroupSize) {
       candidates.push({
         domain,
         type,
@@ -85,6 +87,20 @@ function resolveRecordIds(
   return indices;
 }
 
+async function confirmAction(prompt: string): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`${prompt} (y/N): `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
+    });
+  });
+}
+
 export function registerCompactCommand(program: Command): void {
   program
     .command("compact")
@@ -93,6 +109,10 @@ export function registerCompactCommand(program: Command): void {
     .option("--analyze", "show compaction candidates")
     .option("--apply", "apply a compaction (replace records with summary)")
     .option("--auto", "automatically compact all candidates")
+    .option("--dry-run", "preview what --auto would do without writing (use with --auto)")
+    .option("--min-group <size>", "minimum group size for auto-compaction (default: 5)", "5")
+    .option("--max-records <count>", "maximum records to compact in one run (default: 50)", "50")
+    .option("--yes", "skip confirmation prompts (use with --auto)")
     .option("--records <ids>", "comma-separated record IDs to compact")
     .option("--type <type>", "record type for the replacement")
     .option("--name <name>", "name for replacement (pattern/reference/guide)")
@@ -111,7 +131,7 @@ export function registerCompactCommand(program: Command): void {
         if (options.analyze) {
           await handleAnalyze(jsonMode);
         } else if (options.auto) {
-          await handleAuto(jsonMode);
+          await handleAuto(options, jsonMode);
         } else if (options.apply) {
           if (!domain) {
             const msg = "Domain is required for --apply.";
@@ -180,24 +200,128 @@ async function handleAnalyze(jsonMode: boolean): Promise<void> {
   );
 }
 
-async function handleAuto(jsonMode: boolean): Promise<void> {
+async function handleAuto(options: Record<string, unknown>, jsonMode: boolean): Promise<void> {
   const config = await readConfig();
   const now = new Date();
   const shelfLife = config.classification_defaults.shelf_life;
 
+  const dryRun = options.dryRun === true;
+  const skipConfirmation = options.yes === true;
+  const minGroupSize = Number.parseInt(options.minGroup as string, 10) || 5;
+  const maxRecords = Number.parseInt(options.maxRecords as string, 10) || 50;
+
+  // Collect all candidates across all domains
+  const allCandidates: Array<{ domain: string; candidate: CompactCandidate }> = [];
+
+  for (const domain of config.domains) {
+    const filePath = getExpertisePath(domain);
+    const records = await readExpertiseFile(filePath);
+    if (records.length < 2) continue;
+
+    const candidates = findCandidates(domain, records, now, shelfLife, minGroupSize);
+    for (const candidate of candidates) {
+      allCandidates.push({ domain, candidate });
+    }
+  }
+
+  if (allCandidates.length === 0) {
+    if (jsonMode) {
+      outputJson({
+        success: true,
+        command: "compact",
+        action: dryRun ? "dry-run" : "auto",
+        compacted: 0,
+        results: [],
+      });
+    } else {
+      console.log(chalk.green("No compaction candidates found."));
+    }
+    return;
+  }
+
+  // Calculate total records to compact and apply max limit
+  let totalRecordsToCompact = 0;
+  const candidatesToProcess: Array<{ domain: string; candidate: CompactCandidate }> = [];
+
+  for (const item of allCandidates) {
+    if (totalRecordsToCompact + item.candidate.records.length > maxRecords) {
+      break;
+    }
+    candidatesToProcess.push(item);
+    totalRecordsToCompact += item.candidate.records.length;
+  }
+
+  // Show summary
+  if (!jsonMode && !dryRun) {
+    console.log(chalk.bold(`\nCompaction summary:\n`));
+    console.log(`  ${candidatesToProcess.length} groups will be compacted`);
+    console.log(`  ${totalRecordsToCompact} records → ${candidatesToProcess.length} records\n`);
+
+    for (const { domain, candidate } of candidatesToProcess) {
+      console.log(chalk.cyan(`${domain}/${candidate.type}`) + ` (${candidate.records.length} records)`);
+      for (const r of candidate.records.slice(0, 3)) {
+        console.log(`  ${r.id ?? "(no id)"}: ${r.summary}`);
+      }
+      if (candidate.records.length > 3) {
+        console.log(chalk.dim(`  ... and ${candidate.records.length - 3} more`));
+      }
+      console.log();
+    }
+
+    if (allCandidates.length > candidatesToProcess.length) {
+      const skipped = allCandidates.length - candidatesToProcess.length;
+      console.log(chalk.yellow(`Note: ${skipped} additional groups skipped due to --max-records limit\n`));
+    }
+  }
+
+  // Dry-run mode: just show what would be done
+  if (dryRun) {
+    if (jsonMode) {
+      outputJson({
+        success: true,
+        command: "compact",
+        action: "dry-run",
+        wouldCompact: totalRecordsToCompact,
+        groups: candidatesToProcess.map(({ domain, candidate }) => ({
+          domain,
+          type: candidate.type,
+          count: candidate.records.length,
+        })),
+      });
+    } else {
+      console.log(chalk.green(`✓ Dry-run complete. Would compact ${totalRecordsToCompact} records across ${candidatesToProcess.length} groups.`));
+      console.log(chalk.dim("  Run without --dry-run to apply changes."));
+    }
+    return;
+  }
+
+  // Ask for confirmation unless --yes was passed
+  if (!jsonMode && !skipConfirmation) {
+    const confirmed = await confirmAction("Proceed with compaction?");
+    if (!confirmed) {
+      console.log(chalk.yellow("Compaction cancelled."));
+      return;
+    }
+  }
+
+  // Apply compaction
   let totalCompacted = 0;
   const results: Array<{ domain: string; type: RecordType; count: number }> = [];
 
-  for (const domain of config.domains) {
+  // Group candidates by domain for efficient processing
+  const byDomain = new Map<string, CompactCandidate[]>();
+  for (const { domain, candidate } of candidatesToProcess) {
+    if (!byDomain.has(domain)) {
+      byDomain.set(domain, []);
+    }
+    byDomain.get(domain)!.push(candidate);
+  }
+
+  for (const [domain, candidates] of byDomain) {
     const filePath = getExpertisePath(domain);
 
     await withFileLock(filePath, async () => {
       const records = await readExpertiseFile(filePath);
-      if (records.length < 2) return;
-
-      const candidates = findCandidates(domain, records, now, shelfLife);
-      if (candidates.length === 0) return;
-
       let updatedRecords = [...records];
 
       for (const candidate of candidates) {
@@ -240,12 +364,7 @@ async function handleAuto(jsonMode: boolean): Promise<void> {
     return;
   }
 
-  if (totalCompacted === 0) {
-    console.log(chalk.green("No compaction candidates found."));
-    return;
-  }
-
-  console.log(chalk.green(`✓ Auto-compacted ${totalCompacted} records across ${results.length} groups`));
+  console.log(chalk.green(`\n✓ Auto-compacted ${totalCompacted} records across ${results.length} groups`));
   for (const r of results) {
     console.log(chalk.dim(`  ${r.domain}/${r.type}: ${r.count} records → 1`));
   }
