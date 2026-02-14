@@ -655,6 +655,280 @@ describe("prime command", () => {
     });
   });
 
+  describe("domain exclusion", () => {
+    it("validates excluded domain exists in config", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing"] },
+        tmpDir,
+      );
+      const config = await readConfig(tmpDir);
+      const excludedDomain = "nonexistent";
+
+      expect(config.domains.includes(excludedDomain)).toBe(false);
+    });
+
+    it("excludes specified domain from output", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture", "api"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      const apiPath = getExpertisePath("api", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+      await createExpertiseFile(apiPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(apiPath, {
+        type: "pattern",
+        name: "REST endpoints",
+        description: "Follow RESTful conventions",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      // Exclude architecture domain
+      const config = await readConfig(tmpDir);
+      const excluded = ["architecture"];
+      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+
+      const sections: string[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        const lastUpdated = await getFileModTime(filePath);
+        sections.push(formatDomainExpertise(domain, records, lastUpdated));
+      }
+
+      const output = formatPrimeOutput(sections);
+      expect(output).toContain("## testing");
+      expect(output).toContain("## api");
+      expect(output).not.toContain("## architecture");
+      expect(output).toContain("Use vitest");
+      expect(output).toContain("REST endpoints");
+      expect(output).not.toContain("Use ESM");
+    });
+
+    it("excludes multiple domains from output", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture", "api", "database"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      const apiPath = getExpertisePath("api", tmpDir);
+      const dbPath = getExpertisePath("database", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+      await createExpertiseFile(apiPath);
+      await createExpertiseFile(dbPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(apiPath, {
+        type: "pattern",
+        name: "REST endpoints",
+        description: "Follow RESTful conventions",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(dbPath, {
+        type: "convention",
+        content: "Use PostgreSQL",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      // Exclude architecture and api domains
+      const config = await readConfig(tmpDir);
+      const excluded = ["architecture", "api"];
+      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+
+      const sections: string[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        const lastUpdated = await getFileModTime(filePath);
+        sections.push(formatDomainExpertise(domain, records, lastUpdated));
+      }
+
+      const output = formatPrimeOutput(sections);
+      expect(output).toContain("## testing");
+      expect(output).toContain("## database");
+      expect(output).not.toContain("## architecture");
+      expect(output).not.toContain("## api");
+      expect(output).toContain("Use vitest");
+      expect(output).toContain("Use PostgreSQL");
+      expect(output).not.toContain("Use ESM");
+      expect(output).not.toContain("REST endpoints");
+    });
+
+    it("combines --domain and --exclude-domain flags", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture", "api", "database"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      const apiPath = getExpertisePath("api", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+      await createExpertiseFile(apiPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(apiPath, {
+        type: "pattern",
+        name: "REST endpoints",
+        description: "Follow RESTful conventions",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      // Select testing and architecture, then exclude architecture
+      const requested = ["testing", "architecture"];
+      const excluded = ["architecture"];
+      const targetDomains = requested.filter(d => !excluded.includes(d));
+
+      const sections: string[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        const lastUpdated = await getFileModTime(filePath);
+        sections.push(formatDomainExpertise(domain, records, lastUpdated));
+      }
+
+      const output = formatPrimeOutput(sections);
+      expect(output).toContain("## testing");
+      expect(output).not.toContain("## architecture");
+      expect(output).not.toContain("## api");
+      expect(output).toContain("Use vitest");
+      expect(output).not.toContain("Use ESM");
+    });
+
+    it("exclusion works with --format xml", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      const config = await readConfig(tmpDir);
+      const excluded = ["architecture"];
+      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+
+      const sections: string[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        const lastUpdated = await getFileModTime(filePath);
+        sections.push(formatDomainExpertiseXml(domain, records, lastUpdated));
+      }
+
+      const output = formatPrimeOutputXml(sections);
+      expect(output).toContain('<domain name="testing"');
+      expect(output).not.toContain('<domain name="architecture"');
+    });
+
+    it("exclusion works with --mcp format", async () => {
+      await writeConfig(
+        { ...DEFAULT_CONFIG, domains: ["testing", "architecture"] },
+        tmpDir,
+      );
+
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(archPath, {
+        type: "decision",
+        title: "Use ESM",
+        rationale: "Better tree-shaking",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      const config = await readConfig(tmpDir);
+      const excluded = ["architecture"];
+      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+
+      const domains: { domain: string; entry_count: number; records: unknown[] }[] = [];
+      for (const domain of targetDomains) {
+        const filePath = getExpertisePath(domain, tmpDir);
+        const records = await readExpertiseFile(filePath);
+        domains.push({ domain, entry_count: records.length, records });
+      }
+
+      const output = formatMcpOutput(domains);
+      const parsed = JSON.parse(output);
+      expect(parsed.domains).toHaveLength(1);
+      expect(parsed.domains[0].domain).toBe("testing");
+    });
+  });
+
   describe("multi-domain prime", () => {
     it("multiple domains produce combined output", async () => {
       await writeConfig(

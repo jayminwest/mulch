@@ -32,6 +32,7 @@ interface PrimeOptions {
   format?: PrimeFormat;
   export?: string;
   domain?: string[];
+  excludeDomain?: string[];
   context?: boolean;
   files?: string[];
   budget?: string;
@@ -72,6 +73,7 @@ export function registerPrimeCommand(program: Command): void {
     .option("-v, --verbose", "full output with section headers and recording instructions")
     .option("--mcp", "output in MCP-compatible JSON format")
     .option("--domain <domains...>", "domain(s) to include")
+    .option("--exclude-domain <domains...>", "domain(s) to exclude")
     .addOption(
       new Option("--format <format>", "output format")
         .choices(["markdown", "xml", "plain"])
@@ -105,29 +107,30 @@ export function registerPrimeCommand(program: Command): void {
           }
         }
 
-        const targetDomains = unique.length > 0
+        const excluded = options.excludeDomain ?? [];
+        for (const d of excluded) {
+          if (!config.domains.includes(d)) {
+            if (jsonMode) {
+              outputJsonError("prime", `Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`);
+            } else {
+              console.error(
+                `Error: Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+              );
+            }
+            process.exitCode = 1;
+            return;
+          }
+        }
+
+        let targetDomains = unique.length > 0
           ? unique
           : config.domains;
 
-        // Check for mutually exclusive options
-        if (options.context && options.files) {
-          const msg = "Cannot use --context and --files together. Choose one.";
-          if (jsonMode) {
-            outputJsonError("prime", msg);
-          } else {
-            console.error(`Error: ${msg}`);
-          }
-          process.exitCode = 1;
-          return;
-        }
+        targetDomains = targetDomains.filter(d => !excluded.includes(d));
 
-        // Resolve files for filtering
-        let filesToFilter: string[] | undefined;
-        if (options.files) {
-          // Use explicit file paths from --files
-          filesToFilter = options.files;
-        } else if (options.context) {
-          // Use git changed files from --context
+        // Resolve changed files for --context filtering
+        let changedFiles: string[] | undefined;
+        if (options.context) {
           const cwd = process.cwd();
           if (!isGitRepo(cwd)) {
             const msg = "Not in a git repository. --context requires git.";
