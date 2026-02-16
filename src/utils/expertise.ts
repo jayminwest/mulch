@@ -1,6 +1,7 @@
 import { readFile, appendFile, writeFile, stat, rename, unlink } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import type { ExpertiseRecord, RecordType, Classification } from "../schemas/record.js";
+import { searchBM25, DEFAULT_BM25_PARAMS } from "./bm25.js";
 
 export async function readExpertiseFile(
   filePath: string,
@@ -213,26 +214,16 @@ export function resolveRecordId(
   };
 }
 
+/**
+ * Search records using BM25 ranking algorithm.
+ * Returns records sorted by relevance (highest score first).
+ */
 export function searchRecords(
   records: ExpertiseRecord[],
   query: string,
 ): ExpertiseRecord[] {
-  const lowerQuery = query.toLowerCase();
-  return records.filter((record) => {
-    for (const value of Object.values(record)) {
-      if (typeof value === "string" && value.toLowerCase().includes(lowerQuery)) {
-        return true;
-      }
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          if (typeof item === "string" && item.toLowerCase().includes(lowerQuery)) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  });
+  const results = searchBM25(records, query, DEFAULT_BM25_PARAMS);
+  return results.map((r) => r.record);
 }
 
 export interface DomainHealth {
