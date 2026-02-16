@@ -467,6 +467,120 @@ describe("record command", () => {
     expect(validate(record)).toBe(true);
   });
 
+  it("record with cross-domain relates_to reference validates", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "pattern",
+      name: "cross-domain-pattern",
+      description: "Pattern referencing another domain",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      relates_to: ["cli:mx-abc123"],
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record with cross-domain supersedes reference validates", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "New convention",
+      classification: "foundational",
+      recorded_at: new Date().toISOString(),
+      supersedes: ["architecture:mx-def456"],
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record with mixed local and cross-domain references validates", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "failure",
+      description: "Bug with dependencies",
+      resolution: "Updated both modules",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      relates_to: ["mx-1a2b3c4d", "testing:mx-abc456", "cli:mx-def789"],
+      supersedes: ["mx-0a1b2c3d"],
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record with cross-domain reference is stored and read back correctly", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const record: ExpertiseRecord = {
+      type: "pattern",
+      name: "cross-ref-pattern",
+      description: "Pattern with cross-domain link",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      relates_to: ["cli:mx-abc123", "mx-1a2b3c4d"],
+      supersedes: ["architecture:mx-def789"],
+    };
+    await appendRecord(filePath, record);
+
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+    expect(records[0].relates_to).toEqual(["cli:mx-abc123", "mx-1a2b3c4d"]);
+    expect(records[0].supersedes).toEqual(["architecture:mx-def789"]);
+  });
+
+  it("cross-domain reference with invalid format fails validation", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "test",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      relates_to: ["INVALID:mx-123"],
+    };
+
+    expect(validate(record)).toBe(false);
+  });
+
+  it("cross-domain reference with missing hash fails validation", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "test",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      relates_to: ["cli:"],
+    };
+
+    expect(validate(record)).toBe(false);
+  });
+
+  it("cross-domain reference with numeric domain validates", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "test",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      relates_to: ["api-v2:mx-abc123"],
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
   it("record with evidence.bead validates against schema", () => {
     const ajv = new Ajv();
     const validate = ajv.compile(recordSchema);

@@ -1,4 +1,4 @@
-const linkArray = { type: "array", items: { type: "string", pattern: "^mx-[0-9a-f]{4,8}$" } } as const;
+const linkArray = { type: "array", items: { type: "string", pattern: "^([a-z0-9-]+:)?mx-[0-9a-f]{4,8}$" } } as const;
 
 export const recordSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
