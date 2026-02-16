@@ -7,13 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-15
+
 ### Added
 
+- BM25 search ranking algorithm — `mulch search` now returns results ranked by relevance instead of raw order (`src/utils/bm25.ts`)
+- `--dry-run` flag for `mulch record` — preview what would be created/updated/skipped without writing to JSONL (works with `--batch` and `--stdin`)
 - `--batch <file>` flag for `mulch record` — read JSON records from a file (more discoverable alternative to `--stdin`)
-- Batch recording examples in `mulch record --help` output
+- Cross-domain record references — `relates_to` and `supersedes` now accept `domain:mx-hash` format (e.g., `api:mx-abc123`) in addition to local `mx-hash`
+- Required-fields-per-type table in `mulch record --help` output
+- Comprehensive tests for `src/index.ts` exports
 
 ### Changed
 
+- `mulch search` uses BM25 scoring for ranked results instead of simple substring matching
 - README: added 'Batch recording' section documenting `--batch` and `--stdin` workflows
 - `mulch prime` verbose output updated to show `--batch` alongside `--stdin`
 
@@ -143,7 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jayminwest/mulch/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jayminwest/mulch/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jayminwest/mulch/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/jayminwest/mulch/compare/v0.2.4...v0.2.5
