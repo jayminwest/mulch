@@ -705,7 +705,7 @@ describe("processStdinRecords", () => {
       classification: "foundational",
     };
 
-    const result = await processStdinRecords("testing", false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
@@ -736,7 +736,7 @@ describe("processStdinRecords", () => {
       },
     ];
 
-    const result = await processStdinRecords("testing", false, false, JSON.stringify(records), tmpDir);
+    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(records), tmpDir);
 
     expect(result.created).toBe(2);
     expect(result.updated).toBe(0);
@@ -765,7 +765,7 @@ describe("processStdinRecords", () => {
       },
     ];
 
-    const result = await processStdinRecords("testing", false, false, JSON.stringify(records), tmpDir);
+    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(records), tmpDir);
 
     expect(result.created).toBe(1); // Only valid record created
     expect(result.errors).toHaveLength(1);
@@ -791,7 +791,7 @@ describe("processStdinRecords", () => {
     await appendRecord(filePath, record as ExpertiseRecord);
 
     // Try to add same record via stdin
-    const result = await processStdinRecords("testing", false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(0);
@@ -824,7 +824,7 @@ describe("processStdinRecords", () => {
       recorded_at: "2025-01-02T00:00:00.000Z",
     };
 
-    const result = await processStdinRecords("testing", false, false, JSON.stringify(updatedPattern), tmpDir);
+    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(updatedPattern), tmpDir);
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(1);
@@ -848,7 +848,7 @@ describe("processStdinRecords", () => {
     };
 
     const before = new Date();
-    const result = await processStdinRecords("testing", false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
     const after = new Date();
 
     expect(result.created).toBe(1);
@@ -870,7 +870,7 @@ describe("processStdinRecords", () => {
       // no classification
     };
 
-    const result = await processStdinRecords("testing", false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
 
     expect(result.created).toBe(1);
     expect(result.errors).toHaveLength(0);
@@ -888,7 +888,7 @@ describe("processStdinRecords", () => {
     };
 
     await expect(
-      processStdinRecords("nonexistent", false, false, JSON.stringify(record), tmpDir),
+      processStdinRecords("nonexistent", false, false, false, JSON.stringify(record), tmpDir),
     ).rejects.toThrow('Domain "nonexistent" not found');
   });
 
@@ -897,7 +897,7 @@ describe("processStdinRecords", () => {
     await createExpertiseFile(filePath);
 
     await expect(
-      processStdinRecords("testing", false, false, "{ invalid json }", tmpDir),
+      processStdinRecords("testing", false, false, false, "{ invalid json }", tmpDir),
     ).rejects.toThrow("Failed to parse JSON from stdin");
   });
 
@@ -914,13 +914,121 @@ describe("processStdinRecords", () => {
 
     await appendRecord(filePath, record as ExpertiseRecord);
 
-    const result = await processStdinRecords("testing", false, true, JSON.stringify(record), tmpDir); // force=true
+    const result = await processStdinRecords("testing", false, true, false, JSON.stringify(record), tmpDir); // force=true
 
     expect(result.created).toBe(1);
     expect(result.skipped).toBe(0);
 
     const records = await readExpertiseFile(filePath);
     expect(records).toHaveLength(2);
+  });
+
+  it("dry-run shows what would be created without writing", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const record = {
+      type: "convention",
+      content: "Use vitest",
+      classification: "foundational",
+    };
+
+    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(record), tmpDir); // dryRun=true
+
+    expect(result.created).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(result.skipped).toBe(0);
+    expect(result.errors).toHaveLength(0);
+
+    // Verify nothing was actually written
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(0);
+  });
+
+  it("dry-run shows what would be updated without writing", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const originalPattern = {
+      type: "pattern",
+      name: "test-pattern",
+      description: "Original description",
+      classification: "tactical",
+      recorded_at: "2025-01-01T00:00:00.000Z",
+    };
+
+    await appendRecord(filePath, originalPattern as ExpertiseRecord);
+
+    const updatedPattern = {
+      type: "pattern",
+      name: "test-pattern",
+      description: "Updated description",
+      classification: "foundational",
+    };
+
+    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(updatedPattern), tmpDir); // dryRun=true
+
+    expect(result.created).toBe(0);
+    expect(result.updated).toBe(1);
+    expect(result.skipped).toBe(0);
+
+    // Verify original record was not modified
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+    expect((records[0] as { description: string }).description).toBe("Original description");
+  });
+
+  it("dry-run shows what would be skipped without writing", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const record = {
+      type: "convention",
+      content: "Use vitest",
+      classification: "foundational",
+      recorded_at: "2025-01-01T00:00:00.000Z",
+    };
+
+    await appendRecord(filePath, record as ExpertiseRecord);
+
+    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(record), tmpDir); // dryRun=true
+
+    expect(result.created).toBe(0);
+    expect(result.updated).toBe(0);
+    expect(result.skipped).toBe(1);
+
+    // Verify original record was not duplicated
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+  });
+
+  it("dry-run processes multiple records without writing", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const records = [
+      {
+        type: "convention",
+        content: "Use vitest",
+        classification: "foundational",
+      },
+      {
+        type: "pattern",
+        name: "test-pattern",
+        description: "Test pattern",
+        classification: "tactical",
+      },
+    ];
+
+    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(records), tmpDir); // dryRun=true
+
+    expect(result.created).toBe(2);
+    expect(result.updated).toBe(0);
+    expect(result.skipped).toBe(0);
+
+    // Verify nothing was written
+    const savedRecords = await readExpertiseFile(filePath);
+    expect(savedRecords).toHaveLength(0);
   });
 });
 

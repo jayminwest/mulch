@@ -28,6 +28,7 @@ export async function processStdinRecords(
   domain: string,
   jsonMode: boolean,
   force: boolean,
+  dryRun: boolean,
   stdinData?: string,
   cwd?: string,
 ): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
@@ -83,15 +84,16 @@ export async function processStdinRecords(
     return { created: 0, updated: 0, skipped: 0, errors };
   }
 
-  // Process valid records with file locking
+  // Process valid records with file locking (skip write in dry-run mode)
   const filePath = getExpertisePath(domain, cwd);
   let created = 0;
   let updated = 0;
   let skipped = 0;
 
-  await withFileLock(filePath, async () => {
+  if (dryRun) {
+    // Dry-run: check for duplicates without writing
     const existing = await readExpertiseFile(filePath);
-    let currentRecords = [...existing];
+    const currentRecords = [...existing];
 
     for (const record of validRecords) {
       const dup = findDuplicate(currentRecords, record);
@@ -104,25 +106,51 @@ export async function processStdinRecords(
           record.type === "guide";
 
         if (isNamed) {
-          // Upsert: replace in place
-          currentRecords[dup.index] = record;
           updated++;
         } else {
-          // Exact match: skip
           skipped++;
         }
       } else {
-        // New record: append
-        currentRecords.push(record);
         created++;
       }
     }
+  } else {
+    // Normal mode: write with file locking
+    await withFileLock(filePath, async () => {
+      const existing = await readExpertiseFile(filePath);
+      let currentRecords = [...existing];
 
-    // Write all changes at once
-    if (created > 0 || updated > 0) {
-      await writeExpertiseFile(filePath, currentRecords);
-    }
-  });
+      for (const record of validRecords) {
+        const dup = findDuplicate(currentRecords, record);
+
+        if (dup && !force) {
+          const isNamed =
+            record.type === "pattern" ||
+            record.type === "decision" ||
+            record.type === "reference" ||
+            record.type === "guide";
+
+          if (isNamed) {
+            // Upsert: replace in place
+            currentRecords[dup.index] = record;
+            updated++;
+          } else {
+            // Exact match: skip
+            skipped++;
+          }
+        } else {
+          // New record: append
+          currentRecords.push(record);
+          created++;
+        }
+      }
+
+      // Write all changes at once
+      if (created > 0 || updated > 0) {
+        await writeExpertiseFile(filePath, currentRecords);
+      }
+    });
+  }
 
   return { created, updated, skipped, errors };
 }
@@ -157,6 +185,7 @@ export function registerRecordCommand(program: Command): void {
     .option("--supersedes <ids>", "comma-separated record IDs this supersedes")
     .option("--force", "force recording even if duplicate exists")
     .option("--stdin", "read JSON record(s) from stdin (single object or array)")
+    .option("--dry-run", "preview what would be recorded without writing")
     .addHelpText("after", `
 Required fields per record type:
   convention   [content] or --description
@@ -176,11 +205,14 @@ Required fields per record type:
 
         // Handle --stdin mode
         if (options.stdin === true) {
+          const dryRun = options.dryRun === true;
+
           try {
             const result = await processStdinRecords(
               domain,
               jsonMode,
               options.force === true,
+              dryRun,
             );
 
             if (result.errors.length > 0) {
@@ -198,6 +230,7 @@ Required fields per record type:
               outputJson({
                 success: result.errors.length === 0 || result.created + result.updated > 0,
                 command: "record",
+                action: dryRun ? "dry-run" : "stdin",
                 domain,
                 created: result.created,
                 updated: result.updated,
@@ -205,14 +238,33 @@ Required fields per record type:
                 errors: result.errors,
               });
             } else {
-              if (result.created > 0) {
-                console.log(chalk.green(`✔ Created ${result.created} record(s) in ${domain}`));
-              }
-              if (result.updated > 0) {
-                console.log(chalk.green(`✔ Updated ${result.updated} record(s) in ${domain}`));
-              }
-              if (result.skipped > 0) {
-                console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
+              if (dryRun) {
+                const total = result.created + result.updated;
+                if (total > 0 || result.skipped > 0) {
+                  console.log(chalk.green(`✓ Dry-run complete. Would process ${total} record(s) in ${domain}:`));
+                  if (result.created > 0) {
+                    console.log(chalk.dim(`  Create: ${result.created}`));
+                  }
+                  if (result.updated > 0) {
+                    console.log(chalk.dim(`  Update: ${result.updated}`));
+                  }
+                  if (result.skipped > 0) {
+                    console.log(chalk.dim(`  Skip: ${result.skipped}`));
+                  }
+                  console.log(chalk.dim("  Run without --dry-run to apply changes."));
+                } else {
+                  console.log(chalk.yellow("No records would be processed."));
+                }
+              } else {
+                if (result.created > 0) {
+                  console.log(chalk.green(`✔ Created ${result.created} record(s) in ${domain}`));
+                }
+                if (result.updated > 0) {
+                  console.log(chalk.green(`✔ Updated ${result.updated} record(s) in ${domain}`));
+                }
+                if (result.skipped > 0) {
+                  console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
+                }
               }
             }
 
@@ -512,73 +564,112 @@ Required fields per record type:
         }
 
         const filePath = getExpertisePath(domain);
-        await withFileLock(filePath, async () => {
+        const dryRun = options.dryRun === true;
+
+        if (dryRun) {
+          // Dry-run: check for duplicates without writing
           const existing = await readExpertiseFile(filePath);
           const dup = findDuplicate(existing, record);
 
+          let action = "created";
           if (dup && !options.force) {
             const isNamed =
               record.type === "pattern" || record.type === "decision" ||
               record.type === "reference" || record.type === "guide";
 
-            if (isNamed) {
-              // Upsert: replace in place
-              existing[dup.index] = record;
-              await writeExpertiseFile(filePath, existing);
+            action = isNamed ? "updated" : "skipped";
+          }
+
+          if (jsonMode) {
+            outputJson({
+              success: true,
+              command: "record",
+              action: "dry-run",
+              wouldDo: action,
+              domain,
+              type: recordType,
+              record,
+            });
+          } else {
+            if (action === "created") {
+              console.log(chalk.green(`✓ Dry-run: Would create ${recordType} in ${domain}`));
+            } else if (action === "updated") {
+              console.log(chalk.green(`✓ Dry-run: Would update existing ${recordType} in ${domain}`));
+            } else {
+              console.log(chalk.yellow(`Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`));
+            }
+            console.log(chalk.dim("  Run without --dry-run to apply changes."));
+          }
+        } else {
+          // Normal mode: write with file locking
+          await withFileLock(filePath, async () => {
+            const existing = await readExpertiseFile(filePath);
+            const dup = findDuplicate(existing, record);
+
+            if (dup && !options.force) {
+              const isNamed =
+                record.type === "pattern" || record.type === "decision" ||
+                record.type === "reference" || record.type === "guide";
+
+              if (isNamed) {
+                // Upsert: replace in place
+                existing[dup.index] = record;
+                await writeExpertiseFile(filePath, existing);
+                if (jsonMode) {
+                  outputJson({
+                    success: true,
+                    command: "record",
+                    action: "updated",
+                    domain,
+                    type: recordType,
+                    index: dup.index + 1,
+                    record,
+                  });
+                } else {
+                  console.log(
+                    chalk.green(
+                      `\u2714 Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`,
+                    ),
+                  );
+                }
+              } else {
+                // Exact match: skip
+                if (jsonMode) {
+                  outputJson({
+                    success: true,
+                    command: "record",
+                    action: "skipped",
+                    domain,
+                    type: recordType,
+                    index: dup.index + 1,
+                  });
+                } else {
+                  console.log(
+                    chalk.yellow(
+                      `Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
+                    ),
+                  );
+                }
+              }
+            } else {
+              await appendRecord(filePath, record);
               if (jsonMode) {
                 outputJson({
                   success: true,
                   command: "record",
-                  action: "updated",
+                  action: "created",
                   domain,
                   type: recordType,
-                  index: dup.index + 1,
                   record,
                 });
               } else {
                 console.log(
-                  chalk.green(
-                    `\u2714 Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`,
-                  ),
-                );
-              }
-            } else {
-              // Exact match: skip
-              if (jsonMode) {
-                outputJson({
-                  success: true,
-                  command: "record",
-                  action: "skipped",
-                  domain,
-                  type: recordType,
-                  index: dup.index + 1,
-                });
-              } else {
-                console.log(
-                  chalk.yellow(
-                    `Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
-                  ),
+                  chalk.green(`\u2714 Recorded ${recordType} in ${domain}`),
                 );
               }
             }
-          } else {
-            await appendRecord(filePath, record);
-            if (jsonMode) {
-              outputJson({
-                success: true,
-                command: "record",
-                action: "created",
-                domain,
-                type: recordType,
-                record,
-              });
-            } else {
-              console.log(
-                chalk.green(`\u2714 Recorded ${recordType} in ${domain}`),
-              );
-            }
-          }
-        });
+          });
+        }
       },
     );
 }
