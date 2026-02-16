@@ -132,10 +132,9 @@ describe("search command", () => {
       const records = await readExpertiseFile(
         getExpertisePath("database", tmpDir),
       );
-      // "FTS5" appears in both description and resolution of the failure record
-      // but that's one record; let's search for something in the type field
-      const matches = searchRecords(records, "foundational");
-      expect(matches).toHaveLength(2); // convention + pattern
+      // "SQLite" appears in convention, "queries" appears in failure
+      const matches = searchRecords(records, "mode");
+      expect(matches).toHaveLength(1); // WAL mode in convention
     });
 
     it("is case-insensitive", async () => {
@@ -160,9 +159,10 @@ describe("search command", () => {
         getExpertisePath("api", tmpDir),
       );
       const allRecords = [...dbRecords, ...apiRecords];
-      // "foundational" appears in classification across both domains
-      const matches = searchRecords(allRecords, "foundational");
-      expect(matches).toHaveLength(3); // WAL conv + migration pattern + REST decision
+      // Search for a term that appears in content across domains
+      // "system" appears in "migration-runner" description
+      const matches = searchRecords(allRecords, "system");
+      expect(matches).toHaveLength(1); // migration pattern
     });
   });
 
