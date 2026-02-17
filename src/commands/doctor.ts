@@ -400,6 +400,13 @@ export function registerDoctorCommand(program: Command): void {
             ? check.message
             : `${check.message}`;
           console.log(`  ${icon} ${msg}`);
+
+          // Print details for non-pass checks
+          if (check.status !== "pass" && check.details.length > 0) {
+            for (const detail of check.details) {
+              console.log(`      ${detail}`);
+            }
+          }
         }
         console.log(`\n${summary.pass} passed, ${summary.warn} warning(s), ${summary.fail} failed`);
 
