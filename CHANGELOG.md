@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-02-17
+
+### Added
+
+- Quick reference section in compact `mulch prime` output — shows essential commands (`search`, `prime --files`, `prime --context`, `record`, `doctor`) so agents have a cheat sheet without switching to `--full` mode
+
+### Testing
+
+- 532 tests across 30 test files
+
 ## [0.4.0] - 2026-02-15
 
 ### Added
@@ -150,7 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jayminwest/mulch/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jayminwest/mulch/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jayminwest/mulch/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jayminwest/mulch/compare/v0.2.5...v0.3.0
