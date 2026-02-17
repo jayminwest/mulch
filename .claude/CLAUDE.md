@@ -108,6 +108,7 @@ These are named failures. If you catch yourself doing any of these, stop and cor
 - **SILENT_FAILURE** -- Encountering an error (test failure, lint failure, blocked dependency) and not reporting it via mail. Every error must be communicated to your parent with `--type error`.
 - **INCOMPLETE_CLOSE** -- Running `bd close` without first passing quality gates (`bun test`, `bun run lint`, `bun run typecheck`) and sending a result mail to your parent.
 - **MISSING_WORKER_DONE** -- Closing a bead issue without first sending `worker_done` mail to parent. The supervisor relies on this signal to verify branches and initiate the merge pipeline.
+- **MISSING_MULCH_RECORD** -- Closing without recording mulch learnings. Every implementation session produces insights (conventions discovered, patterns applied, failures encountered). Skipping `mulch record` loses knowledge for future agents.
 
 ## Cost Awareness
 
@@ -119,14 +120,19 @@ Every mail message and every tool call costs tokens. Be concise in mail bodies -
 2. Run `bun run lint` -- lint and formatting must be clean.
 3. Run `bun run typecheck` -- no TypeScript errors.
 4. Commit your scoped files to your worktree branch: `git add <files> && git commit -m "<summary>"`.
-5. Send `worker_done` mail to your parent with structured payload:
+5. **Record mulch learnings** -- review your work for insights worth preserving (conventions discovered, patterns applied, failures encountered, decisions made) and record them:
+   ```bash
+   mulch record <domain> --type <convention|pattern|failure|decision> --description "..."
+   ```
+   This is a required gate, not optional. Every implementation session produces learnings. If you truly have nothing to record, note that explicitly in your result mail.
+6. Send `worker_done` mail to your parent with structured payload:
    ```bash
    overstory mail send --to <parent> --subject "Worker done: <task-id>" \
      --body "Completed implementation for <task-id>. Quality gates passed." \
      --type worker_done --agent $OVERSTORY_AGENT_NAME
    ```
-6. Run `bd close <task-id> --reason "<summary of implementation>"`.
-7. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.
+7. Run `bd close <task-id> --reason "<summary of implementation>"`.
+8. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.
 
 ## Overlay
 
@@ -137,34 +143,33 @@ Your task-specific context (task ID, file scope, spec path, branch name, parent 
 
 ## Your Assignment
 
-- **Agent Name:** compact-builder
-- **Task ID:** mulch-ahz
+- **Agent Name:** compact-test-builder-2
+- **Task ID:** mulch-tpy
 - **Spec:** No spec file provided
-- **Branch:** overstory/compact-builder/mulch-ahz
-- **Worktree:** /Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-builder
-- **Parent:** features-lead
+- **Branch:** overstory/compact-test-builder-2/mulch-tpy
+- **Worktree:** /Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-test-builder-2
+- **Parent:** bugfix-lead
 - **Depth:** 2
 
 No task spec was provided. Check your mail or ask your parent agent for details.
 
 ## Working Directory
 
-Your worktree root is: `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-builder`
+Your worktree root is: `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-test-builder-2`
 
 **CRITICAL**: All file operations MUST use paths within this directory.
-- Use paths relative to your worktree root, or absolute paths starting with `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-builder`
+- Use paths relative to your worktree root, or absolute paths starting with `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-test-builder-2`
 - Writing to the canonical repo root instead of your worktree is a critical error (PATH_BOUNDARY_VIOLATION)
 - You may READ files from the canonical repo for context, but all WRITES go to your worktree
 
 ## File Scope (exclusive ownership)
 
-These paths are relative to your worktree root: `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-builder`
+These paths are relative to your worktree root: `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-test-builder-2`
 
 You may ONLY modify the files listed below within your worktree. Do not touch any other files.
 If you need changes outside your scope, send mail to your parent agent
 requesting the modification.
 
-- `src/commands/compact.ts`
 - `test/commands/compact.test.ts`
 
 ## Expertise
@@ -173,28 +178,95 @@ Prime relevant domain knowledge before starting work:
 
 No specific expertise domains configured
 
+### Pre-loaded Expertise
+
+The following expertise was automatically loaded at spawn time based on your file scope:
+
+# Project Expertise (via Mulch)
+
+## cli (15 records, updated 1d ago)
+- [guide] add-command: How to add a new CLI command: create src/commands/<name>.ts, export register<Name>Command, register ... (mx-60f9f9)
+- [convention] Use 'records' not 'entries' in all user-facing messages (command descriptions, output text, format h... (mx-e98196)
+- [convention] cli.ts .version() must match package.json version. Bump both together. (mx-5ab2bc)
+- [pattern] session-end-prompting: All agent-facing snippets (onboard, setup recipes, CLAUDE.md) use 'Before completing your task, revi... (mx-4d72e9)
+- [decision] ID-based record addressing: Replaced 1-based index addressing with mx-ID prefix matching (like beads). (mx-4b9c8e)
+- [pattern] onboard-marker-update: mulch onboard uses <!-- mulch:start --> / <!-- mulch:end --> markers for idempotent section replacem... (mx-9ac899)
+- [pattern] shared-markers: src/utils/markers.ts exports MARKER_START, MARKER_END, hasMarkerSection(), replaceMarkerSection(), r... (mx-5e6801)
+- [failure] CI workflows ran npm test before npm run build, but update.test.ts shells out to node dist/cli.js wh... → Move npm run build before npm test in both CI and publish workflows (mx-c69b29)
+- [pattern] concurrency-docs: Concurrency safety documentation lives in three places that must stay in sync: (1) README.md 'Concur... (mx-1a8c90)
+- [convention] When documenting command safety for multi-agent use, categorize commands into three tiers: fully saf... (mx-fd3cee)
+- [convention] Maintain CHANGELOG.md (Keep a Changelog format) in repo root. (mx-900a53)
+- [convention] Keep README.md in sync with project state. (mx-6ac234)
+- [failure] Merged external PR then added tests in a separate commit without co-authoring the contributor. → When adding follow-up commits for external PRs, always Co-Authored-By the original contributor. (mx-0631c3)
+- [failure] Used greedy regex /.mulch\/expertise\/(.+)\.jsonl/ to extract domain from git diff headers like 'dif... → Changed to non-greedy pattern /\.mulch\/expertise\/([^/]+)\.jsonl/ using [^/]+ to match only charact... (mx-ee5e54)
+- [failure] Node v25.3.0 intercepts piped stdin (echo '...' | node script.js) and evaluates it as JavaScript ins... → Use file redirects (< file.json) instead of pipes, or invoke via bin link (npx mulch). (mx-ca6219)
+
+## architecture (2 records, updated 7d ago)
+- [decision] merge=union for JSONL gitattributes: Built-in git merge strategy that keeps all unique lines from both sides.
+- [decision] Provider-optimized prime formats: XML for Claude (40% accuracy variance on delimiter choice per research), plain text for Codex, markd...
+
+## testing (5 records, updated 6d ago)
+- [failure] Prune boundary test was flaky — daysAgo(14) plus milliseconds of clock drift made age 14.0000001, pa... → Math.floor the age-in-days computation so boundary records are treated as exactly N whole days old (mx-992c08)
+- [convention] No mocks. (mx-53d431)
+- [convention] Test file location mirrors src/ structure: test/commands/ for src/commands/, test/utils/ for src/uti... (mx-40a586)
+- [failure] Used process.exit(1) in command handler. → Use process.exitCode = 1 instead. Lets the event loop drain and Vitest clean up. (mx-c1d2d0)
+- [failure] Ajv schema had required and properties but no type: 'object'. → Always include type: 'object' alongside required and properties in every JSON schema definition/oneO... (mx-a22e75)
+
+## typescript (8 records, updated 6d ago)
+- [convention] All relative imports must end with .js extension (NodeNext module resolution). (mx-a064b1)
+- [convention] Ajv must be imported with ESM/CJS interop shim: import _Ajv from 'ajv'; const Ajv = _Ajv.default ?? (mx-c8ab6c)
+- [convention] JSON schemas must live in .ts files (exported const), never .json files. (mx-5baadf)
+- [convention] Use process.exitCode = 1 instead of process.exit(1). (mx-4ed520)
+- [convention] Ajv strict mode requires type: 'object' alongside required and properties in JSON schema definitions... (mx-b0403f)
+- [convention] No any, no @ts-ignore, no @ts-expect-error. (mx-ee9655)
+- [failure] Put JSON schema in a .json file. → Export schemas as const from .ts files (src/schemas/record-schema.ts). (mx-cb54cf)
+- [failure] import Ajv from 'ajv' compiled fine but threw 'Ajv is not a constructor' at runtime in ESM. → Use interop shim: import _Ajv from 'ajv'; const Ajv = _Ajv.default ?? _Ajv; (mx-f3950d)
+
+## Quick Reference
+
+- `mulch search "query"` — find relevant records before implementing
+- `mulch prime --files src/foo.ts` — load records for specific files
+- `mulch prime --context` — load records for git-changed files
+- `mulch record <domain> --type <type> --description "..."`
+  - Types: `convention`, `pattern`, `failure`, `decision`, `reference`, `guide`
+  - Evidence: `--evidence-commit <sha>`, `--evidence-bead <id>`
+- `mulch doctor` — check record health
+
+# 🚨 SESSION CLOSE PROTOCOL 🚨
+
+**CRITICAL**: Before saying "done" or "complete", you MUST run this checklist:
+
+```
+[ ] 1. mulch learn              # see what files changed — decide what to record
+[ ] 2. mulch record <domain> --type <type> --description "..."
+[ ] 3. mulch sync               # validate, stage, and commit .mulch/ changes
+```
+
+**NEVER skip this.** Unrecorded learnings are lost for the next session.
+
+
 ## Communication
 
-Use `overstory mail` for all communication. Your address is **compact-builder**.
+Use `overstory mail` for all communication. Your address is **compact-test-builder-2**.
 
 ```bash
 # Check your inbox (do this regularly)
-overstory mail check --agent compact-builder
+overstory mail check --agent compact-test-builder-2
 
 # Send a status update to your parent
-overstory mail send --to features-lead --subject "status" \
-  --body "Progress update here" --type status --agent compact-builder
+overstory mail send --to bugfix-lead --subject "status" \
+  --body "Progress update here" --type status --agent compact-test-builder-2
 
 # Ask a question
-overstory mail send --to features-lead --subject "question" \
-  --body "Your question here" --type question --priority high --agent compact-builder
+overstory mail send --to bugfix-lead --subject "question" \
+  --body "Your question here" --type question --priority high --agent compact-test-builder-2
 
 # Report completion
-overstory mail send --to features-lead --subject "done" \
-  --body "Summary of what was done" --type result --agent compact-builder
+overstory mail send --to bugfix-lead --subject "done" \
+  --body "Summary of what was done" --type result --agent compact-test-builder-2
 
 # Reply to a message
-overstory mail reply <message-id> --body "Your reply" --agent compact-builder
+overstory mail reply <message-id> --body "Your reply" --agent compact-test-builder-2
 ```
 
 ## Spawning Sub-Workers
@@ -208,19 +280,20 @@ Before reporting completion, you MUST pass all quality gates:
 1. **Tests:** `bun test` — all tests must pass
 2. **Lint:** `bun run lint` — zero errors
 3. **Typecheck:** `bun run typecheck` — no TypeScript errors
-4. **Commit:** all changes committed to your branch (overstory/compact-builder/mulch-ahz)
-5. **Signal completion:** send `worker_done` mail to features-lead: `overstory mail send --to features-lead --subject "Worker done: mulch-ahz" --body "Quality gates passed." --type worker_done --agent compact-builder`
-6. **Close issue:** `bd close mulch-ahz --reason "summary of changes"`
+4. **Commit:** all changes committed to your branch (overstory/compact-test-builder-2/mulch-tpy)
+5. **Record mulch learnings:** `mulch record <domain> --type <convention|pattern|failure|decision> --description "..."` — capture insights from your work
+6. **Signal completion:** send `worker_done` mail to bugfix-lead: `overstory mail send --to bugfix-lead --subject "Worker done: mulch-tpy" --body "Quality gates passed." --type worker_done --agent compact-test-builder-2`
+7. **Close issue:** `bd close mulch-tpy --reason "summary of changes"`
 
 Do NOT push to the canonical branch. Your work will be merged by the
 orchestrator via `overstory merge`.
 
 ## Constraints
 
-- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-builder`
+- **WORKTREE ISOLATION**: All writes MUST target files within your worktree at `/Users/jayminwest/Projects/mulch/.overstory/worktrees/compact-test-builder-2`
 - NEVER write to the canonical repo root — all writes go to your worktree copy
 - Only modify files in your File Scope
-- Commit only to your branch: overstory/compact-builder/mulch-ahz
+- Commit only to your branch: overstory/compact-test-builder-2/mulch-tpy
 - Never push to the canonical branch
 - Report completion via `bd close` AND `overstory mail send --type result`
 - If you encounter a blocking issue, send mail with `--priority urgent --type error`
