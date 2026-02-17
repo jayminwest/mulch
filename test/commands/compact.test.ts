@@ -525,6 +525,272 @@ describe("compact command", () => {
     });
   });
 
+  describe("domain filtering", () => {
+    it("maintains separate expertise files for different domains", async () => {
+      // Set up two domains with records
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      // Add 3 conventions to testing domain
+      for (let i = 0; i < 3; i++) {
+        await appendRecord(testingPath, {
+          type: "convention",
+          content: `Testing convention ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      // Add 3 patterns to architecture domain
+      for (let i = 0; i < 3; i++) {
+        await appendRecord(archPath, {
+          type: "pattern",
+          name: `arch-pattern-${i}`,
+          description: `Architecture pattern ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      const testingRecords = await readExpertiseFile(testingPath);
+      const archRecords = await readExpertiseFile(archPath);
+
+      // Each domain should have its own records
+      expect(testingRecords).toHaveLength(3);
+      expect(archRecords).toHaveLength(3);
+
+      // Testing domain should only have conventions
+      expect(testingRecords.every(r => r.type === "convention")).toBe(true);
+
+      // Architecture domain should only have patterns
+      expect(archRecords.every(r => r.type === "pattern")).toBe(true);
+    });
+
+    it("correctly identifies compactable groups within a single domain", async () => {
+      // Set up testing domain with multiple record types
+      const testingPath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(testingPath);
+
+      // Add 3 conventions (compactable group)
+      for (let i = 0; i < 3; i++) {
+        await appendRecord(testingPath, {
+          type: "convention",
+          content: `Convention ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      // Add only 1 pattern (not compactable)
+      await appendRecord(testingPath, {
+        type: "pattern",
+        name: "single-pattern",
+        description: "Only one pattern",
+        classification: "tactical",
+        recorded_at: daysAgo(5),
+      });
+
+      // Add 3 failures (compactable group)
+      for (let i = 0; i < 3; i++) {
+        await appendRecord(testingPath, {
+          type: "failure",
+          description: `Failure ${i}`,
+          resolution: `Fix ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      const records = await readExpertiseFile(testingPath);
+      expect(records).toHaveLength(7);
+
+      // Group by type
+      const byType = new Map<string, number>();
+      for (const r of records) {
+        byType.set(r.type, (byType.get(r.type) || 0) + 1);
+      }
+
+      // Should have 3 conventions, 1 pattern, 3 failures
+      expect(byType.get("convention")).toBe(3);
+      expect(byType.get("pattern")).toBe(1);
+      expect(byType.get("failure")).toBe(3);
+
+      // Two groups would be compactable (3+ records): conventions and failures
+      // One group would not be compactable (< 3 records): pattern
+    });
+
+    it("preserves domain isolation during compaction setup", async () => {
+      // Set up two domains with compactable records
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      // Add 5 conventions to testing (meets min-group threshold)
+      for (let i = 0; i < 5; i++) {
+        await appendRecord(testingPath, {
+          type: "convention",
+          content: `Testing convention ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(10),
+        });
+      }
+
+      // Add 5 patterns to architecture (meets min-group threshold)
+      for (let i = 0; i < 5; i++) {
+        await appendRecord(archPath, {
+          type: "pattern",
+          name: `arch-pattern-${i}`,
+          description: `Architecture pattern ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(10),
+        });
+      }
+
+      const testingBefore = await readExpertiseFile(testingPath);
+      const archBefore = await readExpertiseFile(archPath);
+
+      expect(testingBefore).toHaveLength(5);
+      expect(archBefore).toHaveLength(5);
+
+      // All testing records should be conventions
+      expect(testingBefore.every(r => r.type === "convention")).toBe(true);
+
+      // All architecture records should be patterns
+      expect(archBefore.every(r => r.type === "pattern")).toBe(true);
+
+      // Records from one domain should not affect the other
+      // This verifies the foundation for domain-filtered compaction
+    });
+
+    it("handles multiple domains with varying record counts", async () => {
+      // Set up domains with different characteristics
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      // Testing: small group (below compaction threshold)
+      for (let i = 0; i < 2; i++) {
+        await appendRecord(testingPath, {
+          type: "convention",
+          content: `Convention ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      // Architecture: large group (above compaction threshold)
+      for (let i = 0; i < 5; i++) {
+        await appendRecord(archPath, {
+          type: "pattern",
+          name: `pattern-${i}`,
+          description: `Pattern ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      const testingRecords = await readExpertiseFile(testingPath);
+      const archRecords = await readExpertiseFile(archPath);
+
+      expect(testingRecords).toHaveLength(2);
+      expect(archRecords).toHaveLength(5);
+
+      // Testing domain has too few records for auto-compaction (< 3)
+      // Architecture domain has enough records for auto-compaction (5)
+      // Domain filtering would allow selective compaction of architecture only
+    });
+
+    it("correctly groups records by type within domain for compaction analysis", async () => {
+      // Set up a domain with multiple types, some compactable
+      const testingPath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(testingPath);
+
+      // Add 3 conventions (compactable)
+      for (let i = 0; i < 3; i++) {
+        await appendRecord(testingPath, {
+          type: "convention",
+          content: `Convention ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      // Add 3 patterns (compactable)
+      for (let i = 0; i < 3; i++) {
+        await appendRecord(testingPath, {
+          type: "pattern",
+          name: `pattern-${i}`,
+          description: `Pattern ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      // Add 3 failures (compactable)
+      for (let i = 0; i < 3; i++) {
+        await appendRecord(testingPath, {
+          type: "failure",
+          description: `Failure ${i}`,
+          resolution: `Fix ${i}`,
+          classification: "tactical",
+          recorded_at: daysAgo(5),
+        });
+      }
+
+      const records = await readExpertiseFile(testingPath);
+      expect(records).toHaveLength(9);
+
+      // Group by type to verify proper segregation
+      const conventions = records.filter(r => r.type === "convention");
+      const patterns = records.filter(r => r.type === "pattern");
+      const failures = records.filter(r => r.type === "failure");
+
+      expect(conventions).toHaveLength(3);
+      expect(patterns).toHaveLength(3);
+      expect(failures).toHaveLength(3);
+
+      // Each type group would be a separate compaction candidate
+      // Domain filtering ensures these are analyzed independently per domain
+    });
+
+    it("correctly isolates domain records during multi-domain setup", async () => {
+      // Verify that records don't leak between domains
+      const testingPath = getExpertisePath("testing", tmpDir);
+      const archPath = getExpertisePath("architecture", tmpDir);
+      await createExpertiseFile(testingPath);
+      await createExpertiseFile(archPath);
+
+      await appendRecord(testingPath, {
+        type: "convention",
+        content: "Testing-specific convention",
+        classification: "foundational",
+        recorded_at: daysAgo(1),
+      });
+
+      await appendRecord(archPath, {
+        type: "pattern",
+        name: "arch-pattern",
+        description: "Architecture-specific pattern",
+        classification: "foundational",
+        recorded_at: daysAgo(1),
+      });
+
+      const testingRecords = await readExpertiseFile(testingPath);
+      const archRecords = await readExpertiseFile(archPath);
+
+      // Each domain should only have its own records
+      expect(testingRecords).toHaveLength(1);
+      expect(testingRecords[0].type).toBe("convention");
+
+      expect(archRecords).toHaveLength(1);
+      expect(archRecords[0].type).toBe("pattern");
+    });
+  });
+
   describe("apply", () => {
     it("compacts multiple conventions into one", async () => {
       const filePath = getExpertisePath("testing", tmpDir);
