@@ -148,4 +148,30 @@ describe("doctor health checks", () => {
     const shelfLife = DEFAULT_CONFIG.classification_defaults.shelf_life;
     expect(isStale(record, new Date(), shelfLife)).toBe(false);
   });
+
+  it("detects governance threshold violations", async () => {
+    const config = { ...DEFAULT_CONFIG, domains: ["testing"] };
+    config.governance.warn_entries = 5;
+    config.governance.max_entries = 10;
+    config.governance.hard_limit = 15;
+    await writeConfig(config, tmpDir);
+
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    // Add 7 records to trigger warn threshold (over warn_entries of 5)
+    for (let i = 0; i < 7; i++) {
+      await appendRecord(filePath, {
+        type: "convention",
+        content: `Convention ${i}`,
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+    }
+
+    const records = await readExpertiseFile(filePath);
+    expect(records.length).toBe(7);
+    expect(records.length).toBeGreaterThan(config.governance.warn_entries);
+    expect(records.length).toBeLessThan(config.governance.max_entries);
+  });
 });
