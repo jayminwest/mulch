@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-02-17
+
+### Fixed
+
+- `compact --auto` now respects domain argument to filter compaction to specific domain
+- `compact --analyze` now respects domain argument to filter analysis to specific domain
+- `compact --auto --dry-run` shows detailed preview instead of terse summary
+- `compact --analyze` output has better formatting with domain grouping and visual hierarchy
+- `doctor` command now prints `check.details` for non-pass checks (e.g., governance threshold violations were silently hidden)
+
+### Testing
+
+- Added comprehensive domain filtering tests for compact command
+- Added doctor governance threshold violation detection test
+- 539 tests across 30 test files
+
 ## [0.4.1] - 2026-02-17
 
 ### Added
@@ -160,7 +176,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/jayminwest/mulch/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jayminwest/mulch/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jayminwest/mulch/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/jayminwest/mulch/compare/v0.3.0...v0.3.1
