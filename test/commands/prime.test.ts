@@ -1097,11 +1097,23 @@ describe("prime command", () => {
       expect(section).toContain("- [reference] api-docs: External API documentation");
     });
 
-    it("compact wrapper omits recording instructions", () => {
+    it("compact wrapper omits verbose recording instructions", () => {
       const output = formatPrimeOutputCompact([]);
       expect(output).toContain("# Project Expertise (via Mulch)");
       expect(output).toContain("No expertise recorded yet");
       expect(output).not.toContain("## Recording New Learnings");
+    });
+
+    it("compact wrapper includes quick reference section", () => {
+      const output = formatPrimeOutputCompact([]);
+      expect(output).toContain("## Quick Reference");
+      expect(output).toContain('mulch search "query"');
+      expect(output).toContain("mulch prime --files");
+      expect(output).toContain("mulch prime --context");
+      expect(output).toContain("mulch record <domain>");
+      expect(output).toContain("--evidence-commit");
+      expect(output).toContain("--evidence-bead");
+      expect(output).toContain("mulch doctor");
     });
 
     it("compact with multiple domains", async () => {

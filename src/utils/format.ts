@@ -204,6 +204,17 @@ export function formatPrimeOutputCompact(
     lines.push(domainSections.join("\n\n"));
   }
 
+  lines.push("");
+  lines.push("## Quick Reference");
+  lines.push("");
+  lines.push("- `mulch search \"query\"` — find relevant records before implementing");
+  lines.push("- `mulch prime --files src/foo.ts` — load records for specific files");
+  lines.push("- `mulch prime --context` — load records for git-changed files");
+  lines.push("- `mulch record <domain> --type <type> --description \"...\"`");
+  lines.push("  - Types: `convention`, `pattern`, `failure`, `decision`, `reference`, `guide`");
+  lines.push("  - Evidence: `--evidence-commit <sha>`, `--evidence-bead <id>`");
+  lines.push("- `mulch doctor` — check record health");
+
   return lines.join("\n");
 }
 
