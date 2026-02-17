@@ -129,9 +129,9 @@ export function registerCompactCommand(program: Command): void {
         const jsonMode = program.opts().json === true;
 
         if (options.analyze) {
-          await handleAnalyze(jsonMode);
+          await handleAnalyze(jsonMode, domain);
         } else if (options.auto) {
-          await handleAuto(options, jsonMode);
+          await handleAuto(options, jsonMode, domain);
         } else if (options.apply) {
           if (!domain) {
             const msg = "Domain is required for --apply.";
@@ -157,17 +157,32 @@ export function registerCompactCommand(program: Command): void {
     );
 }
 
-async function handleAnalyze(jsonMode: boolean): Promise<void> {
+async function handleAnalyze(jsonMode: boolean, domain?: string): Promise<void> {
   const config = await readConfig();
   const now = new Date();
   const shelfLife = config.classification_defaults.shelf_life;
   const allCandidates: CompactCandidate[] = [];
 
-  for (const domain of config.domains) {
-    const filePath = getExpertisePath(domain);
+  // Filter to specific domain if provided, otherwise check all domains
+  const domainsToCheck = domain ? [domain] : config.domains;
+
+  // Validate domain if specified
+  if (domain && !config.domains.includes(domain)) {
+    const msg = `Domain "${domain}" not found in config.`;
+    if (jsonMode) {
+      outputJsonError("compact", msg);
+    } else {
+      console.error(chalk.red(`Error: ${msg}`));
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  for (const d of domainsToCheck) {
+    const filePath = getExpertisePath(d);
     const records = await readExpertiseFile(filePath);
     if (records.length < 2) continue;
-    const candidates = findCandidates(domain, records, now, shelfLife);
+    const candidates = findCandidates(d, records, now, shelfLife);
     allCandidates.push(...candidates);
   }
 
@@ -186,21 +201,42 @@ async function handleAnalyze(jsonMode: boolean): Promise<void> {
     return;
   }
 
-  console.log(chalk.bold("Compaction candidates:\n"));
+  // Group candidates by domain for better organization
+  const byDomain = new Map<string, CompactCandidate[]>();
   for (const c of allCandidates) {
-    console.log(chalk.cyan(`${c.domain}/${c.type}`) + ` (${c.records.length} records)`);
-    for (const r of c.records) {
-      console.log(`  ${r.id ?? "(no id)"}: ${r.summary}`);
+    if (!byDomain.has(c.domain)) {
+      byDomain.set(c.domain, []);
+    }
+    byDomain.get(c.domain)!.push(c);
+  }
+
+  const totalGroups = allCandidates.length;
+  const totalRecords = allCandidates.reduce((sum, c) => sum + c.records.length, 0);
+
+  console.log(chalk.bold(`\nCompaction candidates:\n`));
+  console.log(chalk.dim(`Found ${totalGroups} groups (${totalRecords} records that could be compacted)\n`));
+
+  for (const [domain, candidates] of byDomain) {
+    console.log(chalk.bold(`${domain}:`));
+    for (const c of candidates) {
+      console.log(`  ${chalk.cyan(c.type)} (${c.records.length} records)`);
+      for (const r of c.records.slice(0, 3)) {
+        console.log(`    ${r.id ?? "(no id)"}: ${r.summary}`);
+      }
+      if (c.records.length > 3) {
+        console.log(chalk.dim(`    ... and ${c.records.length - 3} more`));
+      }
     }
     console.log();
   }
 
-  console.log(
-    chalk.dim("To compact, run: mulch compact <domain> --apply --records <ids> --type <type> [fields...]"),
-  );
+  console.log(chalk.dim("To compact manually:"));
+  console.log(chalk.dim("  mulch compact <domain> --apply --records <ids> --type <type> [fields...]"));
+  console.log(chalk.dim("\nTo compact automatically:"));
+  console.log(chalk.dim("  mulch compact --auto [--dry-run]"));
 }
 
-async function handleAuto(options: Record<string, unknown>, jsonMode: boolean): Promise<void> {
+async function handleAuto(options: Record<string, unknown>, jsonMode: boolean, domain?: string): Promise<void> {
   const config = await readConfig();
   const now = new Date();
   const shelfLife = config.classification_defaults.shelf_life;
@@ -210,17 +246,32 @@ async function handleAuto(options: Record<string, unknown>, jsonMode: boolean): 
   const minGroupSize = Number.parseInt(options.minGroup as string, 10) || 5;
   const maxRecords = Number.parseInt(options.maxRecords as string, 10) || 50;
 
-  // Collect all candidates across all domains
+  // Filter to specific domain if provided, otherwise check all domains
+  const domainsToCheck = domain ? [domain] : config.domains;
+
+  // Validate domain if specified
+  if (domain && !config.domains.includes(domain)) {
+    const msg = `Domain "${domain}" not found in config.`;
+    if (jsonMode) {
+      outputJsonError("compact", msg);
+    } else {
+      console.error(chalk.red(`Error: ${msg}`));
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  // Collect all candidates across specified domains
   const allCandidates: Array<{ domain: string; candidate: CompactCandidate }> = [];
 
-  for (const domain of config.domains) {
-    const filePath = getExpertisePath(domain);
+  for (const d of domainsToCheck) {
+    const filePath = getExpertisePath(d);
     const records = await readExpertiseFile(filePath);
     if (records.length < 2) continue;
 
-    const candidates = findCandidates(domain, records, now, shelfLife, minGroupSize);
+    const candidates = findCandidates(d, records, now, shelfLife, minGroupSize);
     for (const candidate of candidates) {
-      allCandidates.push({ domain, candidate });
+      allCandidates.push({ domain: d, candidate });
     }
   }
 
@@ -274,7 +325,7 @@ async function handleAuto(options: Record<string, unknown>, jsonMode: boolean): 
     }
   }
 
-  // Dry-run mode: just show what would be done
+  // Dry-run mode: show detailed preview of what would be done
   if (dryRun) {
     if (jsonMode) {
       outputJson({
@@ -286,9 +337,30 @@ async function handleAuto(options: Record<string, unknown>, jsonMode: boolean): 
           domain,
           type: candidate.type,
           count: candidate.records.length,
+          records: candidate.records,
         })),
       });
     } else {
+      console.log(chalk.bold(`\nDry-run preview:\n`));
+      console.log(`  ${candidatesToProcess.length} groups would be compacted`);
+      console.log(`  ${totalRecordsToCompact} records → ${candidatesToProcess.length} records\n`);
+
+      for (const { domain, candidate } of candidatesToProcess) {
+        console.log(chalk.cyan(`${domain}/${candidate.type}`) + ` (${candidate.records.length} records)`);
+        for (const r of candidate.records.slice(0, 3)) {
+          console.log(`  ${r.id ?? "(no id)"}: ${r.summary}`);
+        }
+        if (candidate.records.length > 3) {
+          console.log(chalk.dim(`  ... and ${candidate.records.length - 3} more`));
+        }
+        console.log();
+      }
+
+      if (allCandidates.length > candidatesToProcess.length) {
+        const skipped = allCandidates.length - candidatesToProcess.length;
+        console.log(chalk.yellow(`Note: ${skipped} additional groups skipped due to --max-records limit\n`));
+      }
+
       console.log(chalk.green(`✓ Dry-run complete. Would compact ${totalRecordsToCompact} records across ${candidatesToProcess.length} groups.`));
       console.log(chalk.dim("  Run without --dry-run to apply changes."));
     }
