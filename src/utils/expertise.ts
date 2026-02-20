@@ -101,6 +101,26 @@ export function filterByType(
   return records.filter((r) => r.type === type);
 }
 
+export function filterByClassification(
+  records: ExpertiseRecord[],
+  classification: string,
+): ExpertiseRecord[] {
+  return records.filter((r) => r.classification === classification);
+}
+
+export function filterByFile(
+  records: ExpertiseRecord[],
+  file: string,
+): ExpertiseRecord[] {
+  const fileLower = file.toLowerCase();
+  return records.filter((r) => {
+    if ("files" in r && r.files) {
+      return r.files.some((f) => f.toLowerCase().includes(fileLower));
+    }
+    return false;
+  });
+}
+
 export function findDuplicate(
   existing: ExpertiseRecord[],
   newRecord: ExpertiseRecord,
