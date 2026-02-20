@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Command } from "commander";
@@ -18,7 +18,7 @@ import {
 } from "../../src/utils/expertise.js";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
 import type { ExpertiseRecord } from "../../src/schemas/record.js";
-import { registerQueryCommand } from "../../src/commands/query.js";
+import { sortByConfirmationScore, type ScoredRecord, type Outcome } from "../../src/utils/scoring.js";
 
 describe("query command", () => {
   let tmpDir: string;
@@ -754,6 +754,254 @@ describe("query command", () => {
       expect((filteredTesting[0] as { name: string }).name).toBe("test-pattern");
       expect(filteredArch).toHaveLength(1);
       expect((filteredArch[0] as { name: string }).name).toBe("arch-pattern");
+    });
+  });
+
+  describe("outcome-status filtering", () => {
+    it("filters records with outcome.status=success", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "Successful approach",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "success" },
+      });
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "Failed approach",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "failure" },
+      });
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "No outcome",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const successes = records.filter((r) => r.outcome?.status === "success");
+      expect(successes).toHaveLength(1);
+      expect((successes[0] as { content: string }).content).toBe("Successful approach");
+    });
+
+    it("filters records with outcome.status=failure", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendRecord(filePath, {
+        type: "failure",
+        description: "Something broke",
+        resolution: "Use alternative",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "failure", agent: "build-agent" },
+      });
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "Worked fine",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "success" },
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const failures = records.filter((r) => r.outcome?.status === "failure");
+      expect(failures).toHaveLength(1);
+      expect(failures[0].type).toBe("failure");
+      expect(failures[0].outcome?.agent).toBe("build-agent");
+    });
+
+    it("excludes records without outcome when filtering by outcome status", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "No outcome here",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const withSuccess = records.filter((r) => r.outcome?.status === "success");
+      expect(withSuccess).toHaveLength(0);
+    });
+
+    it("outcome-status combined with type filter narrows results", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendRecord(filePath, {
+        type: "pattern",
+        name: "successful-pattern",
+        description: "Pattern that worked",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "success" },
+      });
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "Successful convention",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "success" },
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const successes = records.filter((r) => r.outcome?.status === "success");
+      const successPatterns = filterByType(successes, "pattern");
+      expect(successPatterns).toHaveLength(1);
+      expect((successPatterns[0] as { name: string }).name).toBe("successful-pattern");
+    });
+  });
+
+  describe("sort-by-score", () => {
+    function makeOutcome(status: Outcome["status"]): Outcome {
+      return { status, recorded_at: new Date().toISOString() };
+    }
+
+    async function appendScoredRecord(filePath: string, record: ScoredRecord): Promise<void> {
+      await appendFile(filePath, JSON.stringify(record) + "\n", "utf-8");
+    }
+
+    it("sortByConfirmationScore places high-score records first", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "low-confirm",
+        description: "Rarely confirmed",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success")],
+      });
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "high-confirm",
+        description: "Highly confirmed",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const patterns = filterByType(records, "pattern");
+      const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
+
+      expect(sorted).toHaveLength(2);
+      expect((sorted[0] as { name: string }).name).toBe("high-confirm");
+      expect((sorted[1] as { name: string }).name).toBe("low-confirm");
+    });
+
+    it("records without outcomes sort to the end", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "no-outcomes",
+        description: "No outcome data",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "with-outcomes",
+        description: "Has outcome data",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const patterns = filterByType(records, "pattern");
+      const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
+
+      expect((sorted[0] as { name: string }).name).toBe("with-outcomes");
+      expect((sorted[sorted.length - 1] as { name: string }).name).toBe("no-outcomes");
+    });
+
+    it("sort combined with type filter works correctly", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "a-pattern",
+        description: "A pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success")],
+      });
+      await appendScoredRecord(filePath, {
+        type: "convention",
+        content: "A convention with many confirmations",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+      });
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "b-pattern",
+        description: "A better pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const patterns = filterByType(records, "pattern");
+      const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
+
+      // Only patterns; convention excluded
+      expect(sorted.every((r) => r.type === "pattern")).toBe(true);
+      // b-pattern (2 successes) before a-pattern (1 success)
+      expect((sorted[0] as { name: string }).name).toBe("b-pattern");
+      expect((sorted[1] as { name: string }).name).toBe("a-pattern");
+    });
+
+    it("does not mutate original record array order", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "first",
+        description: "First appended",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success")],
+      });
+      await appendScoredRecord(filePath, {
+        type: "pattern",
+        name: "second",
+        description: "Second appended",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(filePath);
+      const patterns = filterByType(records, "pattern");
+      const originalFirst = (patterns[0] as { name: string }).name;
+
+      sortByConfirmationScore(patterns as ScoredRecord[]); // not reassigned
+
+      expect((patterns[0] as { name: string }).name).toBe(originalFirst);
     });
   });
 });
