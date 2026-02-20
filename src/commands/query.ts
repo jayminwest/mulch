@@ -77,7 +77,7 @@ export function registerQueryCommand(program: Command): void {
               records = filterByFile(records, options.file as string);
             }
             if (options.outcomeStatus) {
-              records = records.filter((r) => r.outcome?.status === (options.outcomeStatus as string));
+              records = records.filter((r) => r.outcomes?.some((o) => o.status === (options.outcomeStatus as string)));
             }
             if (options.sortByScore) {
               records = sortByConfirmationScore(records as ScoredRecord[]);
@@ -101,7 +101,7 @@ export function registerQueryCommand(program: Command): void {
               records = filterByFile(records, options.file as string);
             }
             if (options.outcomeStatus) {
-              records = records.filter((r) => r.outcome?.status === (options.outcomeStatus as string));
+              records = records.filter((r) => r.outcomes?.some((o) => o.status === (options.outcomeStatus as string)));
             }
             if (options.sortByScore) {
               records = sortByConfirmationScore(records as ScoredRecord[]);
