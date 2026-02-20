@@ -7,30 +7,35 @@ import {
 } from "../../src/utils/budget.js";
 import type { DomainRecords } from "../../src/utils/budget.js";
 import type { ExpertiseRecord } from "../../src/schemas/record.js";
+import type { ScoredRecord, Outcome } from "../../src/utils/scoring.js";
 
 function makeRecord(
   type: ExpertiseRecord["type"],
   classification: ExpertiseRecord["classification"],
   overrides: Record<string, unknown> = {},
-): ExpertiseRecord {
+): ScoredRecord {
   const base = {
     classification,
     recorded_at: new Date().toISOString(),
   };
   switch (type) {
     case "convention":
-      return { ...base, type: "convention", content: overrides.content as string ?? "A convention", ...overrides } as ExpertiseRecord;
+      return { ...base, type: "convention", content: overrides.content as string ?? "A convention", ...overrides } as ScoredRecord;
     case "decision":
-      return { ...base, type: "decision", title: overrides.title as string ?? "A decision", rationale: overrides.rationale as string ?? "Because reasons", ...overrides } as ExpertiseRecord;
+      return { ...base, type: "decision", title: overrides.title as string ?? "A decision", rationale: overrides.rationale as string ?? "Because reasons", ...overrides } as ScoredRecord;
     case "pattern":
-      return { ...base, type: "pattern", name: overrides.name as string ?? "A pattern", description: overrides.description as string ?? "A pattern desc", ...overrides } as ExpertiseRecord;
+      return { ...base, type: "pattern", name: overrides.name as string ?? "A pattern", description: overrides.description as string ?? "A pattern desc", ...overrides } as ScoredRecord;
     case "guide":
-      return { ...base, type: "guide", name: overrides.name as string ?? "A guide", description: overrides.description as string ?? "A guide desc", ...overrides } as ExpertiseRecord;
+      return { ...base, type: "guide", name: overrides.name as string ?? "A guide", description: overrides.description as string ?? "A guide desc", ...overrides } as ScoredRecord;
     case "failure":
-      return { ...base, type: "failure", description: overrides.description as string ?? "A failure", resolution: overrides.resolution as string ?? "Fix it", ...overrides } as ExpertiseRecord;
+      return { ...base, type: "failure", description: overrides.description as string ?? "A failure", resolution: overrides.resolution as string ?? "Fix it", ...overrides } as ScoredRecord;
     case "reference":
-      return { ...base, type: "reference", name: overrides.name as string ?? "A reference", description: overrides.description as string ?? "A ref desc", ...overrides } as ExpertiseRecord;
+      return { ...base, type: "reference", name: overrides.name as string ?? "A reference", description: overrides.description as string ?? "A ref desc", ...overrides } as ScoredRecord;
   }
+}
+
+function makeOutcome(status: Outcome["status"]): Outcome {
+  return { status, recorded_at: new Date().toISOString() };
 }
 
 function simpleEstimate(record: ExpertiseRecord): string {
@@ -238,6 +243,94 @@ describe("budget utility", () => {
       const result = applyBudget(domains, 4000, simpleEstimate);
       expect(result.droppedCount).toBe(0);
       expect(result.kept).toHaveLength(0);
+    });
+
+    it("prioritizes records with higher confirmation scores over unscored records of the same type/classification", () => {
+      const unscored = makeRecord("pattern", "foundational", { name: "unscored", description: "no outcomes" });
+      const confirmed = makeRecord("pattern", "foundational", {
+        name: "confirmed",
+        description: "has outcomes",
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+
+      // Put unscored first, confirmed second
+      const domains: DomainRecords[] = [
+        { domain: "d1", records: [unscored, confirmed] },
+      ];
+
+      // Budget that fits only 1 record
+      const cost = estimateTokens(simpleEstimate(confirmed));
+      const result = applyBudget(domains, cost + 1, simpleEstimate);
+
+      expect(result.kept[0].records).toHaveLength(1);
+      expect((result.kept[0].records[0] as { name: string }).name).toBe("confirmed");
+    });
+
+    it("prioritizes records with more confirmations over those with fewer", () => {
+      const oneSuccess = makeRecord("pattern", "foundational", {
+        name: "one-success",
+        description: "one outcome",
+        outcomes: [makeOutcome("success")],
+      });
+      const threeSuccesses = makeRecord("pattern", "foundational", {
+        name: "three-successes",
+        description: "three outcomes",
+        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const domains: DomainRecords[] = [
+        { domain: "d1", records: [oneSuccess, threeSuccesses] },
+      ];
+
+      const cost = estimateTokens(simpleEstimate(threeSuccesses));
+      const result = applyBudget(domains, cost + 1, simpleEstimate);
+
+      expect(result.kept[0].records).toHaveLength(1);
+      expect((result.kept[0].records[0] as { name: string }).name).toBe("three-successes");
+    });
+
+    it("partial outcomes contribute 0.5 to confirmation score", () => {
+      const onePartial = makeRecord("pattern", "foundational", {
+        name: "one-partial",
+        description: "partial outcome",
+        outcomes: [makeOutcome("partial")],
+      });
+      const oneSuccess = makeRecord("pattern", "foundational", {
+        name: "one-success",
+        description: "success outcome",
+        outcomes: [makeOutcome("success")],
+      });
+
+      const domains: DomainRecords[] = [
+        { domain: "d1", records: [onePartial, oneSuccess] },
+      ];
+
+      const cost = estimateTokens(simpleEstimate(oneSuccess));
+      const result = applyBudget(domains, cost + 1, simpleEstimate);
+
+      // success (score=1) > partial (score=0.5)
+      expect(result.kept[0].records).toHaveLength(1);
+      expect((result.kept[0].records[0] as { name: string }).name).toBe("one-success");
+    });
+
+    it("type priority still takes precedence over confirmation score", () => {
+      const highlyConfirmedReference = makeRecord("reference", "foundational", {
+        name: "popular ref",
+        description: "very well confirmed reference",
+        outcomes: Array.from({ length: 10 }, () => makeOutcome("success")),
+      });
+      const unscoredConvention = makeRecord("convention", "foundational", { content: "plain convention" });
+
+      const domains: DomainRecords[] = [
+        { domain: "d1", records: [highlyConfirmedReference, unscoredConvention] },
+      ];
+
+      const cost = estimateTokens(simpleEstimate(unscoredConvention));
+      const result = applyBudget(domains, cost + 1, simpleEstimate);
+
+      // Convention (type priority 0) beats reference (type priority 5) regardless of score
+      expect(result.kept[0].records).toHaveLength(1);
+      expect(result.kept[0].records[0].type).toBe("convention");
     });
   });
 

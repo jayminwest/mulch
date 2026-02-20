@@ -1,4 +1,5 @@
 import type { ExpertiseRecord, RecordType, Classification } from "../schemas/record.js";
+import { type ScoredRecord, computeConfirmationScore } from "./scoring.js";
 
 export const DEFAULT_BUDGET = 4000;
 
@@ -21,7 +22,7 @@ const CLASSIFICATION_PRIORITY: Classification[] = [
 
 export interface DomainRecords {
   domain: string;
-  records: ExpertiseRecord[];
+  records: ScoredRecord[];
 }
 
 export interface BudgetResult {
@@ -34,19 +35,21 @@ export interface BudgetResult {
 }
 
 /**
- * Sort records by priority: type order, then classification, then recency (newest first).
+ * Sort records by priority: type order, then classification, then confirmation score
+ * (higher score = higher priority), then recency (newest first).
  */
-function recordSortKey(r: ExpertiseRecord): [number, number, number] {
+function recordSortKey(r: ScoredRecord): [number, number, number, number] {
   const typeIdx = TYPE_PRIORITY.indexOf(r.type);
   const classIdx = CLASSIFICATION_PRIORITY.indexOf(r.classification);
+  const confirmationScore = computeConfirmationScore(r);
   const time = r.recorded_at ? new Date(r.recorded_at).getTime() : 0;
-  return [typeIdx, classIdx, -time];
+  return [typeIdx, classIdx, -confirmationScore, -time];
 }
 
-function compareRecords(a: ExpertiseRecord, b: ExpertiseRecord): number {
+function compareRecords(a: ScoredRecord, b: ScoredRecord): number {
   const ka = recordSortKey(a);
   const kb = recordSortKey(b);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     if (ka[i] !== kb[i]) return ka[i] - kb[i];
   }
   return 0;
@@ -64,6 +67,7 @@ export function estimateTokens(text: string): number {
  *
  * Records are prioritized by type (conventions first, then decisions, etc.),
  * then by classification (foundational > tactical > observational),
+ * then by confirmation score (higher = higher priority),
  * then by recency (newest first).
  *
  * The formatRecord callback is used to estimate per-record token cost.
@@ -74,7 +78,7 @@ export function applyBudget(
   formatRecord: (record: ExpertiseRecord, domain: string) => string,
 ): BudgetResult {
   // Flatten all records with their domain, then sort by priority
-  const tagged: Array<{ domain: string; record: ExpertiseRecord }> = [];
+  const tagged: Array<{ domain: string; record: ScoredRecord }> = [];
   for (const d of domains) {
     for (const r of d.records) {
       tagged.push({ domain: d.domain, record: r });
@@ -102,7 +106,7 @@ export function applyBudget(
 
   for (const domainName of domainOrder) {
     const originalRecords = domains.find((d) => d.domain === domainName)!.records;
-    const keptRecords: ExpertiseRecord[] = [];
+    const keptRecords: ScoredRecord[] = [];
 
     for (const rec of originalRecords) {
       // Find this record's index in the tagged array
