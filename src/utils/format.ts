@@ -6,6 +6,7 @@ import type {
   DecisionRecord,
   ReferenceRecord,
   GuideRecord,
+  Outcome,
 } from "../schemas/record.js";
 
 export function formatTimeAgo(date: Date): string {
@@ -29,6 +30,14 @@ function formatEvidence(evidence: ConventionRecord["evidence"]): string {
   if (evidence.issue) parts.push(`issue: ${evidence.issue}`);
   if (evidence.file) parts.push(`file: ${evidence.file}`);
   return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
+}
+
+function formatOutcome(outcome: Outcome | undefined): string {
+  if (!outcome) return "";
+  const parts: string[] = [outcome.status === "success" ? "✓" : "✗"];
+  if (outcome.duration !== undefined) parts.push(`${outcome.duration}ms`);
+  if (outcome.agent) parts.push(`@${outcome.agent}`);
+  return ` [${parts.join(" ")}]`;
 }
 
 function formatLinks(r: ExpertiseRecord): string {
@@ -154,23 +163,24 @@ function compactId(r: ExpertiseRecord): string {
 function compactLine(r: ExpertiseRecord): string {
   const links = formatLinks(r);
   const id = compactId(r);
+  const outcome = formatOutcome(r.outcome);
   switch (r.type) {
     case "convention":
-      return `- [convention] ${truncate(r.content)}${id}${links}`;
+      return `- [convention] ${truncate(r.content)}${id}${outcome}${links}`;
     case "pattern": {
       const files = r.files && r.files.length > 0 ? ` (${r.files.join(", ")})` : "";
-      return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${id}${links}`;
+      return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${id}${outcome}${links}`;
     }
     case "failure":
-      return `- [failure] ${truncate(r.description)} → ${truncate(r.resolution)}${id}${links}`;
+      return `- [failure] ${truncate(r.description)} → ${truncate(r.resolution)}${id}${outcome}${links}`;
     case "decision":
-      return `- [decision] ${r.title}: ${truncate(r.rationale)}${id}${links}`;
+      return `- [decision] ${r.title}: ${truncate(r.rationale)}${id}${outcome}${links}`;
     case "reference": {
       const refFiles = r.files && r.files.length > 0 ? `: ${r.files.join(", ")}` : `: ${truncate(r.description)}`;
-      return `- [reference] ${r.name}${refFiles}${id}${links}`;
+      return `- [reference] ${r.name}${refFiles}${id}${outcome}${links}`;
     }
     case "guide":
-      return `- [guide] ${r.name}: ${truncate(r.description)}${id}${links}`;
+      return `- [guide] ${r.name}: ${truncate(r.description)}${id}${outcome}${links}`;
   }
 }
 
@@ -425,6 +435,12 @@ export function formatDomainExpertiseXml(
     }
     if (r.supersedes && r.supersedes.length > 0) {
       lines.push(`    <supersedes>${r.supersedes.join(", ")}</supersedes>`);
+    }
+    if (r.outcome) {
+      const durationAttr = r.outcome.duration !== undefined ? ` duration="${r.outcome.duration}"` : "";
+      const agentAttr = r.outcome.agent ? ` agent="${xmlEscape(r.outcome.agent)}"` : "";
+      const testResultsContent = r.outcome.test_results ? `${xmlEscape(r.outcome.test_results)}` : "";
+      lines.push(`    <outcome status="${r.outcome.status}"${durationAttr}${agentAttr}>${testResultsContent}</outcome>`);
     }
     lines.push(`  </${r.type}>`);
   }

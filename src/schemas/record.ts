@@ -10,6 +10,13 @@ export interface Evidence {
   bead?: string;
 }
 
+export interface Outcome {
+  status: "success" | "failure";
+  duration?: number;
+  test_results?: string;
+  agent?: string;
+}
+
 interface BaseRecord {
   id?: string;
   classification: Classification;
@@ -18,6 +25,7 @@ interface BaseRecord {
   tags?: string[];
   relates_to?: string[];
   supersedes?: string[];
+  outcome?: Outcome;
 }
 
 export interface ConventionRecord extends BaseRecord {

@@ -485,4 +485,107 @@ describe("search command", () => {
       expect((foundationalWithFile[0] as { name: string }).name).toBe("foundational-file-pattern");
     });
   });
+
+  describe("outcome filtering", () => {
+    it("filters records with outcome.status=success", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "convention",
+        content: "Successful approach",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "success" },
+      });
+      await appendRecord(dbPath, {
+        type: "convention",
+        content: "Failed approach",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "failure" },
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const successes = records.filter((r) => r.outcome?.status === "success");
+      expect(successes).toHaveLength(1);
+      expect((successes[0] as { content: string }).content).toBe("Successful approach");
+    });
+
+    it("filters records with outcome.status=failure", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "failure",
+        description: "Operation failed",
+        resolution: "Use alternative",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "failure", agent: "build-agent" },
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const failures = records.filter((r) => r.outcome?.status === "failure");
+      // only the one we added (not the FTS5 failure which has no outcome)
+      expect(failures).toHaveLength(1);
+      expect(failures[0].type).toBe("failure");
+      expect(failures[0].outcome?.agent).toBe("build-agent");
+    });
+
+    it("excludes records without outcome when filtering by outcome status", async () => {
+      const records = await readExpertiseFile(
+        getExpertisePath("database", tmpDir),
+      );
+      // Pre-existing records have no outcome
+      const withOutcome = records.filter((r) => r.outcome?.status === "success");
+      expect(withOutcome).toHaveLength(0);
+    });
+
+    it("outcome filter combined with type filter narrows results", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "pattern",
+        name: "successful-pattern",
+        description: "Pattern that worked",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "success" },
+      });
+      await appendRecord(dbPath, {
+        type: "convention",
+        content: "Successful convention",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        outcome: { status: "success" },
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const successRecords = records.filter((r) => r.outcome?.status === "success");
+      const successPatterns = successRecords.filter((r) => r.type === "pattern");
+      expect(successPatterns).toHaveLength(1);
+      expect((successPatterns[0] as { name: string }).name).toBe("successful-pattern");
+    });
+
+    it("record with full outcome is stored and read back correctly", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "guide",
+        name: "deploy-guide",
+        description: "How to deploy",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcome: {
+          status: "success",
+          duration: 3000,
+          test_results: "All checks passed",
+          agent: "deploy-bot",
+        },
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const guides = records.filter((r) => r.type === "guide");
+      expect(guides).toHaveLength(1);
+      expect(guides[0].outcome?.status).toBe("success");
+      expect(guides[0].outcome?.duration).toBe(3000);
+      expect(guides[0].outcome?.test_results).toBe("All checks passed");
+      expect(guides[0].outcome?.agent).toBe("deploy-bot");
+    });
+  });
 });

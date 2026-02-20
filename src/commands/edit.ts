@@ -10,7 +10,7 @@ import {
 } from "../utils/expertise.js";
 import { withFileLock } from "../utils/lock.js";
 import { recordSchema } from "../schemas/record-schema.js";
-import type { Classification } from "../schemas/record.js";
+import type { Classification, Outcome } from "../schemas/record.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
 
 export function registerEditCommand(program: Command): void {
@@ -34,6 +34,12 @@ export function registerEditCommand(program: Command): void {
     .option("--files <files>", "update related files (comma-separated)")
     .option("--relates-to <ids>", "update linked record IDs (comma-separated)")
     .option("--supersedes <ids>", "update superseded record IDs (comma-separated)")
+    .addOption(
+      new Option("--outcome-status <status>", "set outcome status").choices(["success", "failure"]),
+    )
+    .option("--outcome-duration <ms>", "set outcome duration in milliseconds")
+    .option("--outcome-test-results <text>", "set outcome test results summary")
+    .option("--outcome-agent <agent>", "set outcome agent name")
     .action(
       async (
         domain: string,
@@ -94,6 +100,31 @@ export function registerEditCommand(program: Command): void {
                 .split(",")
                 .map((id: string) => id.trim())
                 .filter(Boolean);
+            }
+            if (options.outcomeStatus) {
+              const existing = record.outcome ?? ({} as Partial<Outcome>);
+              record.outcome = {
+                ...existing,
+                status: options.outcomeStatus as "success" | "failure",
+              } as Outcome;
+            }
+            if (options.outcomeDuration !== undefined && record.outcome) {
+              record.outcome = {
+                ...record.outcome,
+                duration: parseFloat(options.outcomeDuration as string),
+              };
+            }
+            if (options.outcomeTestResults && record.outcome) {
+              record.outcome = {
+                ...record.outcome,
+                test_results: options.outcomeTestResults as string,
+              };
+            }
+            if (options.outcomeAgent && record.outcome) {
+              record.outcome = {
+                ...record.outcome,
+                agent: options.outcomeAgent as string,
+              };
             }
 
             switch (record.type) {

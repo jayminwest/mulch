@@ -30,18 +30,21 @@ export function registerSearchCommand(program: Command): void {
       ]),
     )
     .option("--file <file>", "filter by associated file path (substring match)")
+    .addOption(
+      new Option("--outcome-status <status>", "filter by outcome status").choices(["success", "failure"]),
+    )
     .action(
       async (
         query: string | undefined,
-        options: { domain?: string; type?: string; tag?: string; classification?: string; file?: string },
+        options: { domain?: string; type?: string; tag?: string; classification?: string; file?: string; outcomeStatus?: string },
       ) => {
         const jsonMode = program.opts().json === true;
         try {
-          if (!query && !options.type && !options.domain && !options.tag && !options.classification && !options.file) {
+          if (!query && !options.type && !options.domain && !options.tag && !options.classification && !options.file && !options.outcomeStatus) {
             if (jsonMode) {
-              outputJsonError("search", "Provide a search query or use --type, --domain, --tag, --classification, or --file to filter.");
+              outputJsonError("search", "Provide a search query or use --type, --domain, --tag, --classification, --file, or --outcome-status to filter.");
             } else {
-              console.error("Error: Provide a search query or use --type, --domain, --tag, --classification, or --file to filter.");
+              console.error("Error: Provide a search query or use --type, --domain, --tag, --classification, --file, or --outcome-status to filter.");
             }
             process.exitCode = 1;
             return;
@@ -90,6 +93,9 @@ export function registerSearchCommand(program: Command): void {
               if (options.file) {
                 records = filterByFile(records, options.file);
               }
+              if (options.outcomeStatus) {
+                records = records.filter((r) => r.outcome?.status === options.outcomeStatus);
+              }
               const matches = query ? searchRecords(records, query) : records;
               if (matches.length > 0) {
                 totalMatches += matches.length;
@@ -123,6 +129,9 @@ export function registerSearchCommand(program: Command): void {
               }
               if (options.file) {
                 records = filterByFile(records, options.file);
+              }
+              if (options.outcomeStatus) {
+                records = records.filter((r) => r.outcome?.status === options.outcomeStatus);
               }
               const matches = query ? searchRecords(records, query) : records;
               if (matches.length > 0) {

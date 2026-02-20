@@ -677,6 +677,143 @@ describe("record command", () => {
 
     expect(validate(record)).toBe(true);
   });
+
+  it("record with outcome.status=success validates against schema", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "Use outcome metadata",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      outcome: { status: "success" },
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record with outcome.status=failure validates against schema", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "failure",
+      description: "Build failed",
+      resolution: "Fix the error",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      outcome: { status: "failure" },
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("record with full outcome object validates against schema", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "pattern",
+      name: "test-runner",
+      description: "How to run tests",
+      classification: "foundational",
+      recorded_at: new Date().toISOString(),
+      outcome: {
+        status: "success",
+        duration: 1500,
+        test_results: "42 passed, 0 failed",
+        agent: "test-agent",
+      },
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("outcome with invalid status fails validation", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "Test",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      outcome: { status: "unknown" },
+    };
+
+    expect(validate(record)).toBe(false);
+  });
+
+  it("outcome without status fails validation", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "Test",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      outcome: { duration: 100 },
+    };
+
+    expect(validate(record)).toBe(false);
+  });
+
+  it("record without outcome still validates (backward compat)", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+
+    const record = {
+      type: "convention",
+      content: "No outcome here",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+    };
+
+    expect(validate(record)).toBe(true);
+  });
+
+  it("outcome with all record types validates", () => {
+    const ajv = new Ajv();
+    const validate = ajv.compile(recordSchema);
+    const outcome = { status: "success", duration: 100 };
+    const base = { classification: "tactical", recorded_at: new Date().toISOString(), outcome };
+
+    expect(validate({ type: "convention", content: "test", ...base })).toBe(true);
+    expect(validate({ type: "pattern", name: "p", description: "d", ...base })).toBe(true);
+    expect(validate({ type: "failure", description: "d", resolution: "r", ...base })).toBe(true);
+    expect(validate({ type: "decision", title: "t", rationale: "r", ...base })).toBe(true);
+    expect(validate({ type: "reference", name: "r", description: "d", ...base })).toBe(true);
+    expect(validate({ type: "guide", name: "g", description: "d", ...base })).toBe(true);
+  });
+
+  it("record with outcome is stored and read back correctly", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const record: ExpertiseRecord = {
+      type: "pattern",
+      name: "outcome-pattern",
+      description: "Pattern with outcome metadata",
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      outcome: {
+        status: "success",
+        duration: 2500,
+        test_results: "10 passed",
+        agent: "my-agent",
+      },
+    };
+    await appendRecord(filePath, record);
+
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+    expect(records[0].outcome?.status).toBe("success");
+    expect(records[0].outcome?.duration).toBe(2500);
+    expect(records[0].outcome?.test_results).toBe("10 passed");
+    expect(records[0].outcome?.agent).toBe("my-agent");
+  });
 });
 
 describe("processStdinRecords", () => {

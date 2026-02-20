@@ -16,6 +16,7 @@ import type {
   RecordType,
   Classification,
   Evidence,
+  Outcome,
 } from "../schemas/record.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
 import { readFileSync, existsSync } from "node:fs";
@@ -183,6 +184,12 @@ export function registerRecordCommand(program: Command): void {
     .option("--evidence-bead <bead>", "evidence: bead ID")
     .option("--relates-to <ids>", "comma-separated record IDs this relates to")
     .option("--supersedes <ids>", "comma-separated record IDs this supersedes")
+    .addOption(
+      new Option("--outcome-status <status>", "outcome status").choices(["success", "failure"]),
+    )
+    .option("--outcome-duration <ms>", "outcome duration in milliseconds")
+    .option("--outcome-test-results <text>", "outcome test results summary")
+    .option("--outcome-agent <agent>", "outcome agent name")
     .option("--force", "force recording even if duplicate exists")
     .option("--stdin", "read JSON record(s) from stdin (single object or array)")
     .option("--batch <file>", "read JSON record(s) from file (single object or array)")
@@ -453,6 +460,20 @@ Batch recording examples:
                 .filter(Boolean)
             : undefined;
 
+        let outcome: Outcome | undefined;
+        if (options.outcomeStatus) {
+          outcome = { status: options.outcomeStatus as "success" | "failure" };
+          if (options.outcomeDuration !== undefined) {
+            outcome.duration = parseFloat(options.outcomeDuration as string);
+          }
+          if (options.outcomeTestResults) {
+            outcome.test_results = options.outcomeTestResults as string;
+          }
+          if (options.outcomeAgent) {
+            outcome.agent = options.outcomeAgent as string;
+          }
+        }
+
         let record: ExpertiseRecord;
 
         switch (recordType) {
@@ -480,6 +501,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
+              ...(outcome && { outcome }),
             };
             break;
           }
@@ -514,6 +536,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
+              ...(outcome && { outcome }),
             };
             break;
           }
@@ -544,6 +567,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
+              ...(outcome && { outcome }),
             };
             break;
           }
@@ -574,6 +598,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
+              ...(outcome && { outcome }),
             };
             break;
           }
@@ -608,6 +633,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
+              ...(outcome && { outcome }),
             };
             break;
           }
@@ -639,6 +665,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
+              ...(outcome && { outcome }),
             };
             break;
           }
