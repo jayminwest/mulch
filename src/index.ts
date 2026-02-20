@@ -3,10 +3,13 @@ export type {
   RecordType,
   Classification,
   Evidence,
+  Outcome,
   ConventionRecord,
   PatternRecord,
   FailureRecord,
   DecisionRecord,
+  ReferenceRecord,
+  GuideRecord,
   ExpertiseRecord,
 } from "./schemas/index.js";
 
@@ -28,3 +31,20 @@ export {
   findDuplicate,
   generateRecordId,
 } from "./utils/expertise.js";
+
+// Programmatic API
+export {
+  recordExpertise,
+  searchExpertise,
+  queryDomain,
+  editRecord,
+} from "./api.js";
+export type {
+  RecordOptions,
+  RecordResult,
+  SearchOptions,
+  SearchResult,
+  QueryOptions,
+  EditOptions,
+  RecordUpdates,
+} from "./api.js";
