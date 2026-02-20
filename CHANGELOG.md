@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-20
+
+### Added
+
+#### Programmatic API
+- High-level programmatic API (`src/api.ts`) — `recordExpertise()`, `searchExpertise()`, `queryDomain()`, `editRecord()` for use as a library, with full type exports via `src/index.ts`
+
+#### Query Command Enhancements
+- `--outcome-status <status>` filter for `mulch query` — filter records by outcome status (success/failure)
+- `--sort-by-score` flag for `mulch query` — sort results by confirmation-frequency score (highest first)
+
+### Changed
+
+- **Breaking**: Migrated `BaseRecord.outcome` (singular `Outcome`) to `outcomes` (array `Outcome[]`) — existing records with `outcome` field should be migrated to `outcomes: [...]`
+- Schema, scoring, format, search, query, edit, and record commands all updated for `outcomes[]` array
+
+### Testing
+
+- New `test/api.test.ts` with 26 tests for the programmatic API
+- Expanded `test/commands/query.test.ts` from 6 to 31 tests (outcome-status filter, sort-by-score, JSON output mode)
+- 671 tests across 32 test files
+
 ## [0.4.3] - 2026-02-20
 
 ### Added
@@ -197,7 +219,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jayminwest/mulch/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/jayminwest/mulch/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jayminwest/mulch/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jayminwest/mulch/compare/v0.4.0...v0.4.1

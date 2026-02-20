@@ -71,7 +71,7 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 | `mulch record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
 | `mulch edit <domain> <id>` | Edit an existing record by ID or 1-based index |
 | `mulch delete <domain> <id>` | Delete a record by ID or 1-based index |
-| `mulch query [domain]` | Query expertise (use `--all` for all domains, `--classification`, `--file` filters) |
+| `mulch query [domain]` | Query expertise (use `--all` for all domains, `--classification`, `--file`, `--outcome-status`, `--sort-by-score` filters) |
 | `mulch prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
 | `mulch search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score` filters) |
 | `mulch compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
@@ -197,9 +197,18 @@ The `--apply`, default (non-dry-run), and `--fix` variants acquire locks and are
 
 ## Programmatic API
 
-Mulch exports core utilities for use as a library:
+Mulch exports both low-level utilities and a high-level programmatic API:
 
 ```typescript
+// High-level API — recommended for most use cases
+import {
+  recordExpertise,   // Record a new expertise entry (with dedup and locking)
+  searchExpertise,   // Search records across domains
+  queryDomain,       // Query all records for a domain
+  editRecord,        // Edit an existing record by ID
+} from "mulch-cli";
+
+// Low-level utilities
 import {
   readConfig,
   getExpertisePath,
@@ -213,7 +222,7 @@ import {
 } from "mulch-cli";
 ```
 
-Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `ScoredRecord`, `Outcome`, etc.) are also exported.
+Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `ScoredRecord`, `Outcome`, `RecordOptions`, `RecordResult`, `SearchOptions`, `SearchResult`, `QueryOptions`, `EditOptions`, `RecordUpdates`, etc.) are also exported.
 
 ## Contributing
 
