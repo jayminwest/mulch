@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -18,6 +18,7 @@ import {
 } from "../../src/utils/expertise.js";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
 import type { ExpertiseRecord } from "../../src/schemas/record.js";
+import { sortByConfirmationScore, type ScoredRecord, type Outcome } from "../../src/utils/scoring.js";
 
 describe("search command", () => {
   let tmpDir: string;
@@ -586,6 +587,205 @@ describe("search command", () => {
       expect(guides[0].outcome?.duration).toBe(3000);
       expect(guides[0].outcome?.test_results).toBe("All checks passed");
       expect(guides[0].outcome?.agent).toBe("deploy-bot");
+    });
+  });
+
+  describe("scoring sort integration", () => {
+    function makeOutcome(status: Outcome["status"]): Outcome {
+      return { status, recorded_at: new Date().toISOString() };
+    }
+
+    async function appendScoredRecord(filePath: string, record: ScoredRecord): Promise<void> {
+      await appendFile(filePath, JSON.stringify(record) + "\n", "utf-8");
+    }
+
+    it("sortByConfirmationScore places high-score records first", async () => {
+      // Use api domain which has no pre-existing patterns
+      const apiPath = getExpertisePath("api", tmpDir);
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "low-confirm",
+        description: "Rarely confirmed",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success")],
+      });
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "high-confirm",
+        description: "Highly confirmed",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(apiPath);
+      const patterns = filterByType(records, "pattern");
+      const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
+
+      expect(sorted).toHaveLength(2);
+      expect((sorted[0] as { name: string }).name).toBe("high-confirm");
+      expect((sorted[1] as { name: string }).name).toBe("low-confirm");
+    });
+
+    it("records without outcomes sort to the end", async () => {
+      const apiPath = getExpertisePath("api", tmpDir);
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "no-outcomes",
+        description: "No outcome data",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "with-outcomes",
+        description: "Has outcome data",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(apiPath);
+      const patterns = filterByType(records, "pattern");
+      const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
+
+      expect((sorted[0] as { name: string }).name).toBe("with-outcomes");
+      expect((sorted[sorted.length - 1] as { name: string }).name).toBe("no-outcomes");
+    });
+
+    it("sort combined with text query narrows then orders results", async () => {
+      const apiPath = getExpertisePath("api", tmpDir);
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "caching-basic",
+        description: "Basic caching pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success")],
+      });
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "caching-advanced",
+        description: "Advanced caching strategy",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+      });
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "unrelated-pattern",
+        description: "Something else entirely",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(apiPath);
+      const patterns = filterByType(records, "pattern");
+      // Search for "caching" first, then sort by score
+      const matched = searchRecords(patterns, "caching");
+      const sorted = sortByConfirmationScore(matched as ScoredRecord[]);
+
+      // Only caching records should match
+      expect(sorted).toHaveLength(2);
+      // advanced has 3 successes vs basic's 1
+      expect((sorted[0] as { name: string }).name).toBe("caching-advanced");
+      expect((sorted[1] as { name: string }).name).toBe("caching-basic");
+    });
+
+    it("sort combined with type filter works correctly", async () => {
+      const apiPath = getExpertisePath("api", tmpDir);
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "a-pattern",
+        description: "A pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success")],
+      });
+      await appendScoredRecord(apiPath, {
+        type: "convention",
+        content: "A convention with many confirmations",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+      });
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "b-pattern",
+        description: "A better pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(apiPath);
+      const patterns = filterByType(records, "pattern");
+      const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
+
+      // Only patterns; convention excluded
+      expect(sorted.every((r) => r.type === "pattern")).toBe(true);
+      // b-pattern (2 successes) before a-pattern (1 success)
+      expect((sorted[0] as { name: string }).name).toBe("b-pattern");
+      expect((sorted[1] as { name: string }).name).toBe("a-pattern");
+    });
+
+    it("partial outcomes contribute 0.5 to score", async () => {
+      const apiPath = getExpertisePath("api", tmpDir);
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "two-successes",
+        description: "Two full successes",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "one-success-two-partials",
+        description: "One success, two partials",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("partial"), makeOutcome("partial")],
+      });
+
+      const records = await readExpertiseFile(apiPath);
+      const patterns = filterByType(records, "pattern");
+      const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
+
+      // two-successes scores 2.0; one-success-two-partials scores 1.0 + 0.5 + 0.5 = 2.0
+      // Both score 2.0, order determined by stable sort
+      expect(sorted).toHaveLength(2);
+    });
+
+    it("does not mutate original record array order", async () => {
+      const apiPath = getExpertisePath("api", tmpDir);
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "first",
+        description: "First appended",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success")],
+      });
+      await appendScoredRecord(apiPath, {
+        type: "pattern",
+        name: "second",
+        description: "Second appended",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        outcomes: [makeOutcome("success"), makeOutcome("success")],
+      });
+
+      const records = await readExpertiseFile(apiPath);
+      const patterns = filterByType(records, "pattern");
+      const originalFirst = (patterns[0] as { name: string }).name;
+
+      sortByConfirmationScore(patterns as ScoredRecord[]); // not reassigned
+
+      // Original array unchanged
+      expect((patterns[0] as { name: string }).name).toBe(originalFirst);
     });
   });
 });

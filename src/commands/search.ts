@@ -4,6 +4,7 @@ import { readExpertiseFile, getFileModTime, filterByType, filterByClassification
 import { searchRecords } from "../utils/expertise.js";
 import { formatDomainExpertise } from "../utils/format.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
+import { sortByConfirmationScore, type ScoredRecord } from "../utils/scoring.js";
 
 export function registerSearchCommand(program: Command): void {
   program
@@ -33,10 +34,11 @@ export function registerSearchCommand(program: Command): void {
     .addOption(
       new Option("--outcome-status <status>", "filter by outcome status").choices(["success", "failure"]),
     )
+    .option("--sort-by-score", "sort results by confirmation-frequency score (highest first)")
     .action(
       async (
         query: string | undefined,
-        options: { domain?: string; type?: string; tag?: string; classification?: string; file?: string; outcomeStatus?: string },
+        options: { domain?: string; type?: string; tag?: string; classification?: string; file?: string; outcomeStatus?: string; sortByScore?: boolean },
       ) => {
         const jsonMode = program.opts().json === true;
         try {
@@ -96,7 +98,10 @@ export function registerSearchCommand(program: Command): void {
               if (options.outcomeStatus) {
                 records = records.filter((r) => r.outcome?.status === options.outcomeStatus);
               }
-              const matches = query ? searchRecords(records, query) : records;
+              let matches = query ? searchRecords(records, query) : records;
+              if (options.sortByScore) {
+                matches = sortByConfirmationScore(matches as ScoredRecord[]);
+              }
               if (matches.length > 0) {
                 totalMatches += matches.length;
                 result.push({ domain, matches });
@@ -133,7 +138,10 @@ export function registerSearchCommand(program: Command): void {
               if (options.outcomeStatus) {
                 records = records.filter((r) => r.outcome?.status === options.outcomeStatus);
               }
-              const matches = query ? searchRecords(records, query) : records;
+              let matches = query ? searchRecords(records, query) : records;
+              if (options.sortByScore) {
+                matches = sortByConfirmationScore(matches as ScoredRecord[]);
+              }
               if (matches.length > 0) {
                 totalMatches += matches.length;
                 sections.push(
