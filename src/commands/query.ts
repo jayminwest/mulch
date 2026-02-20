@@ -3,6 +3,7 @@ import { readConfig, getExpertisePath } from "../utils/config.js";
 import { readExpertiseFile, getFileModTime, filterByType, filterByClassification, filterByFile } from "../utils/expertise.js";
 import { formatDomainExpertise } from "../utils/format.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
+import { sortByConfirmationScore, type ScoredRecord } from "../utils/scoring.js";
 
 export function registerQueryCommand(program: Command): void {
   program
@@ -18,6 +19,10 @@ export function registerQueryCommand(program: Command): void {
       ]),
     )
     .option("--file <file>", "filter by associated file path (substring match)")
+    .addOption(
+      new Option("--outcome-status <status>", "filter by outcome status").choices(["success", "failure"]),
+    )
+    .option("--sort-by-score", "sort results by confirmation-frequency score (highest first)")
     .option("--all", "show all domains")
     .action(async (domain: string | undefined, options: Record<string, unknown>) => {
       const jsonMode = program.opts().json === true;
@@ -71,6 +76,12 @@ export function registerQueryCommand(program: Command): void {
             if (options.file) {
               records = filterByFile(records, options.file as string);
             }
+            if (options.outcomeStatus) {
+              records = records.filter((r) => r.outcome?.status === (options.outcomeStatus as string));
+            }
+            if (options.sortByScore) {
+              records = sortByConfirmationScore(records as ScoredRecord[]);
+            }
             result.push({ domain: d, records });
           }
           outputJson({ success: true, command: "query", domains: result });
@@ -88,6 +99,12 @@ export function registerQueryCommand(program: Command): void {
             }
             if (options.file) {
               records = filterByFile(records, options.file as string);
+            }
+            if (options.outcomeStatus) {
+              records = records.filter((r) => r.outcome?.status === (options.outcomeStatus as string));
+            }
+            if (options.sortByScore) {
+              records = sortByConfirmationScore(records as ScoredRecord[]);
             }
             sections.push(formatDomainExpertise(d, records, lastUpdated));
           }
