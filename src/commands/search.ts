@@ -32,7 +32,7 @@ export function registerSearchCommand(program: Command): void {
     )
     .option("--file <file>", "filter by associated file path (substring match)")
     .addOption(
-      new Option("--outcome-status <status>", "filter by outcome status").choices(["success", "failure"]),
+      new Option("--outcome-status <status>", "filter by outcome status").choices(["success", "failure", "partial"]),
     )
     .option("--sort-by-score", "sort results by confirmation-frequency score (highest first)")
     .action(
@@ -96,7 +96,7 @@ export function registerSearchCommand(program: Command): void {
                 records = filterByFile(records, options.file);
               }
               if (options.outcomeStatus) {
-                records = records.filter((r) => r.outcome?.status === options.outcomeStatus);
+                records = records.filter((r) => r.outcomes?.some((o) => o.status === options.outcomeStatus));
               }
               let matches = query ? searchRecords(records, query) : records;
               if (options.sortByScore) {
@@ -136,7 +136,7 @@ export function registerSearchCommand(program: Command): void {
                 records = filterByFile(records, options.file);
               }
               if (options.outcomeStatus) {
-                records = records.filter((r) => r.outcome?.status === options.outcomeStatus);
+                records = records.filter((r) => r.outcomes?.some((o) => o.status === options.outcomeStatus));
               }
               let matches = query ? searchRecords(records, query) : records;
               if (options.sortByScore) {

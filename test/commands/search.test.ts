@@ -488,30 +488,30 @@ describe("search command", () => {
   });
 
   describe("outcome filtering", () => {
-    it("filters records with outcome.status=success", async () => {
+    it("filters records with outcomes containing success", async () => {
       const dbPath = getExpertisePath("database", tmpDir);
       await appendRecord(dbPath, {
         type: "convention",
         content: "Successful approach",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "success" },
+        outcomes: [{ status: "success" }],
       });
       await appendRecord(dbPath, {
         type: "convention",
         content: "Failed approach",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "failure" },
+        outcomes: [{ status: "failure" }],
       });
 
       const records = await readExpertiseFile(dbPath);
-      const successes = records.filter((r) => r.outcome?.status === "success");
+      const successes = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
       expect(successes).toHaveLength(1);
       expect((successes[0] as { content: string }).content).toBe("Successful approach");
     });
 
-    it("filters records with outcome.status=failure", async () => {
+    it("filters records with outcomes containing failure", async () => {
       const dbPath = getExpertisePath("database", tmpDir);
       await appendRecord(dbPath, {
         type: "failure",
@@ -519,24 +519,24 @@ describe("search command", () => {
         resolution: "Use alternative",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "failure", agent: "build-agent" },
+        outcomes: [{ status: "failure", agent: "build-agent" }],
       });
 
       const records = await readExpertiseFile(dbPath);
-      const failures = records.filter((r) => r.outcome?.status === "failure");
-      // only the one we added (not the FTS5 failure which has no outcome)
+      const failures = records.filter((r) => r.outcomes?.some((o) => o.status === "failure"));
+      // only the one we added (not the FTS5 failure which has no outcomes)
       expect(failures).toHaveLength(1);
       expect(failures[0].type).toBe("failure");
-      expect(failures[0].outcome?.agent).toBe("build-agent");
+      expect(failures[0].outcomes?.[0]?.agent).toBe("build-agent");
     });
 
-    it("excludes records without outcome when filtering by outcome status", async () => {
+    it("excludes records without outcomes when filtering by outcome status", async () => {
       const records = await readExpertiseFile(
         getExpertisePath("database", tmpDir),
       );
-      // Pre-existing records have no outcome
-      const withOutcome = records.filter((r) => r.outcome?.status === "success");
-      expect(withOutcome).toHaveLength(0);
+      // Pre-existing records have no outcomes
+      const withSuccess = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
+      expect(withSuccess).toHaveLength(0);
     });
 
     it("outcome filter combined with type filter narrows results", async () => {
@@ -547,24 +547,24 @@ describe("search command", () => {
         description: "Pattern that worked",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "success" },
+        outcomes: [{ status: "success" }],
       });
       await appendRecord(dbPath, {
         type: "convention",
         content: "Successful convention",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "success" },
+        outcomes: [{ status: "success" }],
       });
 
       const records = await readExpertiseFile(dbPath);
-      const successRecords = records.filter((r) => r.outcome?.status === "success");
+      const successRecords = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
       const successPatterns = successRecords.filter((r) => r.type === "pattern");
       expect(successPatterns).toHaveLength(1);
       expect((successPatterns[0] as { name: string }).name).toBe("successful-pattern");
     });
 
-    it("record with full outcome is stored and read back correctly", async () => {
+    it("record with full outcomes array is stored and read back correctly", async () => {
       const dbPath = getExpertisePath("database", tmpDir);
       await appendRecord(dbPath, {
         type: "guide",
@@ -572,21 +572,23 @@ describe("search command", () => {
         description: "How to deploy",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcome: {
-          status: "success",
-          duration: 3000,
-          test_results: "All checks passed",
-          agent: "deploy-bot",
-        },
+        outcomes: [
+          {
+            status: "success",
+            duration: 3000,
+            test_results: "All checks passed",
+            agent: "deploy-bot",
+          },
+        ],
       });
 
       const records = await readExpertiseFile(dbPath);
       const guides = records.filter((r) => r.type === "guide");
       expect(guides).toHaveLength(1);
-      expect(guides[0].outcome?.status).toBe("success");
-      expect(guides[0].outcome?.duration).toBe(3000);
-      expect(guides[0].outcome?.test_results).toBe("All checks passed");
-      expect(guides[0].outcome?.agent).toBe("deploy-bot");
+      expect(guides[0].outcomes?.[0]?.status).toBe("success");
+      expect(guides[0].outcomes?.[0]?.duration).toBe(3000);
+      expect(guides[0].outcomes?.[0]?.test_results).toBe("All checks passed");
+      expect(guides[0].outcomes?.[0]?.agent).toBe("deploy-bot");
     });
   });
 

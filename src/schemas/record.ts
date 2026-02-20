@@ -11,10 +11,12 @@ export interface Evidence {
 }
 
 export interface Outcome {
-  status: "success" | "failure";
+  status: "success" | "failure" | "partial";
   duration?: number;
   test_results?: string;
   agent?: string;
+  notes?: string;
+  recorded_at?: string;
 }
 
 interface BaseRecord {
@@ -25,7 +27,7 @@ interface BaseRecord {
   tags?: string[];
   relates_to?: string[];
   supersedes?: string[];
-  outcome?: Outcome;
+  outcomes?: Outcome[];
 }
 
 export interface ConventionRecord extends BaseRecord {

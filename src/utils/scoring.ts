@@ -1,28 +1,12 @@
-import type { ExpertiseRecord } from "../schemas/record.js";
+import type { ExpertiseRecord, Outcome } from "../schemas/record.js";
+
+export type { Outcome };
 
 /**
- * Represents the outcome of applying a record (pattern, convention, etc.) in practice.
- * Outcomes are recorded by agents after applying a record's guidance.
+ * An ExpertiseRecord with outcome history for confirmation-frequency scoring.
+ * Since ExpertiseRecord now includes outcomes?: Outcome[], this is an alias.
  */
-export interface Outcome {
-  status: "success" | "failure" | "partial";
-  duration_seconds?: number;
-  test_results?: {
-    passed: number;
-    failed: number;
-    skipped?: number;
-  };
-  notes?: string;
-  recorded_at: string;
-}
-
-/**
- * An ExpertiseRecord extended with optional outcome history.
- * Used for confirmation-frequency scoring.
- */
-export type ScoredRecord = ExpertiseRecord & {
-  outcomes?: Outcome[];
-};
+export type ScoredRecord = ExpertiseRecord;
 
 /**
  * Returns the number of successful outcomes for a record.

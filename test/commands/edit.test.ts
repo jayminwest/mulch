@@ -228,7 +228,7 @@ describe("edit command", () => {
     }
   });
 
-  it("adds outcome to a record without one", async () => {
+  it("adds outcomes to a record without one", async () => {
     const filePath = getExpertisePath("testing", tmpDir);
     await appendRecord(filePath, {
       type: "convention",
@@ -240,17 +240,17 @@ describe("edit command", () => {
     const records = await readExpertiseFile(filePath);
     const record = {
       ...records[0],
-      outcome: { status: "success" as const, duration: 1200 },
+      outcomes: [{ status: "success" as const, duration: 1200 }],
     };
     const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
     await writeExpertiseFile(filePath, [record]);
 
     const updated = await readExpertiseFile(filePath);
-    expect(updated[0].outcome?.status).toBe("success");
-    expect(updated[0].outcome?.duration).toBe(1200);
+    expect(updated[0].outcomes?.[0]?.status).toBe("success");
+    expect(updated[0].outcomes?.[0]?.duration).toBe(1200);
   });
 
-  it("updates outcome on an existing record", async () => {
+  it("appends outcome to an existing record's outcomes array", async () => {
     const filePath = getExpertisePath("testing", tmpDir);
     await appendRecord(filePath, {
       type: "failure",
@@ -258,24 +258,28 @@ describe("edit command", () => {
       resolution: "Fixed config",
       classification: "tactical",
       recorded_at: new Date().toISOString(),
-      outcome: { status: "failure", agent: "build-agent" },
+      outcomes: [{ status: "failure", agent: "build-agent" }],
     });
 
     const records = await readExpertiseFile(filePath);
     const record = {
       ...records[0],
-      outcome: { status: "success" as const, agent: "build-agent", test_results: "Resolved" },
+      outcomes: [
+        ...(records[0].outcomes ?? []),
+        { status: "success" as const, agent: "build-agent", test_results: "Resolved" },
+      ],
     };
     const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
     await writeExpertiseFile(filePath, [record]);
 
     const updated = await readExpertiseFile(filePath);
-    expect(updated[0].outcome?.status).toBe("success");
-    expect(updated[0].outcome?.agent).toBe("build-agent");
-    expect(updated[0].outcome?.test_results).toBe("Resolved");
+    expect(updated[0].outcomes).toHaveLength(2);
+    expect(updated[0].outcomes?.[1]?.status).toBe("success");
+    expect(updated[0].outcomes?.[1]?.agent).toBe("build-agent");
+    expect(updated[0].outcomes?.[1]?.test_results).toBe("Resolved");
   });
 
-  it("preserves other record fields when adding outcome", async () => {
+  it("preserves other record fields when adding outcomes", async () => {
     const filePath = getExpertisePath("testing", tmpDir);
     await appendRecord(filePath, {
       type: "decision",
@@ -286,7 +290,7 @@ describe("edit command", () => {
     });
 
     const records = await readExpertiseFile(filePath);
-    const record = { ...records[0], outcome: { status: "success" as const } };
+    const record = { ...records[0], outcomes: [{ status: "success" as const }] };
     const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
     await writeExpertiseFile(filePath, [record]);
 
@@ -296,6 +300,6 @@ describe("edit command", () => {
       expect(updated[0].title).toBe("Use TypeScript");
       expect(updated[0].rationale).toBe("Type safety");
     }
-    expect(updated[0].outcome?.status).toBe("success");
+    expect(updated[0].outcomes?.[0]?.status).toBe("success");
   });
 });

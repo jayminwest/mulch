@@ -16,7 +16,19 @@ export async function readExpertiseFile(
   const records: ExpertiseRecord[] = [];
   const lines = content.split("\n").filter((line) => line.trim().length > 0);
   for (const line of lines) {
-    records.push(JSON.parse(line) as ExpertiseRecord);
+    const raw = JSON.parse(line) as Record<string, unknown>;
+    // Normalize legacy outcome (singular) to outcomes (array) for backward compat
+    if ("outcome" in raw && raw.outcome !== null && raw.outcome !== undefined && !("outcomes" in raw)) {
+      const legacy = raw.outcome as Record<string, unknown>;
+      raw.outcomes = [{
+        status: legacy.status,
+        ...(legacy.duration !== undefined ? { duration: legacy.duration } : {}),
+        ...(legacy.test_results !== undefined ? { test_results: legacy.test_results } : {}),
+        ...(legacy.agent !== undefined ? { agent: legacy.agent } : {}),
+      }];
+      delete raw.outcome;
+    }
+    records.push(raw as unknown as ExpertiseRecord);
   }
   return records;
 }

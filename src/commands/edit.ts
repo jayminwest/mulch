@@ -35,7 +35,7 @@ export function registerEditCommand(program: Command): void {
     .option("--relates-to <ids>", "update linked record IDs (comma-separated)")
     .option("--supersedes <ids>", "update superseded record IDs (comma-separated)")
     .addOption(
-      new Option("--outcome-status <status>", "set outcome status").choices(["success", "failure"]),
+      new Option("--outcome-status <status>", "set outcome status").choices(["success", "failure", "partial"]),
     )
     .option("--outcome-duration <ms>", "set outcome duration in milliseconds")
     .option("--outcome-test-results <text>", "set outcome test results summary")
@@ -102,29 +102,17 @@ export function registerEditCommand(program: Command): void {
                 .filter(Boolean);
             }
             if (options.outcomeStatus) {
-              const existing = record.outcome ?? ({} as Partial<Outcome>);
-              record.outcome = {
-                ...existing,
-                status: options.outcomeStatus as "success" | "failure",
-              } as Outcome;
-            }
-            if (options.outcomeDuration !== undefined && record.outcome) {
-              record.outcome = {
-                ...record.outcome,
-                duration: parseFloat(options.outcomeDuration as string),
-              };
-            }
-            if (options.outcomeTestResults && record.outcome) {
-              record.outcome = {
-                ...record.outcome,
-                test_results: options.outcomeTestResults as string,
-              };
-            }
-            if (options.outcomeAgent && record.outcome) {
-              record.outcome = {
-                ...record.outcome,
-                agent: options.outcomeAgent as string,
-              };
+              const o: Outcome = { status: options.outcomeStatus as "success" | "failure" | "partial" };
+              if (options.outcomeDuration !== undefined) {
+                o.duration = parseFloat(options.outcomeDuration as string);
+              }
+              if (options.outcomeTestResults) {
+                o.test_results = options.outcomeTestResults as string;
+              }
+              if (options.outcomeAgent) {
+                o.agent = options.outcomeAgent as string;
+              }
+              record.outcomes = [...(record.outcomes ?? []), o];
             }
 
             switch (record.type) {

@@ -32,11 +32,14 @@ function formatEvidence(evidence: ConventionRecord["evidence"]): string {
   return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
 }
 
-function formatOutcome(outcome: Outcome | undefined): string {
-  if (!outcome) return "";
-  const parts: string[] = [outcome.status === "success" ? "✓" : "✗"];
-  if (outcome.duration !== undefined) parts.push(`${outcome.duration}ms`);
-  if (outcome.agent) parts.push(`@${outcome.agent}`);
+function formatOutcome(outcomes: Outcome[] | undefined): string {
+  if (!outcomes || outcomes.length === 0) return "";
+  const latest = outcomes[outcomes.length - 1];
+  const statusSymbol = latest.status === "success" ? "✓" : latest.status === "partial" ? "~" : "✗";
+  const parts: string[] = [statusSymbol];
+  if (latest.duration !== undefined) parts.push(`${latest.duration}ms`);
+  if (latest.agent) parts.push(`@${latest.agent}`);
+  if (outcomes.length > 1) parts.push(`(${outcomes.length}x)`);
   return ` [${parts.join(" ")}]`;
 }
 
@@ -163,7 +166,7 @@ function compactId(r: ExpertiseRecord): string {
 function compactLine(r: ExpertiseRecord): string {
   const links = formatLinks(r);
   const id = compactId(r);
-  const outcome = formatOutcome(r.outcome);
+  const outcome = formatOutcome(r.outcomes);
   switch (r.type) {
     case "convention":
       return `- [convention] ${truncate(r.content)}${id}${outcome}${links}`;
@@ -436,11 +439,13 @@ export function formatDomainExpertiseXml(
     if (r.supersedes && r.supersedes.length > 0) {
       lines.push(`    <supersedes>${r.supersedes.join(", ")}</supersedes>`);
     }
-    if (r.outcome) {
-      const durationAttr = r.outcome.duration !== undefined ? ` duration="${r.outcome.duration}"` : "";
-      const agentAttr = r.outcome.agent ? ` agent="${xmlEscape(r.outcome.agent)}"` : "";
-      const testResultsContent = r.outcome.test_results ? `${xmlEscape(r.outcome.test_results)}` : "";
-      lines.push(`    <outcome status="${r.outcome.status}"${durationAttr}${agentAttr}>${testResultsContent}</outcome>`);
+    if (r.outcomes && r.outcomes.length > 0) {
+      for (const outcome of r.outcomes) {
+        const durationAttr = outcome.duration !== undefined ? ` duration="${outcome.duration}"` : "";
+        const agentAttr = outcome.agent ? ` agent="${xmlEscape(outcome.agent)}"` : "";
+        const testResultsContent = outcome.test_results ? `${xmlEscape(outcome.test_results)}` : "";
+        lines.push(`    <outcome status="${outcome.status}"${durationAttr}${agentAttr}>${testResultsContent}</outcome>`);
+      }
     }
     lines.push(`  </${r.type}>`);
   }

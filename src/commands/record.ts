@@ -185,7 +185,7 @@ export function registerRecordCommand(program: Command): void {
     .option("--relates-to <ids>", "comma-separated record IDs this relates to")
     .option("--supersedes <ids>", "comma-separated record IDs this supersedes")
     .addOption(
-      new Option("--outcome-status <status>", "outcome status").choices(["success", "failure"]),
+      new Option("--outcome-status <status>", "outcome status").choices(["success", "failure", "partial"]),
     )
     .option("--outcome-duration <ms>", "outcome duration in milliseconds")
     .option("--outcome-test-results <text>", "outcome test results summary")
@@ -460,18 +460,19 @@ Batch recording examples:
                 .filter(Boolean)
             : undefined;
 
-        let outcome: Outcome | undefined;
+        let outcomes: Outcome[] | undefined;
         if (options.outcomeStatus) {
-          outcome = { status: options.outcomeStatus as "success" | "failure" };
+          const o: Outcome = { status: options.outcomeStatus as "success" | "failure" | "partial" };
           if (options.outcomeDuration !== undefined) {
-            outcome.duration = parseFloat(options.outcomeDuration as string);
+            o.duration = parseFloat(options.outcomeDuration as string);
           }
           if (options.outcomeTestResults) {
-            outcome.test_results = options.outcomeTestResults as string;
+            o.test_results = options.outcomeTestResults as string;
           }
           if (options.outcomeAgent) {
-            outcome.agent = options.outcomeAgent as string;
+            o.agent = options.outcomeAgent as string;
           }
+          outcomes = [o];
         }
 
         let record: ExpertiseRecord;
@@ -501,7 +502,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
-              ...(outcome && { outcome }),
+              ...(outcomes && { outcomes }),
             };
             break;
           }
@@ -536,7 +537,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
-              ...(outcome && { outcome }),
+              ...(outcomes && { outcomes }),
             };
             break;
           }
@@ -567,7 +568,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
-              ...(outcome && { outcome }),
+              ...(outcomes && { outcomes }),
             };
             break;
           }
@@ -598,7 +599,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
-              ...(outcome && { outcome }),
+              ...(outcomes && { outcomes }),
             };
             break;
           }
@@ -633,7 +634,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
-              ...(outcome && { outcome }),
+              ...(outcomes && { outcomes }),
             };
             break;
           }
@@ -665,7 +666,7 @@ Batch recording examples:
               ...(tags && tags.length > 0 && { tags }),
               ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
-              ...(outcome && { outcome }),
+              ...(outcomes && { outcomes }),
             };
             break;
           }
