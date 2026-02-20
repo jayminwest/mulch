@@ -13,6 +13,8 @@ import {
   searchRecords,
   readExpertiseFile,
   filterByType,
+  filterByClassification,
+  filterByFile,
 } from "../../src/utils/expertise.js";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
 import type { ExpertiseRecord } from "../../src/schemas/record.js";
@@ -287,6 +289,200 @@ describe("search command", () => {
       );
       // Only the one with the "target" tag, not the 3 existing untagged records
       expect(filtered).toHaveLength(1);
+    });
+  });
+
+  describe("classification filtering", () => {
+    it("filters foundational records", async () => {
+      const records = await readExpertiseFile(
+        getExpertisePath("database", tmpDir),
+      );
+      // beforeEach adds: convention (foundational), failure (tactical), pattern (foundational)
+      const foundational = filterByClassification(records, "foundational");
+      expect(foundational).toHaveLength(2);
+      expect(foundational.every((r) => r.classification === "foundational")).toBe(true);
+    });
+
+    it("filters tactical records", async () => {
+      const records = await readExpertiseFile(
+        getExpertisePath("database", tmpDir),
+      );
+      const tactical = filterByClassification(records, "tactical");
+      expect(tactical).toHaveLength(1);
+      expect(tactical[0].classification).toBe("tactical");
+      expect(tactical[0].type).toBe("failure");
+    });
+
+    it("returns empty for observational when none exist", async () => {
+      const records = await readExpertiseFile(
+        getExpertisePath("database", tmpDir),
+      );
+      const observational = filterByClassification(records, "observational");
+      expect(observational).toHaveLength(0);
+    });
+
+    it("filters observational records correctly", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "convention",
+        content: "Observational note",
+        classification: "observational",
+        recorded_at: new Date().toISOString(),
+      });
+      const records = await readExpertiseFile(dbPath);
+      const observational = filterByClassification(records, "observational");
+      expect(observational).toHaveLength(1);
+      expect(observational[0].classification).toBe("observational");
+    });
+
+    it("classification filter combined with type filter narrows results", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "convention",
+        content: "Tactical convention",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+      });
+      const records = await readExpertiseFile(dbPath);
+      const tactical = filterByClassification(records, "tactical");
+      const tacticalConventions = filterByType(tactical, "convention");
+      expect(tacticalConventions).toHaveLength(1);
+      expect(tacticalConventions[0].classification).toBe("tactical");
+      expect(tacticalConventions[0].type).toBe("convention");
+    });
+
+    it("classification filter combined with search query narrows results", async () => {
+      const records = await readExpertiseFile(
+        getExpertisePath("database", tmpDir),
+      );
+      // Filter to foundational, then search for "WAL" (convention content)
+      const foundational = filterByClassification(records, "foundational");
+      const matches = searchRecords(foundational, "WAL");
+      expect(matches).toHaveLength(1);
+      expect(matches[0].classification).toBe("foundational");
+    });
+  });
+
+  describe("file filtering", () => {
+    it("filters records by exact file path", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "pattern",
+        name: "query-builder",
+        description: "SQL query builder pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        files: ["src/utils/db.ts"],
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const filtered = filterByFile(records, "src/utils/db.ts");
+      expect(filtered).toHaveLength(1);
+      expect((filtered[0] as { name: string }).name).toBe("query-builder");
+    });
+
+    it("filters records by partial file path (substring match)", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "pattern",
+        name: "repo-pattern",
+        description: "Repository pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        files: ["src/repositories/user.ts", "src/repositories/post.ts"],
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const filtered = filterByFile(records, "repositories");
+      expect(filtered).toHaveLength(1);
+      expect((filtered[0] as { name: string }).name).toBe("repo-pattern");
+    });
+
+    it("file filter is case-insensitive", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "reference",
+        name: "config-ref",
+        description: "Configuration reference",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        files: ["src/Config/Settings.ts"],
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const filtered = filterByFile(records, "config/settings");
+      expect(filtered).toHaveLength(1);
+      expect((filtered[0] as { name: string }).name).toBe("config-ref");
+    });
+
+    it("excludes records with no files field", async () => {
+      const records = await readExpertiseFile(
+        getExpertisePath("database", tmpDir),
+      );
+      // Existing records (convention, failure) have no files field
+      const filtered = filterByFile(records, "src");
+      expect(filtered).toHaveLength(0);
+    });
+
+    it("excludes records whose files do not match", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "pattern",
+        name: "unrelated",
+        description: "Some pattern",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        files: ["src/other/module.ts"],
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const filtered = filterByFile(records, "nonexistent");
+      expect(filtered).toHaveLength(0);
+    });
+
+    it("matches records when one of multiple files matches", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "pattern",
+        name: "multi-file-pattern",
+        description: "Pattern spanning multiple files",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        files: ["src/a.ts", "src/b.ts", "src/c.ts"],
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const filtered = filterByFile(records, "src/b.ts");
+      expect(filtered).toHaveLength(1);
+      expect((filtered[0] as { name: string }).name).toBe("multi-file-pattern");
+    });
+
+    it("file filter combined with classification filter narrows results", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        type: "pattern",
+        name: "foundational-file-pattern",
+        description: "Foundational pattern with file",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+        files: ["src/core.ts"],
+      });
+      await appendRecord(dbPath, {
+        type: "pattern",
+        name: "tactical-file-pattern",
+        description: "Tactical pattern with same file",
+        classification: "tactical",
+        recorded_at: new Date().toISOString(),
+        files: ["src/core.ts"],
+      });
+
+      const records = await readExpertiseFile(dbPath);
+      const withFile = filterByFile(records, "src/core.ts");
+      expect(withFile).toHaveLength(2);
+
+      const foundationalWithFile = filterByClassification(withFile, "foundational");
+      expect(foundationalWithFile).toHaveLength(1);
+      expect((foundationalWithFile[0] as { name: string }).name).toBe("foundational-file-pattern");
     });
   });
 });

@@ -1,6 +1,6 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { readConfig, getExpertisePath } from "../utils/config.js";
-import { readExpertiseFile, getFileModTime, filterByType } from "../utils/expertise.js";
+import { readExpertiseFile, getFileModTime, filterByType, filterByClassification, filterByFile } from "../utils/expertise.js";
 import { formatDomainExpertise } from "../utils/format.js";
 import { outputJson, outputJsonError } from "../utils/json-output.js";
 
@@ -10,6 +10,14 @@ export function registerQueryCommand(program: Command): void {
     .argument("[domain]", "expertise domain to query")
     .description("Query expertise records")
     .option("--type <type>", "filter by record type")
+    .addOption(
+      new Option("--classification <classification>", "filter by classification").choices([
+        "foundational",
+        "tactical",
+        "observational",
+      ]),
+    )
+    .option("--file <file>", "filter by associated file path (substring match)")
     .option("--all", "show all domains")
     .action(async (domain: string | undefined, options: Record<string, unknown>) => {
       const jsonMode = program.opts().json === true;
@@ -57,6 +65,12 @@ export function registerQueryCommand(program: Command): void {
             if (options.type) {
               records = filterByType(records, options.type as string);
             }
+            if (options.classification) {
+              records = filterByClassification(records, options.classification as string);
+            }
+            if (options.file) {
+              records = filterByFile(records, options.file as string);
+            }
             result.push({ domain: d, records });
           }
           outputJson({ success: true, command: "query", domains: result });
@@ -68,6 +82,12 @@ export function registerQueryCommand(program: Command): void {
             const lastUpdated = await getFileModTime(filePath);
             if (options.type) {
               records = filterByType(records, options.type as string);
+            }
+            if (options.classification) {
+              records = filterByClassification(records, options.classification as string);
+            }
+            if (options.file) {
+              records = filterByFile(records, options.file as string);
             }
             sections.push(formatDomainExpertise(d, records, lastUpdated));
           }
