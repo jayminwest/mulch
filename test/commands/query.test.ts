@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -19,6 +19,7 @@ import {
 import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
 import type { ExpertiseRecord } from "../../src/schemas/record.js";
 import { sortByConfirmationScore, type ScoredRecord, type Outcome } from "../../src/utils/scoring.js";
+import { registerQueryCommand } from "../../src/commands/query.js";
 
 describe("query command", () => {
   let tmpDir: string;
@@ -758,7 +759,28 @@ describe("query command", () => {
   });
 
   describe("outcome-status filtering", () => {
-    it("filters records with outcome.status=success", async () => {
+    let originalCwd: string;
+
+    beforeEach(() => {
+      originalCwd = process.cwd();
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      process.exitCode = 0;
+    });
+
+    function makeProgram(): Command {
+      const program = new Command();
+      program
+        .name("mulch")
+        .option("--json", "output as structured JSON")
+        .exitOverride();
+      registerQueryCommand(program);
+      return program;
+    }
+
+    it("filters records with outcomes containing success", async () => {
       await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
@@ -768,14 +790,14 @@ describe("query command", () => {
         content: "Successful approach",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "success" },
+        outcomes: [{ status: "success" }],
       });
       await appendRecord(filePath, {
         type: "convention",
         content: "Failed approach",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "failure" },
+        outcomes: [{ status: "failure" }],
       });
       await appendRecord(filePath, {
         type: "convention",
@@ -784,13 +806,26 @@ describe("query command", () => {
         recorded_at: new Date().toISOString(),
       });
 
-      const records = await readExpertiseFile(filePath);
-      const successes = records.filter((r) => r.outcome?.status === "success");
-      expect(successes).toHaveLength(1);
-      expect((successes[0] as { content: string }).content).toBe("Successful approach");
+      process.chdir(tmpDir);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync(["node", "mulch", "--json", "query", "testing", "--outcome-status", "success"]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
+          success: boolean;
+          domains: Array<{ domain: string; records: Array<{ content: string }> }>;
+        };
+        expect(output.success).toBe(true);
+        expect(output.domains[0].records).toHaveLength(1);
+        expect(output.domains[0].records[0].content).toBe("Successful approach");
+      } finally {
+        logSpy.mockRestore();
+      }
     });
 
-    it("filters records with outcome.status=failure", async () => {
+    it("filters records with outcomes containing failure", async () => {
       await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
@@ -801,24 +836,36 @@ describe("query command", () => {
         resolution: "Use alternative",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "failure", agent: "build-agent" },
+        outcomes: [{ status: "failure", agent: "build-agent" }],
       });
       await appendRecord(filePath, {
         type: "convention",
         content: "Worked fine",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "success" },
+        outcomes: [{ status: "success" }],
       });
 
-      const records = await readExpertiseFile(filePath);
-      const failures = records.filter((r) => r.outcome?.status === "failure");
-      expect(failures).toHaveLength(1);
-      expect(failures[0].type).toBe("failure");
-      expect(failures[0].outcome?.agent).toBe("build-agent");
+      process.chdir(tmpDir);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync(["node", "mulch", "--json", "query", "testing", "--outcome-status", "failure"]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
+          success: boolean;
+          domains: Array<{ domain: string; records: Array<{ type: string }> }>;
+        };
+        expect(output.success).toBe(true);
+        expect(output.domains[0].records).toHaveLength(1);
+        expect(output.domains[0].records[0].type).toBe("failure");
+      } finally {
+        logSpy.mockRestore();
+      }
     });
 
-    it("excludes records without outcome when filtering by outcome status", async () => {
+    it("excludes records without outcomes when filtering by outcome status", async () => {
       await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
@@ -830,9 +877,22 @@ describe("query command", () => {
         recorded_at: new Date().toISOString(),
       });
 
-      const records = await readExpertiseFile(filePath);
-      const withSuccess = records.filter((r) => r.outcome?.status === "success");
-      expect(withSuccess).toHaveLength(0);
+      process.chdir(tmpDir);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync(["node", "mulch", "--json", "query", "testing", "--outcome-status", "success"]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
+          success: boolean;
+          domains: Array<{ domain: string; records: unknown[] }>;
+        };
+        expect(output.success).toBe(true);
+        expect(output.domains[0].records).toHaveLength(0);
+      } finally {
+        logSpy.mockRestore();
+      }
     });
 
     it("outcome-status combined with type filter narrows results", async () => {
@@ -846,21 +906,43 @@ describe("query command", () => {
         description: "Pattern that worked",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "success" },
+        outcomes: [{ status: "success" }],
       });
       await appendRecord(filePath, {
         type: "convention",
         content: "Successful convention",
         classification: "tactical",
         recorded_at: new Date().toISOString(),
-        outcome: { status: "success" },
+        outcomes: [{ status: "success" }],
       });
 
-      const records = await readExpertiseFile(filePath);
-      const successes = records.filter((r) => r.outcome?.status === "success");
-      const successPatterns = filterByType(successes, "pattern");
-      expect(successPatterns).toHaveLength(1);
-      expect((successPatterns[0] as { name: string }).name).toBe("successful-pattern");
+      process.chdir(tmpDir);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "--json",
+          "query",
+          "testing",
+          "--outcome-status",
+          "success",
+          "--type",
+          "pattern",
+        ]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
+          success: boolean;
+          domains: Array<{ domain: string; records: Array<{ name: string }> }>;
+        };
+        expect(output.success).toBe(true);
+        expect(output.domains[0].records).toHaveLength(1);
+        expect(output.domains[0].records[0].name).toBe("successful-pattern");
+      } finally {
+        logSpy.mockRestore();
+      }
     });
   });
 
