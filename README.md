@@ -71,9 +71,9 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 | `mulch record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
 | `mulch edit <domain> <id>` | Edit an existing record by ID or 1-based index |
 | `mulch delete <domain> <id>` | Delete a record by ID or 1-based index |
-| `mulch query [domain]` | Query expertise (use `--all` for all domains) |
+| `mulch query [domain]` | Query expertise (use `--all` for all domains, `--classification`, `--file` filters) |
 | `mulch prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
-| `mulch search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag` filters) |
+| `mulch search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score` filters) |
 | `mulch compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `mulch diff [ref]` | Show expertise changes between git refs (`mulch diff HEAD~3`, `mulch diff main..feature`) |
 | `mulch status` | Show expertise freshness and counts (`--json` for health metrics) |
@@ -97,7 +97,7 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 | `reference` | name, description | Key files, endpoints, or resources worth remembering |
 | `guide` | name, description | Step-by-step procedures for recurring tasks |
 
-All records support optional `--classification` (foundational / tactical / observational), evidence flags (`--evidence-commit`, `--evidence-issue`, `--evidence-file`), `--tags`, `--relates-to`, and `--supersedes` for linking. Cross-domain references use `domain:mx-hash` format (e.g., `--relates-to api:mx-abc123`).
+All records support optional `--classification` (foundational / tactical / observational), evidence flags (`--evidence-commit`, `--evidence-issue`, `--evidence-file`), `--tags`, `--relates-to`, `--supersedes` for linking, and `--outcome-status` (success/failure) for tracking application results. Cross-domain references use `domain:mx-hash` format (e.g., `--relates-to api:mx-abc123`).
 
 ## Example Output
 
@@ -213,7 +213,7 @@ import {
 } from "mulch-cli";
 ```
 
-Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, etc.) are also exported.
+Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `ScoredRecord`, `Outcome`, etc.) are also exported.
 
 ## Contributing
 

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-02-20
+
+### Added
+
+- Confirmation-frequency scoring module (`src/utils/scoring.ts`) — tracks record application outcomes (success/failure/partial) and computes confirmation scores for prioritization
+- Optional `outcome` field on all record types — agents can record whether applying a record's guidance succeeded or failed (`--outcome-status`, `--outcome-duration`, `--outcome-test-results`, `--outcome-agent`)
+- `--sort-by-score` flag for `mulch search` — orders results by confirmation-frequency score (most-confirmed records first)
+- `--classification` filter for `mulch search` and `mulch query` — filter by foundational/tactical/observational
+- `--file` filter for `mulch search` and `mulch query` — substring match on records with `files[]` field
+- `filterByClassification()` and `filterByFile()` utilities in `src/utils/expertise.ts`
+
+### Changed
+
+- `mulch prime` budget sorting now uses confirmation score as a third-level sort factor (after type and classification, before recency)
+- `DomainRecords.records` widened from `ExpertiseRecord[]` to `ScoredRecord[]` to support outcomes
+
+### Testing
+
+- New `test/utils/scoring.test.ts` with 40 tests for the scoring module
+- 625 tests across 31 test files
+
 ## [0.4.2] - 2026-02-17
 
 ### Fixed
@@ -176,7 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/jayminwest/mulch/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jayminwest/mulch/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jayminwest/mulch/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jayminwest/mulch/compare/v0.3.1...v0.4.0
