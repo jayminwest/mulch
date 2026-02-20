@@ -53,7 +53,7 @@ export interface RecordUpdates {
   tags?: string[];
   relates_to?: string[];
   supersedes?: string[];
-  outcome?: Outcome;
+  outcomes?: Outcome[];
   // type-specific fields
   content?: string;
   name?: string;
@@ -241,8 +241,8 @@ export async function editRecord(
     if (updates.supersedes !== undefined) {
       record.supersedes = updates.supersedes;
     }
-    if (updates.outcome !== undefined) {
-      record.outcome = updates.outcome;
+    if (updates.outcomes !== undefined) {
+      record.outcomes = updates.outcomes;
     }
 
     // Apply type-specific updates
