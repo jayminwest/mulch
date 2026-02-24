@@ -1,4 +1,10 @@
-export type RecordType = "convention" | "pattern" | "failure" | "decision" | "reference" | "guide";
+export type RecordType =
+  | "convention"
+  | "pattern"
+  | "failure"
+  | "decision"
+  | "reference"
+  | "guide";
 
 export type Classification = "foundational" | "tactical" | "observational";
 

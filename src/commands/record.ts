@@ -1,25 +1,24 @@
-import { Command, Option } from "commander";
-import _Ajv from "ajv";
-const Ajv = _Ajv.default ?? _Ajv;
+import { existsSync, readFileSync } from "node:fs";
+import Ajv from "ajv";
 import chalk from "chalk";
-import { readConfig, getExpertisePath } from "../utils/config.js";
-import {
-  appendRecord,
-  readExpertiseFile,
-  writeExpertiseFile,
-  findDuplicate,
-} from "../utils/expertise.js";
-import { withFileLock } from "../utils/lock.js";
-import { recordSchema } from "../schemas/record-schema.js";
+import { type Command, Option } from "commander";
+import { recordSchema } from "../schemas/record-schema.ts";
 import type {
-  ExpertiseRecord,
-  RecordType,
   Classification,
   Evidence,
+  ExpertiseRecord,
   Outcome,
-} from "../schemas/record.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
-import { readFileSync, existsSync } from "node:fs";
+  RecordType,
+} from "../schemas/record.ts";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
+import {
+  appendRecord,
+  findDuplicate,
+  readExpertiseFile,
+  writeExpertiseFile,
+} from "../utils/expertise.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { withFileLock } from "../utils/lock.ts";
 
 /**
  * Process records from stdin (JSON single object or array)
@@ -32,11 +31,18 @@ export async function processStdinRecords(
   dryRun: boolean,
   stdinData?: string,
   cwd?: string,
-): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
+): Promise<{
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}> {
   const config = await readConfig(cwd);
 
   if (!config.domains.includes(domain)) {
-    throw new Error(`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`);
+    throw new Error(
+      `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+    );
   }
 
   // Read stdin (or use provided data for testing)
@@ -47,7 +53,9 @@ export async function processStdinRecords(
     const parsed = JSON.parse(inputData);
     inputRecords = Array.isArray(parsed) ? parsed : [parsed];
   } catch (err) {
-    throw new Error(`Failed to parse JSON from stdin: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(
+      `Failed to parse JSON from stdin: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // Validate each record against schema
@@ -63,7 +71,8 @@ export async function processStdinRecords(
     // Ensure recorded_at and classification are set
     if (typeof record === "object" && record !== null) {
       if (!("recorded_at" in record)) {
-        (record as Record<string, unknown>).recorded_at = new Date().toISOString();
+        (record as Record<string, unknown>).recorded_at =
+          new Date().toISOString();
       }
       if (!("classification" in record)) {
         (record as Record<string, unknown>).classification = "tactical";
@@ -119,7 +128,7 @@ export async function processStdinRecords(
     // Normal mode: write with file locking
     await withFileLock(filePath, async () => {
       const existing = await readExpertiseFile(filePath);
-      let currentRecords = [...existing];
+      const currentRecords = [...existing];
 
       for (const record of validRecords) {
         const dup = findDuplicate(currentRecords, record);
@@ -163,8 +172,14 @@ export function registerRecordCommand(program: Command): void {
     .argument("[content]", "record content")
     .description("Record an expertise record")
     .addOption(
-      new Option("--type <type>", "record type")
-        .choices(["convention", "pattern", "failure", "decision", "reference", "guide"]),
+      new Option("--type <type>", "record type").choices([
+        "convention",
+        "pattern",
+        "failure",
+        "decision",
+        "reference",
+        "guide",
+      ]),
     )
     .addOption(
       new Option("--classification <classification>", "classification level")
@@ -185,16 +200,28 @@ export function registerRecordCommand(program: Command): void {
     .option("--relates-to <ids>", "comma-separated record IDs this relates to")
     .option("--supersedes <ids>", "comma-separated record IDs this supersedes")
     .addOption(
-      new Option("--outcome-status <status>", "outcome status").choices(["success", "failure", "partial"]),
+      new Option("--outcome-status <status>", "outcome status").choices([
+        "success",
+        "failure",
+        "partial",
+      ]),
     )
     .option("--outcome-duration <ms>", "outcome duration in milliseconds")
     .option("--outcome-test-results <text>", "outcome test results summary")
     .option("--outcome-agent <agent>", "outcome agent name")
     .option("--force", "force recording even if duplicate exists")
-    .option("--stdin", "read JSON record(s) from stdin (single object or array)")
-    .option("--batch <file>", "read JSON record(s) from file (single object or array)")
+    .option(
+      "--stdin",
+      "read JSON record(s) from stdin (single object or array)",
+    )
+    .option(
+      "--batch <file>",
+      "read JSON record(s) from file (single object or array)",
+    )
     .option("--dry-run", "preview what would be recorded without writing")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Required fields per record type:
   convention   [content] or --description
   pattern      --name, --description (or [content])
@@ -207,7 +234,8 @@ Batch recording examples:
   mulch record cli --batch records.json
   mulch record cli --batch records.json --dry-run
   echo '[{"type":"convention","content":"test"}]' > batch.json && mulch record cli --batch batch.json
-`)
+`,
+    )
     .action(
       async (
         domain: string,
@@ -225,7 +253,9 @@ Batch recording examples:
             if (jsonMode) {
               outputJsonError("record", `Batch file not found: ${batchFile}`);
             } else {
-              console.error(chalk.red(`Error: batch file not found: ${batchFile}`));
+              console.error(
+                chalk.red(`Error: batch file not found: ${batchFile}`),
+              );
             }
             process.exitCode = 1;
             return;
@@ -243,7 +273,10 @@ Batch recording examples:
 
             if (result.errors.length > 0) {
               if (jsonMode) {
-                outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
+                outputJsonError(
+                  "record",
+                  `Validation errors: ${result.errors.join("; ")}`,
+                );
               } else {
                 console.error(chalk.red("Validation errors:"));
                 for (const error of result.errors) {
@@ -254,7 +287,9 @@ Batch recording examples:
 
             if (jsonMode) {
               outputJson({
-                success: result.errors.length === 0 || result.created + result.updated > 0,
+                success:
+                  result.errors.length === 0 ||
+                  result.created + result.updated > 0,
                 command: "record",
                 action: dryRun ? "dry-run" : "batch",
                 domain,
@@ -267,7 +302,11 @@ Batch recording examples:
               if (dryRun) {
                 const total = result.created + result.updated;
                 if (total > 0 || result.skipped > 0) {
-                  console.log(chalk.green(`✓ Dry-run complete. Would process ${total} record(s) in ${domain}:`));
+                  console.log(
+                    chalk.green(
+                      `✓ Dry-run complete. Would process ${total} record(s) in ${domain}:`,
+                    ),
+                  );
                   if (result.created > 0) {
                     console.log(chalk.dim(`  Create: ${result.created}`));
                   }
@@ -277,31 +316,55 @@ Batch recording examples:
                   if (result.skipped > 0) {
                     console.log(chalk.dim(`  Skip: ${result.skipped}`));
                   }
-                  console.log(chalk.dim("  Run without --dry-run to apply changes."));
+                  console.log(
+                    chalk.dim("  Run without --dry-run to apply changes."),
+                  );
                 } else {
                   console.log(chalk.yellow("No records would be processed."));
                 }
               } else {
                 if (result.created > 0) {
-                  console.log(chalk.green(`✔ Created ${result.created} record(s) in ${domain}`));
+                  console.log(
+                    chalk.green(
+                      `✔ Created ${result.created} record(s) in ${domain}`,
+                    ),
+                  );
                 }
                 if (result.updated > 0) {
-                  console.log(chalk.green(`✔ Updated ${result.updated} record(s) in ${domain}`));
+                  console.log(
+                    chalk.green(
+                      `✔ Updated ${result.updated} record(s) in ${domain}`,
+                    ),
+                  );
                 }
                 if (result.skipped > 0) {
-                  console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
+                  console.log(
+                    chalk.yellow(
+                      `Skipped ${result.skipped} duplicate(s) in ${domain}`,
+                    ),
+                  );
                 }
               }
             }
 
-            if (result.errors.length > 0 && result.created + result.updated === 0) {
+            if (
+              result.errors.length > 0 &&
+              result.created + result.updated === 0
+            ) {
               process.exitCode = 1;
             }
           } catch (err) {
             if (jsonMode) {
-              outputJsonError("record", err instanceof Error ? err.message : String(err));
+              outputJsonError(
+                "record",
+                err instanceof Error ? err.message : String(err),
+              );
             } else {
-              console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+              console.error(
+                chalk.red(
+                  `Error: ${err instanceof Error ? err.message : String(err)}`,
+                ),
+              );
             }
             process.exitCode = 1;
           }
@@ -322,7 +385,10 @@ Batch recording examples:
 
             if (result.errors.length > 0) {
               if (jsonMode) {
-                outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
+                outputJsonError(
+                  "record",
+                  `Validation errors: ${result.errors.join("; ")}`,
+                );
               } else {
                 console.error(chalk.red("Validation errors:"));
                 for (const error of result.errors) {
@@ -333,7 +399,9 @@ Batch recording examples:
 
             if (jsonMode) {
               outputJson({
-                success: result.errors.length === 0 || result.created + result.updated > 0,
+                success:
+                  result.errors.length === 0 ||
+                  result.created + result.updated > 0,
                 command: "record",
                 action: dryRun ? "dry-run" : "stdin",
                 domain,
@@ -346,7 +414,11 @@ Batch recording examples:
               if (dryRun) {
                 const total = result.created + result.updated;
                 if (total > 0 || result.skipped > 0) {
-                  console.log(chalk.green(`✓ Dry-run complete. Would process ${total} record(s) in ${domain}:`));
+                  console.log(
+                    chalk.green(
+                      `✓ Dry-run complete. Would process ${total} record(s) in ${domain}:`,
+                    ),
+                  );
                   if (result.created > 0) {
                     console.log(chalk.dim(`  Create: ${result.created}`));
                   }
@@ -356,31 +428,55 @@ Batch recording examples:
                   if (result.skipped > 0) {
                     console.log(chalk.dim(`  Skip: ${result.skipped}`));
                   }
-                  console.log(chalk.dim("  Run without --dry-run to apply changes."));
+                  console.log(
+                    chalk.dim("  Run without --dry-run to apply changes."),
+                  );
                 } else {
                   console.log(chalk.yellow("No records would be processed."));
                 }
               } else {
                 if (result.created > 0) {
-                  console.log(chalk.green(`✔ Created ${result.created} record(s) in ${domain}`));
+                  console.log(
+                    chalk.green(
+                      `✔ Created ${result.created} record(s) in ${domain}`,
+                    ),
+                  );
                 }
                 if (result.updated > 0) {
-                  console.log(chalk.green(`✔ Updated ${result.updated} record(s) in ${domain}`));
+                  console.log(
+                    chalk.green(
+                      `✔ Updated ${result.updated} record(s) in ${domain}`,
+                    ),
+                  );
                 }
                 if (result.skipped > 0) {
-                  console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
+                  console.log(
+                    chalk.yellow(
+                      `Skipped ${result.skipped} duplicate(s) in ${domain}`,
+                    ),
+                  );
                 }
               }
             }
 
-            if (result.errors.length > 0 && result.created + result.updated === 0) {
+            if (
+              result.errors.length > 0 &&
+              result.created + result.updated === 0
+            ) {
               process.exitCode = 1;
             }
           } catch (err) {
             if (jsonMode) {
-              outputJsonError("record", err instanceof Error ? err.message : String(err));
+              outputJsonError(
+                "record",
+                err instanceof Error ? err.message : String(err),
+              );
             } else {
-              console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+              console.error(
+                chalk.red(
+                  `Error: ${err instanceof Error ? err.message : String(err)}`,
+                ),
+              );
             }
             process.exitCode = 1;
           }
@@ -390,7 +486,10 @@ Batch recording examples:
 
         if (!config.domains.includes(domain)) {
           if (jsonMode) {
-            outputJsonError("record", `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`);
+            outputJsonError(
+              "record",
+              `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+            );
           } else {
             console.error(
               chalk.red(`Error: domain "${domain}" not found in config.`),
@@ -408,10 +507,15 @@ Batch recording examples:
         // Validate --type is provided for non-stdin mode
         if (!options.type) {
           if (jsonMode) {
-            outputJsonError("record", "--type is required (convention, pattern, failure, decision, reference, guide)");
+            outputJsonError(
+              "record",
+              "--type is required (convention, pattern, failure, decision, reference, guide)",
+            );
           } else {
             console.error(
-              chalk.red("Error: --type is required (convention, pattern, failure, decision, reference, guide)"),
+              chalk.red(
+                "Error: --type is required (convention, pattern, failure, decision, reference, guide)",
+              ),
             );
           }
           process.exitCode = 1;
@@ -419,12 +523,18 @@ Batch recording examples:
         }
 
         const recordType = options.type as RecordType;
-        const classification = (options.classification as Classification) ?? "tactical";
+        const classification =
+          (options.classification as Classification) ?? "tactical";
         const recordedAt = new Date().toISOString();
 
         // Build evidence if any evidence option is provided
         let evidence: Evidence | undefined;
-        if (options.evidenceCommit || options.evidenceIssue || options.evidenceFile || options.evidenceBead) {
+        if (
+          options.evidenceCommit ||
+          options.evidenceIssue ||
+          options.evidenceFile ||
+          options.evidenceBead
+        ) {
           evidence = {};
           if (options.evidenceCommit)
             evidence.commit = options.evidenceCommit as string;
@@ -462,9 +572,11 @@ Batch recording examples:
 
         let outcomes: Outcome[] | undefined;
         if (options.outcomeStatus) {
-          const o: Outcome = { status: options.outcomeStatus as "success" | "failure" | "partial" };
+          const o: Outcome = {
+            status: options.outcomeStatus as "success" | "failure" | "partial",
+          };
           if (options.outcomeDuration !== undefined) {
-            o.duration = parseFloat(options.outcomeDuration as string);
+            o.duration = Number.parseFloat(options.outcomeDuration as string);
           }
           if (options.outcomeTestResults) {
             o.test_results = options.outcomeTestResults as string;
@@ -479,10 +591,14 @@ Batch recording examples:
 
         switch (recordType) {
           case "convention": {
-            const conventionContent = content ?? (options.description as string | undefined);
+            const conventionContent =
+              content ?? (options.description as string | undefined);
             if (!conventionContent) {
               if (jsonMode) {
-                outputJsonError("record", "Convention records require content (positional argument or --description).");
+                outputJsonError(
+                  "record",
+                  "Convention records require content (positional argument or --description).",
+                );
               } else {
                 console.error(
                   chalk.red(
@@ -500,7 +616,8 @@ Batch recording examples:
               recorded_at: recordedAt,
               ...(evidence && { evidence }),
               ...(tags && tags.length > 0 && { tags }),
-              ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
+              ...(relatesTo &&
+                relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
               ...(outcomes && { outcomes }),
             };
@@ -513,7 +630,10 @@ Batch recording examples:
               (options.description as string | undefined) ?? content;
             if (!patternName || !patternDesc) {
               if (jsonMode) {
-                outputJsonError("record", "Pattern records require --name and --description (or positional content).");
+                outputJsonError(
+                  "record",
+                  "Pattern records require --name and --description (or positional content).",
+                );
               } else {
                 console.error(
                   chalk.red(
@@ -535,7 +655,8 @@ Batch recording examples:
                 files: options.files.split(","),
               }),
               ...(tags && tags.length > 0 && { tags }),
-              ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
+              ...(relatesTo &&
+                relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
               ...(outcomes && { outcomes }),
             };
@@ -547,7 +668,10 @@ Batch recording examples:
             const failureResolution = options.resolution as string | undefined;
             if (!failureDesc || !failureResolution) {
               if (jsonMode) {
-                outputJsonError("record", "Failure records require --description and --resolution.");
+                outputJsonError(
+                  "record",
+                  "Failure records require --description and --resolution.",
+                );
               } else {
                 console.error(
                   chalk.red(
@@ -566,7 +690,8 @@ Batch recording examples:
               recorded_at: recordedAt,
               ...(evidence && { evidence }),
               ...(tags && tags.length > 0 && { tags }),
-              ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
+              ...(relatesTo &&
+                relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
               ...(outcomes && { outcomes }),
             };
@@ -578,7 +703,10 @@ Batch recording examples:
             const decisionRationale = options.rationale as string | undefined;
             if (!decisionTitle || !decisionRationale) {
               if (jsonMode) {
-                outputJsonError("record", "Decision records require --title and --rationale.");
+                outputJsonError(
+                  "record",
+                  "Decision records require --title and --rationale.",
+                );
               } else {
                 console.error(
                   chalk.red(
@@ -597,7 +725,8 @@ Batch recording examples:
               recorded_at: recordedAt,
               ...(evidence && { evidence }),
               ...(tags && tags.length > 0 && { tags }),
-              ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
+              ...(relatesTo &&
+                relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
               ...(outcomes && { outcomes }),
             };
@@ -610,7 +739,10 @@ Batch recording examples:
               (options.description as string | undefined) ?? content;
             if (!refName || !refDesc) {
               if (jsonMode) {
-                outputJsonError("record", "Reference records require --name and --description (or positional content).");
+                outputJsonError(
+                  "record",
+                  "Reference records require --name and --description (or positional content).",
+                );
               } else {
                 console.error(
                   chalk.red(
@@ -632,7 +764,8 @@ Batch recording examples:
                 files: options.files.split(","),
               }),
               ...(tags && tags.length > 0 && { tags }),
-              ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
+              ...(relatesTo &&
+                relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
               ...(outcomes && { outcomes }),
             };
@@ -645,7 +778,10 @@ Batch recording examples:
               (options.description as string | undefined) ?? content;
             if (!guideName || !guideDesc) {
               if (jsonMode) {
-                outputJsonError("record", "Guide records require --name and --description (or positional content).");
+                outputJsonError(
+                  "record",
+                  "Guide records require --name and --description (or positional content).",
+                );
               } else {
                 console.error(
                   chalk.red(
@@ -664,7 +800,8 @@ Batch recording examples:
               recorded_at: recordedAt,
               ...(evidence && { evidence }),
               ...(tags && tags.length > 0 && { tags }),
-              ...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
+              ...(relatesTo &&
+                relatesTo.length > 0 && { relates_to: relatesTo }),
               ...(supersedes && supersedes.length > 0 && { supersedes }),
               ...(outcomes && { outcomes }),
             };
@@ -676,9 +813,14 @@ Batch recording examples:
         const ajv = new Ajv();
         const validate = ajv.compile(recordSchema);
         if (!validate(record)) {
-          const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
+          const errors = (validate.errors ?? []).map(
+            (err) => `${err.instancePath} ${err.message}`,
+          );
           if (jsonMode) {
-            outputJsonError("record", `Schema validation failed: ${errors.join("; ")}`);
+            outputJsonError(
+              "record",
+              `Schema validation failed: ${errors.join("; ")}`,
+            );
           } else {
             console.error(chalk.red("Error: record failed schema validation:"));
             for (const err of validate.errors ?? []) {
@@ -700,8 +842,10 @@ Batch recording examples:
           let action = "created";
           if (dup && !options.force) {
             const isNamed =
-              record.type === "pattern" || record.type === "decision" ||
-              record.type === "reference" || record.type === "guide";
+              record.type === "pattern" ||
+              record.type === "decision" ||
+              record.type === "reference" ||
+              record.type === "guide";
 
             action = isNamed ? "updated" : "skipped";
           }
@@ -718,11 +862,23 @@ Batch recording examples:
             });
           } else {
             if (action === "created") {
-              console.log(chalk.green(`✓ Dry-run: Would create ${recordType} in ${domain}`));
+              console.log(
+                chalk.green(
+                  `✓ Dry-run: Would create ${recordType} in ${domain}`,
+                ),
+              );
             } else if (action === "updated") {
-              console.log(chalk.green(`✓ Dry-run: Would update existing ${recordType} in ${domain}`));
+              console.log(
+                chalk.green(
+                  `✓ Dry-run: Would update existing ${recordType} in ${domain}`,
+                ),
+              );
             } else {
-              console.log(chalk.yellow(`Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`));
+              console.log(
+                chalk.yellow(
+                  `Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`,
+                ),
+              );
             }
             console.log(chalk.dim("  Run without --dry-run to apply changes."));
           }
@@ -734,8 +890,10 @@ Batch recording examples:
 
             if (dup && !options.force) {
               const isNamed =
-                record.type === "pattern" || record.type === "decision" ||
-                record.type === "reference" || record.type === "guide";
+                record.type === "pattern" ||
+                record.type === "decision" ||
+                record.type === "reference" ||
+                record.type === "guide";
 
               if (isNamed) {
                 // Upsert: replace in place

@@ -6,7 +6,7 @@ export {
   readConfig,
   writeConfig,
   initMulchDir,
-} from "./config.js";
+} from "./config.ts";
 
 export {
   readExpertiseFile,
@@ -16,7 +16,7 @@ export {
   countRecords,
   filterByType,
   generateRecordId,
-} from "./expertise.js";
+} from "./expertise.ts";
 
 export {
   formatDomainExpertise,
@@ -24,19 +24,19 @@ export {
   formatStatusOutput,
   formatTimeAgo,
   getRecordSummary,
-} from "./format.js";
+} from "./format.ts";
 
 export {
   outputJson,
   outputJsonError,
-} from "./json-output.js";
+} from "./json-output.ts";
 
 export {
   isGitRepo,
   getChangedFiles,
   fileMatchesAny,
   filterByContext,
-} from "./git.js";
+} from "./git.ts";
 
 export {
   MARKER_START,
@@ -45,10 +45,10 @@ export {
   replaceMarkerSection,
   removeMarkerSection,
   wrapInMarkers,
-} from "./markers.js";
+} from "./markers.ts";
 
 export {
   getCurrentVersion,
   getLatestVersion,
   compareSemver,
-} from "./version.js";
+} from "./version.ts";

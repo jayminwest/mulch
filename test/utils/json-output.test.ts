@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { outputJson, outputJsonError } from "../../src/utils/json-output.js";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { outputJson, outputJsonError } from "../../src/utils/json-output.ts";
 
 describe("outputJson", () => {
-  let logSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    logSpy = spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -36,10 +36,10 @@ describe("outputJson", () => {
 });
 
 describe("outputJsonError", () => {
-  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    errorSpy = spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {

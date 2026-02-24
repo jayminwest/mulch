@@ -1,15 +1,12 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { join } from "node:path";
 
 /**
  * Read the current CLI version from package.json.
  */
 export function getCurrentVersion(): string {
-  const pkgPath = join(__dirname, "..", "..", "package.json");
+  const pkgPath = join(import.meta.dir, "..", "..", "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version: string };
   return pkg.version;
 }

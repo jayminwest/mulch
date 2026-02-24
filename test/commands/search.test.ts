@@ -1,24 +1,28 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, appendFile } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
   createExpertiseFile,
-  searchRecords,
-  readExpertiseFile,
-  filterByType,
   filterByClassification,
   filterByFile,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
-import { sortByConfirmationScore, type ScoredRecord, type Outcome } from "../../src/utils/scoring.js";
+  filterByType,
+  readExpertiseFile,
+  searchRecords,
+} from "../../src/utils/expertise.ts";
+import {
+  type Outcome,
+  type ScoredRecord,
+  sortByConfirmationScore,
+} from "../../src/utils/scoring.ts";
 
 describe("search command", () => {
   let tmpDir: string;
@@ -106,18 +110,14 @@ describe("search command", () => {
     });
 
     it("matches decision title", async () => {
-      const records = await readExpertiseFile(
-        getExpertisePath("api", tmpDir),
-      );
+      const records = await readExpertiseFile(getExpertisePath("api", tmpDir));
       const matches = searchRecords(records, "REST");
       expect(matches).toHaveLength(1);
       expect(matches[0].type).toBe("decision");
     });
 
     it("matches decision rationale", async () => {
-      const records = await readExpertiseFile(
-        getExpertisePath("api", tmpDir),
-      );
+      const records = await readExpertiseFile(getExpertisePath("api", tmpDir));
       const matches = searchRecords(records, "familiarity");
       expect(matches).toHaveLength(1);
       expect(matches[0].type).toBe("decision");
@@ -301,7 +301,9 @@ describe("search command", () => {
       // beforeEach adds: convention (foundational), failure (tactical), pattern (foundational)
       const foundational = filterByClassification(records, "foundational");
       expect(foundational).toHaveLength(2);
-      expect(foundational.every((r) => r.classification === "foundational")).toBe(true);
+      expect(
+        foundational.every((r) => r.classification === "foundational"),
+      ).toBe(true);
     });
 
     it("filters tactical records", async () => {
@@ -481,9 +483,14 @@ describe("search command", () => {
       const withFile = filterByFile(records, "src/core.ts");
       expect(withFile).toHaveLength(2);
 
-      const foundationalWithFile = filterByClassification(withFile, "foundational");
+      const foundationalWithFile = filterByClassification(
+        withFile,
+        "foundational",
+      );
       expect(foundationalWithFile).toHaveLength(1);
-      expect((foundationalWithFile[0] as { name: string }).name).toBe("foundational-file-pattern");
+      expect((foundationalWithFile[0] as { name: string }).name).toBe(
+        "foundational-file-pattern",
+      );
     });
   });
 
@@ -506,9 +513,13 @@ describe("search command", () => {
       });
 
       const records = await readExpertiseFile(dbPath);
-      const successes = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
+      const successes = records.filter((r) =>
+        r.outcomes?.some((o) => o.status === "success"),
+      );
       expect(successes).toHaveLength(1);
-      expect((successes[0] as { content: string }).content).toBe("Successful approach");
+      expect((successes[0] as { content: string }).content).toBe(
+        "Successful approach",
+      );
     });
 
     it("filters records with outcomes containing failure", async () => {
@@ -523,7 +534,9 @@ describe("search command", () => {
       });
 
       const records = await readExpertiseFile(dbPath);
-      const failures = records.filter((r) => r.outcomes?.some((o) => o.status === "failure"));
+      const failures = records.filter((r) =>
+        r.outcomes?.some((o) => o.status === "failure"),
+      );
       // only the one we added (not the FTS5 failure which has no outcomes)
       expect(failures).toHaveLength(1);
       expect(failures[0].type).toBe("failure");
@@ -535,7 +548,9 @@ describe("search command", () => {
         getExpertisePath("database", tmpDir),
       );
       // Pre-existing records have no outcomes
-      const withSuccess = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
+      const withSuccess = records.filter((r) =>
+        r.outcomes?.some((o) => o.status === "success"),
+      );
       expect(withSuccess).toHaveLength(0);
     });
 
@@ -558,10 +573,16 @@ describe("search command", () => {
       });
 
       const records = await readExpertiseFile(dbPath);
-      const successRecords = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
-      const successPatterns = successRecords.filter((r) => r.type === "pattern");
+      const successRecords = records.filter((r) =>
+        r.outcomes?.some((o) => o.status === "success"),
+      );
+      const successPatterns = successRecords.filter(
+        (r) => r.type === "pattern",
+      );
       expect(successPatterns).toHaveLength(1);
-      expect((successPatterns[0] as { name: string }).name).toBe("successful-pattern");
+      expect((successPatterns[0] as { name: string }).name).toBe(
+        "successful-pattern",
+      );
     });
 
     it("record with full outcomes array is stored and read back correctly", async () => {
@@ -597,8 +618,11 @@ describe("search command", () => {
       return { status, recorded_at: new Date().toISOString() };
     }
 
-    async function appendScoredRecord(filePath: string, record: ScoredRecord): Promise<void> {
-      await appendFile(filePath, JSON.stringify(record) + "\n", "utf-8");
+    async function appendScoredRecord(
+      filePath: string,
+      record: ScoredRecord,
+    ): Promise<void> {
+      await appendFile(filePath, `${JSON.stringify(record)}\n`, "utf-8");
     }
 
     it("sortByConfirmationScore places high-score records first", async () => {
@@ -618,7 +642,11 @@ describe("search command", () => {
         description: "Highly confirmed",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
 
       const records = await readExpertiseFile(apiPath);
@@ -653,7 +681,9 @@ describe("search command", () => {
       const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
 
       expect((sorted[0] as { name: string }).name).toBe("with-outcomes");
-      expect((sorted[sorted.length - 1] as { name: string }).name).toBe("no-outcomes");
+      expect((sorted[sorted.length - 1] as { name: string }).name).toBe(
+        "no-outcomes",
+      );
     });
 
     it("sort combined with text query narrows then orders results", async () => {
@@ -672,7 +702,11 @@ describe("search command", () => {
         description: "Advanced caching strategy",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
       await appendScoredRecord(apiPath, {
         type: "pattern",
@@ -680,7 +714,12 @@ describe("search command", () => {
         description: "Something else entirely",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
 
       const records = await readExpertiseFile(apiPath);
@@ -711,7 +750,11 @@ describe("search command", () => {
         content: "A convention with many confirmations",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
       await appendScoredRecord(apiPath, {
         type: "pattern",
@@ -749,7 +792,11 @@ describe("search command", () => {
         description: "One success, two partials",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcomes: [makeOutcome("success"), makeOutcome("partial"), makeOutcome("partial")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("partial"),
+          makeOutcome("partial"),
+        ],
       });
 
       const records = await readExpertiseFile(apiPath);

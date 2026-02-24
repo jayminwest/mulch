@@ -1,5 +1,9 @@
-import type { ExpertiseRecord, RecordType, Classification } from "../schemas/record.js";
-import { type ScoredRecord, computeConfirmationScore } from "./scoring.js";
+import type {
+  Classification,
+  ExpertiseRecord,
+  RecordType,
+} from "../schemas/record.ts";
+import { type ScoredRecord, computeConfirmationScore } from "./scoring.ts";
 
 export const DEFAULT_BUDGET = 4000;
 
@@ -105,7 +109,9 @@ export function applyBudget(
   const droppedDomains = new Set<string>();
 
   for (const domainName of domainOrder) {
-    const originalRecords = domains.find((d) => d.domain === domainName)!.records;
+    const originalRecords = domains.find(
+      (d) => d.domain === domainName,
+    )!.records;
     const keptRecords: ScoredRecord[] = [];
 
     for (const rec of originalRecords) {
@@ -139,9 +145,13 @@ export function applyBudget(
 /**
  * Format the truncation summary line shown when records are dropped.
  */
-export function formatBudgetSummary(droppedCount: number, droppedDomainCount: number): string {
-  const domainPart = droppedDomainCount > 0
-    ? ` across ${droppedDomainCount} domain${droppedDomainCount === 1 ? "" : "s"}`
-    : "";
+export function formatBudgetSummary(
+  droppedCount: number,
+  droppedDomainCount: number,
+): string {
+  const domainPart =
+    droppedDomainCount > 0
+      ? ` across ${droppedDomainCount} domain${droppedDomainCount === 1 ? "" : "s"}`
+      : "";
   return `... and ${droppedCount} more record${droppedCount === 1 ? "" : "s"}${domainPart} (use --budget <n> to show more)`;
 }

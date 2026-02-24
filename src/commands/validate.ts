@@ -1,11 +1,10 @@
-import { Command } from "commander";
 import { readFile } from "node:fs/promises";
-import _Ajv from "ajv";
-const Ajv = _Ajv.default ?? _Ajv;
+import Ajv from "ajv";
 import chalk from "chalk";
-import { readConfig, getExpertisePath } from "../utils/config.js";
-import { recordSchema } from "../schemas/record-schema.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
+import type { Command } from "commander";
+import { recordSchema } from "../schemas/record-schema.ts";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
 
 export function registerValidateCommand(program: Command): void {
   program
@@ -21,7 +20,8 @@ export function registerValidateCommand(program: Command): void {
 
       let totalRecords = 0;
       let totalErrors = 0;
-      const errors: Array<{ domain: string; line: number; message: string }> = [];
+      const errors: Array<{ domain: string; line: number; message: string }> =
+        [];
 
       for (const domain of domains) {
         const filePath = getExpertisePath(domain);
@@ -49,21 +49,23 @@ export function registerValidateCommand(program: Command): void {
             const msg = "Invalid JSON: failed to parse";
             errors.push({ domain, line: lineNumber, message: msg });
             if (!jsonMode) {
-              console.error(
-                chalk.red(`${domain}:${lineNumber} - ${msg}`),
-              );
+              console.error(chalk.red(`${domain}:${lineNumber} - ${msg}`));
             }
             continue;
           }
 
           if (!validate(parsed)) {
             totalErrors++;
-            const schemaErrors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`).join("; ");
+            const schemaErrors = (validate.errors ?? [])
+              .map((err) => `${err.instancePath} ${err.message}`)
+              .join("; ");
             const msg = `Schema validation failed: ${schemaErrors}`;
             errors.push({ domain, line: lineNumber, message: msg });
             if (!jsonMode) {
               console.error(
-                chalk.red(`${domain}:${lineNumber} - Schema validation failed:`),
+                chalk.red(
+                  `${domain}:${lineNumber} - Schema validation failed:`,
+                ),
               );
               for (const err of validate.errors ?? []) {
                 console.error(

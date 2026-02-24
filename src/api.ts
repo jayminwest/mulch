@@ -1,17 +1,21 @@
-import type { ExpertiseRecord, Classification, Outcome } from "./schemas/record.js";
-import { readConfig, getExpertisePath } from "./utils/config.js";
+import type {
+  Classification,
+  ExpertiseRecord,
+  Outcome,
+} from "./schemas/record.ts";
+import { getExpertisePath, readConfig } from "./utils/config.ts";
 import {
-  readExpertiseFile,
-  writeExpertiseFile,
   appendRecord,
-  findDuplicate,
-  resolveRecordId,
-  searchRecords,
-  filterByType,
   filterByClassification,
   filterByFile,
-} from "./utils/expertise.js";
-import { withFileLock } from "./utils/lock.js";
+  filterByType,
+  findDuplicate,
+  readExpertiseFile,
+  resolveRecordId,
+  searchRecords,
+  writeExpertiseFile,
+} from "./utils/expertise.ts";
+import { withFileLock } from "./utils/lock.ts";
 
 export interface RecordOptions {
   force?: boolean;
@@ -100,13 +104,11 @@ export async function recordExpertise(
         existing[dup.index] = record;
         await writeExpertiseFile(filePath, existing);
         return { action: "updated" as const, record };
-      } else {
-        return { action: "skipped" as const, record: dup.record };
       }
-    } else {
-      await appendRecord(filePath, record);
-      return { action: "created" as const, record };
+      return { action: "skipped" as const, record: dup.record };
     }
+    await appendRecord(filePath, record);
+    return { action: "created" as const, record };
   });
 }
 

@@ -1,7 +1,6 @@
-import { describe, it, expect } from "vitest";
-import _Ajv from "ajv";
-const Ajv = (_Ajv as unknown as { default: typeof _Ajv }).default ?? _Ajv;
-import { recordSchema } from "../../src/schemas/record-schema.js";
+import { describe, expect, it } from "bun:test";
+import Ajv from "ajv";
+import { recordSchema } from "../../src/schemas/record-schema.ts";
 
 describe("validate command", () => {
   const ajv = new Ajv();

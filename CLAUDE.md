@@ -5,17 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test Commands
 
 ```bash
-npm run build          # tsc → dist/
-npm run dev            # tsc --watch
-npm run test           # vitest run (all tests)
-npm run test:watch     # vitest (watch mode)
-npx vitest run test/commands/record.test.ts  # single test file
-npm run lint           # tsc --noEmit (type-check only)
+bun test              # bun test (all tests)
+bun test --watch      # bun test --watch
+bun test test/commands/record.test.ts  # single test file
+bun run lint          # bunx biome check .
+bun run typecheck     # tsc --noEmit
 ```
 
 ## Architecture
 
-Mulch is a passive CLI tool (`mulch-cli`) that manages structured expertise files for coding agents. It has no LLM dependency — agents call `mulch record` / `mulch query`, and Mulch handles storage and retrieval.
+Mulch is a passive CLI tool (`mulch-cli`) that manages structured expertise files for coding agents. It has no LLM dependency — agents call `mulch record` / `mulch query`, and Mulch handles storage and retrieval. Bun is the runtime — source `.ts` files are executed directly with no build step.
 
 ### Storage Model
 
@@ -31,7 +30,7 @@ Three classifications with shelf lives for pruning: `foundational` (permanent), 
 
 ### Command Pattern
 
-Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All commands are registered in `src/cli.ts`. Entry point is `src/cli.ts`.
+Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
 
 ### Concurrency Safety
 
@@ -46,9 +45,9 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 ## TypeScript Conventions
 
-- **ESM-only**: All relative imports must end with `.js` extension (`import { foo } from "./bar.js"`)
-- **Ajv import**: Must use `import _Ajv from "ajv"; const Ajv = _Ajv.default ?? _Ajv;` for ESM/CJS interop
-- **Schemas in `.ts` files**: Never put JSON schemas in `.json` files — tsc won't copy them to `dist/`. Export from TypeScript files instead (see `src/schemas/record-schema.ts`)
+- **ESM-only**: All relative imports use `.ts` extensions (`import { foo } from "./bar.ts"`)
+- **Ajv import**: Simple `import Ajv from "ajv"` (Bun handles ESM/CJS interop)
+- **Schemas in `.ts` files**: Export JSON schemas from TypeScript files (see `src/schemas/record-schema.ts`)
 - **Strict mode**: No `any`, no `@ts-ignore`, no `@ts-expect-error`
 - **Ajv strict mode**: Always include `type: "object"` alongside `required` and `properties` in JSON schema definitions
 

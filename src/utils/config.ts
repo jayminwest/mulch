@@ -1,16 +1,15 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import yaml from "js-yaml";
-import type { MulchConfig } from "../schemas/config.js";
-import { DEFAULT_CONFIG } from "../schemas/config.js";
+import type { MulchConfig } from "../schemas/config.ts";
+import { DEFAULT_CONFIG } from "../schemas/config.ts";
 
 const MULCH_DIR = ".mulch";
 const CONFIG_FILE = "mulch.config.yaml";
 const EXPERTISE_DIR = "expertise";
 
-export const GITATTRIBUTES_LINE =
-  ".mulch/expertise/*.jsonl merge=union";
+export const GITATTRIBUTES_LINE = ".mulch/expertise/*.jsonl merge=union";
 
 export const MULCH_README = `# .mulch/
 
@@ -80,9 +79,7 @@ export async function writeConfig(
   await writeFile(configPath, content, "utf-8");
 }
 
-export async function initMulchDir(
-  cwd: string = process.cwd(),
-): Promise<void> {
+export async function initMulchDir(cwd: string = process.cwd()): Promise<void> {
   const mulchDir = getMulchDir(cwd);
   const expertiseDir = getExpertiseDir(cwd);
   await mkdir(mulchDir, { recursive: true });
@@ -103,10 +100,11 @@ export async function initMulchDir(
     // File doesn't exist yet — will create it
   }
   if (!existing.includes(GITATTRIBUTES_LINE)) {
-    const separator = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+    const separator =
+      existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
     await writeFile(
       gitattributesPath,
-      existing + separator + GITATTRIBUTES_LINE + "\n",
+      `${existing + separator + GITATTRIBUTES_LINE}\n`,
       "utf-8",
     );
   }

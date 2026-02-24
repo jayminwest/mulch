@@ -1,20 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
+  getExpertiseDir,
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-  getExpertiseDir,
-} from "../../src/utils/config.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
+} from "../../src/utils/config.ts";
 import {
-  createExpertiseFile,
   appendRecord,
+  createExpertiseFile,
   readExpertiseFile,
-} from "../../src/utils/expertise.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+} from "../../src/utils/expertise.ts";
 
 let tmpDir: string;
 
@@ -27,10 +27,7 @@ function daysAgo(days: number): string {
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "mulch-doctor-test-"));
   await initMulchDir(tmpDir);
-  await writeConfig(
-    { ...DEFAULT_CONFIG, domains: ["testing", "api"] },
-    tmpDir,
-  );
+  await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "api"] }, tmpDir);
 });
 
 afterEach(async () => {
@@ -62,7 +59,9 @@ describe("doctor health checks", () => {
 
     // Read should throw or skip invalid lines
     // The doctor command would detect this
-    const content = await import("node:fs/promises").then((fs) => fs.readFile(filePath, "utf-8"));
+    const content = await import("node:fs/promises").then((fs) =>
+      fs.readFile(filePath, "utf-8"),
+    );
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     let invalidCount = 0;
     for (const line of lines) {

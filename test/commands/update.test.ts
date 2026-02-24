@@ -1,13 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { execSync } from "node:child_process";
 
 describe("update command", () => {
   it("--check --json reports version information", () => {
-    const result = execSync("node dist/cli.js update --check --json", {
+    const result = execSync("bun src/cli.ts update --check --json", {
       encoding: "utf-8",
       timeout: 15000,
     });
-    const output = JSON.parse(result) as { success: boolean; command: string; current: string; upToDate: boolean; updated: boolean };
+    const output = JSON.parse(result) as {
+      success: boolean;
+      command: string;
+      current: string;
+      upToDate: boolean;
+      updated: boolean;
+    };
     expect(output.success).toBe(true);
     expect(output.command).toBe("update");
     expect(output.current).toMatch(/^\d+\.\d+\.\d+$/);
@@ -15,7 +21,7 @@ describe("update command", () => {
   });
 
   it("--check shows human-readable output", () => {
-    const result = execSync("node dist/cli.js update --check", {
+    const result = execSync("bun src/cli.ts update --check", {
       encoding: "utf-8",
       timeout: 15000,
     });

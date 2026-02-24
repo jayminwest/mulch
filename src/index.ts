@@ -11,16 +11,16 @@ export type {
   ReferenceRecord,
   GuideRecord,
   ExpertiseRecord,
-} from "./schemas/index.js";
+} from "./schemas/index.ts";
 
-export type { MulchConfig } from "./schemas/index.js";
-export { DEFAULT_CONFIG } from "./schemas/index.js";
+export type { MulchConfig } from "./schemas/index.ts";
+export { DEFAULT_CONFIG } from "./schemas/index.ts";
 
 // Schema exports
-export { recordSchema } from "./schemas/record-schema.js";
+export { recordSchema } from "./schemas/record-schema.ts";
 
 // Config utilities
-export { readConfig, getExpertisePath } from "./utils/config.js";
+export { readConfig, getExpertisePath } from "./utils/config.ts";
 
 // Expertise utilities
 export {
@@ -30,7 +30,7 @@ export {
   writeExpertiseFile,
   findDuplicate,
   generateRecordId,
-} from "./utils/expertise.js";
+} from "./utils/expertise.ts";
 
 // Programmatic API
 export {
@@ -38,7 +38,7 @@ export {
   searchExpertise,
   queryDomain,
   editRecord,
-} from "./api.js";
+} from "./api.ts";
 export type {
   RecordOptions,
   RecordResult,
@@ -47,4 +47,4 @@ export type {
   QueryOptions,
   EditOptions,
   RecordUpdates,
-} from "./api.js";
+} from "./api.ts";

@@ -1,9 +1,9 @@
-import { Command } from "commander";
 import chalk from "chalk";
-import { readConfig, getExpertisePath } from "../utils/config.js";
-import { readExpertiseFile } from "../utils/expertise.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
-import { isGitRepo, getChangedFiles } from "../utils/git.js";
+import type { Command } from "commander";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { readExpertiseFile } from "../utils/expertise.ts";
+import { getChangedFiles, isGitRepo } from "../utils/git.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
 
 interface DomainMatch {
   domain: string;
@@ -126,17 +126,13 @@ export function registerLearnCommand(program: Command): void {
         // Plain text output
         console.log(chalk.bold("\nSession learnings check\n"));
 
-        console.log(
-          chalk.cyan(`Changed files (${changedFiles.length}):`),
-        );
+        console.log(chalk.cyan(`Changed files (${changedFiles.length}):`));
         for (const f of changedFiles) {
           console.log(`  ${f}`);
         }
 
         if (matches.length > 0) {
-          console.log(
-            chalk.cyan(`\nSuggested domains:`),
-          );
+          console.log(chalk.cyan("\nSuggested domains:"));
           for (const m of matches) {
             const label =
               m.matchedFiles.length === 1 ? "file matches" : "files match";
@@ -148,7 +144,7 @@ export function registerLearnCommand(program: Command): void {
 
         if (unmatched.length > 0) {
           console.log(
-            chalk.yellow(`\nUnmatched files (no domain association):`),
+            chalk.yellow("\nUnmatched files (no domain association):"),
           );
           for (const f of unmatched) {
             console.log(`  ${f}`);

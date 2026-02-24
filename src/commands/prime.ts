@@ -1,29 +1,29 @@
 import { writeFile } from "node:fs/promises";
-import { Command, Option } from "commander";
 import chalk from "chalk";
-import { readConfig, getExpertisePath } from "../utils/config.js";
-import { readExpertiseFile, getFileModTime } from "../utils/expertise.js";
-import {
-  formatDomainExpertise,
-  formatPrimeOutput,
-  formatDomainExpertiseXml,
-  formatPrimeOutputXml,
-  formatDomainExpertisePlain,
-  formatPrimeOutputPlain,
-  formatDomainExpertiseCompact,
-  formatPrimeOutputCompact,
-  formatMcpOutput,
-  getSessionEndReminder,
-} from "../utils/format.js";
-import type { McpDomain, PrimeFormat } from "../utils/format.js";
-import { outputJsonError } from "../utils/json-output.js";
-import { isGitRepo, getChangedFiles, filterByContext } from "../utils/git.js";
+import { type Command, Option } from "commander";
 import {
   DEFAULT_BUDGET,
   applyBudget,
   formatBudgetSummary,
-} from "../utils/budget.js";
-import type { DomainRecords } from "../utils/budget.js";
+} from "../utils/budget.ts";
+import type { DomainRecords } from "../utils/budget.ts";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { getFileModTime, readExpertiseFile } from "../utils/expertise.ts";
+import {
+  formatDomainExpertise,
+  formatDomainExpertiseCompact,
+  formatDomainExpertisePlain,
+  formatDomainExpertiseXml,
+  formatMcpOutput,
+  formatPrimeOutput,
+  formatPrimeOutputCompact,
+  formatPrimeOutputPlain,
+  formatPrimeOutputXml,
+  getSessionEndReminder,
+} from "../utils/format.ts";
+import type { McpDomain, PrimeFormat } from "../utils/format.ts";
+import { filterByContext, getChangedFiles, isGitRepo } from "../utils/git.ts";
+import { outputJsonError } from "../utils/json-output.ts";
 
 interface PrimeOptions {
   full?: boolean;
@@ -43,12 +43,17 @@ interface PrimeOptions {
  * Produce a rough text representation of a record for token estimation.
  * Uses a simple format similar to compact lines.
  */
-function estimateRecordText(record: import("../schemas/record.js").ExpertiseRecord): string {
+function estimateRecordText(
+  record: import("../schemas/record.js").ExpertiseRecord,
+): string {
   switch (record.type) {
     case "convention":
       return `[convention] ${record.content}`;
     case "pattern": {
-      const files = record.files && record.files.length > 0 ? ` (${record.files.join(", ")})` : "";
+      const files =
+        record.files && record.files.length > 0
+          ? ` (${record.files.join(", ")})`
+          : "";
       return `[pattern] ${record.name}: ${record.description}${files}`;
     }
     case "failure":
@@ -56,7 +61,10 @@ function estimateRecordText(record: import("../schemas/record.js").ExpertiseReco
     case "decision":
       return `[decision] ${record.title}: ${record.rationale}`;
     case "reference": {
-      const refFiles = record.files && record.files.length > 0 ? `: ${record.files.join(", ")}` : `: ${record.description}`;
+      const refFiles =
+        record.files && record.files.length > 0
+          ? `: ${record.files.join(", ")}`
+          : `: ${record.description}`;
       return `[reference] ${record.name}${refFiles}`;
     }
     case "guide":
@@ -70,7 +78,10 @@ export function registerPrimeCommand(program: Command): void {
     .description("Generate a priming prompt from expertise records")
     .argument("[domains...]", "optional domain(s) to scope output to")
     .option("--full", "include full record details (classification, evidence)")
-    .option("-v, --verbose", "full output with section headers and recording instructions")
+    .option(
+      "-v, --verbose",
+      "full output with section headers and recording instructions",
+    )
     .option("--mcp", "output in MCP-compatible JSON format")
     .option("--domain <domains...>", "domain(s) to include")
     .option("--exclude-domain <domains...>", "domain(s) to exclude")
@@ -79,10 +90,19 @@ export function registerPrimeCommand(program: Command): void {
         .choices(["markdown", "xml", "plain"])
         .default("markdown"),
     )
-    .option("--context", "filter records to only those relevant to changed files")
-    .option("--files <paths...>", "filter records to only those relevant to specified files")
+    .option(
+      "--context",
+      "filter records to only those relevant to changed files",
+    )
+    .option(
+      "--files <paths...>",
+      "filter records to only those relevant to specified files",
+    )
     .option("--export <path>", "export output to a file")
-    .option("--budget <tokens>", `token budget for output (default: ${DEFAULT_BUDGET})`)
+    .option(
+      "--budget <tokens>",
+      `token budget for output (default: ${DEFAULT_BUDGET})`,
+    )
     .option("--no-limit", "disable token budget limit")
     .action(async (domainsArg: string[], options: PrimeOptions) => {
       const jsonMode = program.opts().json === true;
@@ -96,7 +116,10 @@ export function registerPrimeCommand(program: Command): void {
         for (const d of unique) {
           if (!config.domains.includes(d)) {
             if (jsonMode) {
-              outputJsonError("prime", `Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`);
+              outputJsonError(
+                "prime",
+                `Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+              );
             } else {
               console.error(
                 `Error: Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
@@ -111,7 +134,10 @@ export function registerPrimeCommand(program: Command): void {
         for (const d of excluded) {
           if (!config.domains.includes(d)) {
             if (jsonMode) {
-              outputJsonError("prime", `Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`);
+              outputJsonError(
+                "prime",
+                `Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+              );
             } else {
               console.error(
                 `Error: Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
@@ -122,11 +148,9 @@ export function registerPrimeCommand(program: Command): void {
           }
         }
 
-        let targetDomains = unique.length > 0
-          ? unique
-          : config.domains;
+        let targetDomains = unique.length > 0 ? unique : config.domains;
 
-        targetDomains = targetDomains.filter(d => !excluded.includes(d));
+        targetDomains = targetDomains.filter((d) => !excluded.includes(d));
 
         // Resolve changed files for --context or --files filtering
         let filesToFilter: string[] | undefined;
@@ -145,7 +169,10 @@ export function registerPrimeCommand(program: Command): void {
           filesToFilter = getChangedFiles(cwd, "HEAD~1");
           if (filesToFilter.length === 0) {
             if (jsonMode) {
-              outputJsonError("prime", "No changed files found. Nothing to filter by.");
+              outputJsonError(
+                "prime",
+                "No changed files found. Nothing to filter by.",
+              );
             } else {
               console.log("No changed files found. Nothing to filter by.");
             }
@@ -158,7 +185,9 @@ export function registerPrimeCommand(program: Command): void {
         // Determine budget settings
         const isMachineOutput = options.mcp === true || jsonMode;
         const budgetEnabled = !isMachineOutput && options.noLimit !== true;
-        const budget = options.budget ? parseInt(options.budget, 10) : DEFAULT_BUDGET;
+        const budget = options.budget
+          ? Number.parseInt(options.budget, 10)
+          : DEFAULT_BUDGET;
 
         let output: string;
 
@@ -199,10 +228,8 @@ export function registerPrimeCommand(program: Command): void {
           let droppedDomainCount = 0;
 
           if (budgetEnabled) {
-            const result = applyBudget(
-              allDomainRecords,
-              budget,
-              (record) => estimateRecordText(record),
+            const result = applyBudget(allDomainRecords, budget, (record) =>
+              estimateRecordText(record),
             );
             domainRecordsToFormat = result.kept;
             droppedCount = result.droppedCount;
@@ -261,14 +288,14 @@ export function registerPrimeCommand(program: Command): void {
 
           // Append truncation summary before session reminder
           if (droppedCount > 0) {
-            output += "\n\n" + formatBudgetSummary(droppedCount, droppedDomainCount);
+            output += `\n\n${formatBudgetSummary(droppedCount, droppedDomainCount)}`;
           }
 
-          output += "\n\n" + getSessionEndReminder(format);
+          output += `\n\n${getSessionEndReminder(format)}`;
         }
 
         if (options.export) {
-          await writeFile(options.export, output + "\n", "utf-8");
+          await writeFile(options.export, `${output}\n`, "utf-8");
           if (!jsonMode) {
             console.log(chalk.green(`Exported to ${options.export}`));
           }
@@ -278,9 +305,14 @@ export function registerPrimeCommand(program: Command): void {
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") {
           if (jsonMode) {
-            outputJsonError("prime", "No .mulch/ directory found. Run `mulch init` first.");
+            outputJsonError(
+              "prime",
+              "No .mulch/ directory found. Run `mulch init` first.",
+            );
           } else {
-            console.error("Error: No .mulch/ directory found. Run `mulch init` first.");
+            console.error(
+              "Error: No .mulch/ directory found. Run `mulch init` first.",
+            );
           }
         } else {
           if (jsonMode) {

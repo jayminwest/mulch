@@ -1,19 +1,19 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
-  readExpertiseFile,
   createExpertiseFile,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+  readExpertiseFile,
+} from "../../src/utils/expertise.ts";
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -126,7 +126,9 @@ describe("compact command", () => {
 
       expect(result.type).toBe("convention");
       if (result.type === "convention") {
-        expect(result.content).toBe("Convention A\n\nConvention B\n\nConvention C");
+        expect(result.content).toBe(
+          "Convention A\n\nConvention B\n\nConvention C",
+        );
       }
       expect(result.classification).toBe("foundational");
       expect(result.supersedes).toEqual(["mx-test1", "mx-test2", "mx-test3"]);
@@ -168,7 +170,9 @@ describe("compact command", () => {
       expect(result.type).toBe("pattern");
       if (result.type === "pattern") {
         expect(result.name).toBe("much-longer-name");
-        expect(result.description).toBe("Description 1\n\nDescription 2\n\nDescription 3");
+        expect(result.description).toBe(
+          "Description 1\n\nDescription 2\n\nDescription 3",
+        );
       }
       expect(result.classification).toBe("foundational");
       expect(result.supersedes).toEqual(["mx-test1", "mx-test2", "mx-test3"]);
@@ -241,7 +245,9 @@ describe("compact command", () => {
       expect(result.type).toBe("decision");
       if (result.type === "decision") {
         expect(result.title).toBe("Much longer decision title");
-        expect(result.rationale).toBe("Rationale 1\n\nRationale 2\n\nRationale 3");
+        expect(result.rationale).toBe(
+          "Rationale 1\n\nRationale 2\n\nRationale 3",
+        );
       }
       expect(result.classification).toBe("foundational");
     });
@@ -279,7 +285,9 @@ describe("compact command", () => {
       const result = mergeRecords(records);
 
       expect(result.tags).toBeDefined();
-      expect(result.tags).toEqual(expect.arrayContaining(["tag1", "tag2", "tag3", "tag4"]));
+      expect(result.tags).toEqual(
+        expect.arrayContaining(["tag1", "tag2", "tag3", "tag4"]),
+      );
       expect(result.tags?.length).toBe(4); // Deduplicated
     });
 
@@ -320,7 +328,13 @@ describe("compact command", () => {
 
       if (result.type === "pattern") {
         expect(result.files).toBeDefined();
-        expect(result.files).toEqual(expect.arrayContaining(["src/file1.ts", "src/file2.ts", "src/file3.ts"]));
+        expect(result.files).toEqual(
+          expect.arrayContaining([
+            "src/file1.ts",
+            "src/file2.ts",
+            "src/file3.ts",
+          ]),
+        );
         expect(result.files?.length).toBe(3); // Deduplicated
       }
     });
@@ -408,7 +422,9 @@ describe("compact command", () => {
 
       // With --min-group 5 (default), 4 records should not be compacted
       // unless they have stale records
-      const { default: findCandidates } = await import("../../src/commands/compact.js");
+      const { default: findCandidates } = await import(
+        "../../src/commands/compact.js"
+      );
       // We'd need to export findCandidates to test this properly, or test via CLI
       // For now, we verify that the logic works in the auto handler
     });
@@ -562,10 +578,10 @@ describe("compact command", () => {
       expect(archRecords).toHaveLength(3);
 
       // Testing domain should only have conventions
-      expect(testingRecords.every(r => r.type === "convention")).toBe(true);
+      expect(testingRecords.every((r) => r.type === "convention")).toBe(true);
 
       // Architecture domain should only have patterns
-      expect(archRecords.every(r => r.type === "pattern")).toBe(true);
+      expect(archRecords.every((r) => r.type === "pattern")).toBe(true);
     });
 
     it("correctly identifies compactable groups within a single domain", async () => {
@@ -656,10 +672,10 @@ describe("compact command", () => {
       expect(archBefore).toHaveLength(5);
 
       // All testing records should be conventions
-      expect(testingBefore.every(r => r.type === "convention")).toBe(true);
+      expect(testingBefore.every((r) => r.type === "convention")).toBe(true);
 
       // All architecture records should be patterns
-      expect(archBefore.every(r => r.type === "pattern")).toBe(true);
+      expect(archBefore.every((r) => r.type === "pattern")).toBe(true);
 
       // Records from one domain should not affect the other
       // This verifies the foundation for domain-filtered compaction
@@ -745,9 +761,9 @@ describe("compact command", () => {
       expect(records).toHaveLength(9);
 
       // Group by type to verify proper segregation
-      const conventions = records.filter(r => r.type === "convention");
-      const patterns = records.filter(r => r.type === "pattern");
-      const failures = records.filter(r => r.type === "failure");
+      const conventions = records.filter((r) => r.type === "convention");
+      const patterns = records.filter((r) => r.type === "pattern");
+      const failures = records.filter((r) => r.type === "failure");
 
       expect(conventions).toHaveLength(3);
       expect(patterns).toHaveLength(3);
@@ -834,7 +850,9 @@ describe("compact command", () => {
       };
       remaining.push(replacement);
 
-      const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
+      const { writeExpertiseFile } = await import(
+        "../../src/utils/expertise.js"
+      );
       await writeExpertiseFile(filePath, remaining);
 
       const after = await readExpertiseFile(filePath);
@@ -887,7 +905,9 @@ describe("compact command", () => {
       };
       remaining.push(replacement);
 
-      const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
+      const { writeExpertiseFile } = await import(
+        "../../src/utils/expertise.js"
+      );
       await writeExpertiseFile(filePath, remaining);
 
       const after = await readExpertiseFile(filePath);
@@ -925,7 +945,9 @@ describe("compact command", () => {
         supersedes: before.map((r) => r.id!),
       };
 
-      const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
+      const { writeExpertiseFile } = await import(
+        "../../src/utils/expertise.js"
+      );
       await writeExpertiseFile(filePath, [replacement]);
 
       const after = await readExpertiseFile(filePath);
@@ -964,7 +986,9 @@ describe("compact command", () => {
         supersedes: sourceIds,
       };
 
-      const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
+      const { writeExpertiseFile } = await import(
+        "../../src/utils/expertise.js"
+      );
       await writeExpertiseFile(filePath, [replacement]);
 
       const after = await readExpertiseFile(filePath);

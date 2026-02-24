@@ -10,9 +10,9 @@ export type {
   ReferenceRecord,
   GuideRecord,
   ExpertiseRecord,
-} from "./record.js";
+} from "./record.ts";
 
-export type { MulchConfig } from "./config.js";
-export { DEFAULT_CONFIG } from "./config.js";
+export type { MulchConfig } from "./config.ts";
+export { DEFAULT_CONFIG } from "./config.ts";
 
-export { recordSchema } from "./record-schema.js";
+export { recordSchema } from "./record-schema.ts";

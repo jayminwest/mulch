@@ -1,26 +1,26 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
-  initMulchDir,
-  writeConfig,
   getExpertisePath,
   getMulchDir,
+  initMulchDir,
   readConfig,
-} from "../../src/utils/config.js";
+  writeConfig,
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
-  readExpertiseFile,
-  createExpertiseFile,
-  countRecords,
-  getFileModTime,
   calculateDomainHealth,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import { formatStatusOutput } from "../../src/utils/format.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+  countRecords,
+  createExpertiseFile,
+  getFileModTime,
+  readExpertiseFile,
+} from "../../src/utils/expertise.ts";
+import { formatStatusOutput } from "../../src/utils/format.ts";
 
 describe("status command", () => {
   let tmpDir: string;
@@ -51,10 +51,7 @@ describe("status command", () => {
   });
 
   it("shows status with a domain and entries", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -176,7 +173,10 @@ describe("status command", () => {
   });
 
   it("calculateDomainHealth returns correct metrics for empty domain", () => {
-    const health = calculateDomainHealth([], 100, { tactical: 14, observational: 30 });
+    const health = calculateDomainHealth([], 100, {
+      tactical: 14,
+      observational: 30,
+    });
     expect(health.governance_utilization).toBe(0);
     expect(health.stale_count).toBe(0);
     expect(health.type_distribution).toEqual({
@@ -245,7 +245,10 @@ describe("status command", () => {
       },
     ];
 
-    const health = calculateDomainHealth(records, 100, { tactical: 14, observational: 30 });
+    const health = calculateDomainHealth(records, 100, {
+      tactical: 14,
+      observational: 30,
+    });
 
     expect(health.governance_utilization).toBe(6); // 6/100 = 6%
     expect(health.stale_count).toBe(1); // Only the tactical record from 20 days ago
@@ -274,7 +277,10 @@ describe("status command", () => {
       recorded_at: new Date().toISOString(),
     }));
 
-    const health = calculateDomainHealth(records, 100, { tactical: 14, observational: 30 });
+    const health = calculateDomainHealth(records, 100, {
+      tactical: 14,
+      observational: 30,
+    });
     expect(health.governance_utilization).toBe(75); // 75/100 = 75%
   });
 
@@ -306,7 +312,10 @@ describe("status command", () => {
       },
     ];
 
-    const health = calculateDomainHealth(records, 100, { tactical: 14, observational: 30 });
+    const health = calculateDomainHealth(records, 100, {
+      tactical: 14,
+      observational: 30,
+    });
     expect(health.stale_count).toBe(1);
   });
 
@@ -332,7 +341,10 @@ describe("status command", () => {
       },
     ];
 
-    const health = calculateDomainHealth(records, 100, { tactical: 14, observational: 30 });
+    const health = calculateDomainHealth(records, 100, {
+      tactical: 14,
+      observational: 30,
+    });
     expect(health.stale_count).toBe(1);
   });
 });

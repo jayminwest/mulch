@@ -1,4 +1,4 @@
-import type { ExpertiseRecord } from "../schemas/record.js";
+import type { ExpertiseRecord } from "../schemas/record.ts";
 
 /**
  * BM25 parameters (tuned for short document collections like expertise records)
@@ -163,7 +163,8 @@ function calculateBM25Score(
     // BM25 formula
     const numerator = termFreq * (params.k1 + 1);
     const denominator =
-      termFreq + params.k1 * (1 - params.b + params.b * (docLength / avgDocLength));
+      termFreq +
+      params.k1 * (1 - params.b + params.b * (docLength / avgDocLength));
 
     score += termIDF * (numerator / denominator);
   }

@@ -1,8 +1,12 @@
 import { execSync } from "node:child_process";
-import { Command } from "commander";
 import chalk from "chalk";
-import { getCurrentVersion, getLatestVersion, compareSemver } from "../utils/version.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
+import type { Command } from "commander";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import {
+  compareSemver,
+  getCurrentVersion,
+  getLatestVersion,
+} from "../utils/version.ts";
 
 export function registerUpdateCommand(program: Command): void {
   program
@@ -16,9 +20,16 @@ export function registerUpdateCommand(program: Command): void {
 
       if (latest === null) {
         if (jsonMode) {
-          outputJsonError("update", "Unable to reach npm registry. Check your internet connection.");
+          outputJsonError(
+            "update",
+            "Unable to reach npm registry. Check your internet connection.",
+          );
         } else {
-          console.error(chalk.red("Unable to reach npm registry. Check your internet connection."));
+          console.error(
+            chalk.red(
+              "Unable to reach npm registry. Check your internet connection.",
+            ),
+          );
         }
         process.exitCode = 1;
         return;
@@ -28,7 +39,14 @@ export function registerUpdateCommand(program: Command): void {
 
       if (cmp >= 0) {
         if (jsonMode) {
-          outputJson({ success: true, command: "update", current, latest, upToDate: true, updated: false });
+          outputJson({
+            success: true,
+            command: "update",
+            current,
+            latest,
+            upToDate: true,
+            updated: false,
+          });
         } else {
           console.log(chalk.green(`mulch-cli ${current} is up to date`));
         }
@@ -37,16 +55,27 @@ export function registerUpdateCommand(program: Command): void {
 
       if (options.check) {
         if (jsonMode) {
-          outputJson({ success: true, command: "update", current, latest, upToDate: false, updated: false });
+          outputJson({
+            success: true,
+            command: "update",
+            current,
+            latest,
+            upToDate: false,
+            updated: false,
+          });
         } else {
-          console.log(`Update available: ${chalk.yellow(current)} → ${chalk.green(latest)}`);
+          console.log(
+            `Update available: ${chalk.yellow(current)} → ${chalk.green(latest)}`,
+          );
           console.log(`Run ${chalk.cyan("mulch update")} to install.`);
         }
         return;
       }
 
       if (!jsonMode) {
-        console.log(`Updating mulch-cli: ${chalk.yellow(current)} → ${chalk.green(latest)}`);
+        console.log(
+          `Updating mulch-cli: ${chalk.yellow(current)} → ${chalk.green(latest)}`,
+        );
       }
 
       try {
@@ -57,7 +86,14 @@ export function registerUpdateCommand(program: Command): void {
         });
 
         if (jsonMode) {
-          outputJson({ success: true, command: "update", current, latest, upToDate: false, updated: true });
+          outputJson({
+            success: true,
+            command: "update",
+            current,
+            latest,
+            upToDate: false,
+            updated: true,
+          });
         } else {
           console.log(chalk.green(`Updated to mulch-cli ${latest}`));
         }
@@ -66,7 +102,9 @@ export function registerUpdateCommand(program: Command): void {
           outputJsonError("update", `Update failed: ${(err as Error).message}`);
         } else {
           console.error(chalk.red(`Update failed: ${(err as Error).message}`));
-          console.error(chalk.yellow("Try running manually: npm update -g mulch-cli"));
+          console.error(
+            chalk.yellow("Try running manually: npm update -g mulch-cli"),
+          );
         }
         process.exitCode = 1;
       }

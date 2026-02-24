@@ -1,12 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "bun:test";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
-  tokenize,
+  type BM25Params,
+  DEFAULT_BM25_PARAMS,
   extractRecordText,
   searchBM25,
-  DEFAULT_BM25_PARAMS,
-  type BM25Params,
-} from "../../src/utils/bm25.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+  tokenize,
+} from "../../src/utils/bm25.ts";
 
 describe("BM25", () => {
   describe("tokenize", () => {
@@ -19,7 +19,12 @@ describe("BM25", () => {
     });
 
     it("should remove punctuation", () => {
-      expect(tokenize("foo.bar,baz!qux?")).toEqual(["foo", "bar", "baz", "qux"]);
+      expect(tokenize("foo.bar,baz!qux?")).toEqual([
+        "foo",
+        "bar",
+        "baz",
+        "qux",
+      ]);
     });
 
     it("should preserve hyphens in words", () => {
@@ -196,7 +201,8 @@ describe("BM25", () => {
       },
       {
         type: "failure",
-        description: "File writes were not atomic, concurrent writes caused corruption",
+        description:
+          "File writes were not atomic, concurrent writes caused corruption",
         resolution: "Implemented atomic writes pattern",
         classification: "tactical",
         recorded_at: "2024-01-04T00:00:00Z",

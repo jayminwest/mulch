@@ -1,21 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import yaml from "js-yaml";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { MulchConfig } from "../../src/schemas/config.ts";
 import {
-  initMulchDir,
-  readConfig,
-  writeConfig,
-  getMulchDir,
   getConfigPath,
   getExpertiseDir,
   getExpertisePath,
+  getMulchDir,
+  initMulchDir,
+  readConfig,
   validateDomainName,
-} from "../../src/utils/config.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import type { MulchConfig } from "../../src/schemas/config.js";
+  writeConfig,
+} from "../../src/utils/config.ts";
 
 describe("config utils", () => {
   let tmpDir: string;
@@ -108,19 +108,33 @@ describe("config utils", () => {
     });
 
     it("rejects path traversal attempts", () => {
-      expect(() => validateDomainName("../../etc/passwd")).toThrow(/Invalid domain name/);
-      expect(() => validateDomainName("../secrets")).toThrow(/Invalid domain name/);
-      expect(() => validateDomainName("foo/../../bar")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("../../etc/passwd")).toThrow(
+        /Invalid domain name/,
+      );
+      expect(() => validateDomainName("../secrets")).toThrow(
+        /Invalid domain name/,
+      );
+      expect(() => validateDomainName("foo/../../bar")).toThrow(
+        /Invalid domain name/,
+      );
     });
 
     it("rejects names with slashes", () => {
-      expect(() => validateDomainName("foo/bar")).toThrow(/Invalid domain name/);
-      expect(() => validateDomainName("/absolute")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("foo/bar")).toThrow(
+        /Invalid domain name/,
+      );
+      expect(() => validateDomainName("/absolute")).toThrow(
+        /Invalid domain name/,
+      );
     });
 
     it("rejects names with dots", () => {
-      expect(() => validateDomainName("my.domain")).toThrow(/Invalid domain name/);
-      expect(() => validateDomainName(".hidden")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("my.domain")).toThrow(
+        /Invalid domain name/,
+      );
+      expect(() => validateDomainName(".hidden")).toThrow(
+        /Invalid domain name/,
+      );
     });
 
     it("rejects empty string", () => {
@@ -128,14 +142,24 @@ describe("config utils", () => {
     });
 
     it("rejects names starting with hyphen or underscore", () => {
-      expect(() => validateDomainName("-leading")).toThrow(/Invalid domain name/);
-      expect(() => validateDomainName("_leading")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("-leading")).toThrow(
+        /Invalid domain name/,
+      );
+      expect(() => validateDomainName("_leading")).toThrow(
+        /Invalid domain name/,
+      );
     });
 
     it("rejects names with spaces or special characters", () => {
-      expect(() => validateDomainName("my domain")).toThrow(/Invalid domain name/);
-      expect(() => validateDomainName("domain;rm -rf")).toThrow(/Invalid domain name/);
-      expect(() => validateDomainName("$(whoami)")).toThrow(/Invalid domain name/);
+      expect(() => validateDomainName("my domain")).toThrow(
+        /Invalid domain name/,
+      );
+      expect(() => validateDomainName("domain;rm -rf")).toThrow(
+        /Invalid domain name/,
+      );
+      expect(() => validateDomainName("$(whoami)")).toThrow(
+        /Invalid domain name/,
+      );
     });
   });
 
@@ -147,7 +171,9 @@ describe("config utils", () => {
     });
 
     it("rejects path traversal via domain name", () => {
-      expect(() => getExpertisePath("../../etc/passwd", "/some/path")).toThrow(/Invalid domain name/);
+      expect(() => getExpertisePath("../../etc/passwd", "/some/path")).toThrow(
+        /Invalid domain name/,
+      );
     });
   });
 

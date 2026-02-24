@@ -40,7 +40,7 @@ export function removeMarkerSection(content: string): string {
   const before = content.substring(0, startIdx);
   const after = content.substring(endIdx + MARKER_END.length);
 
-  return (before + after).replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  return `${(before + after).replace(/\n{3,}/g, "\n\n").trim()}\n`;
 }
 
 /**

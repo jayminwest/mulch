@@ -1,10 +1,10 @@
-import { Command } from "commander";
 import chalk from "chalk";
-import { readConfig, getExpertisePath } from "../utils/config.js";
-import { readExpertiseFile, writeExpertiseFile } from "../utils/expertise.js";
-import { withFileLock } from "../utils/lock.js";
-import type { ExpertiseRecord, Classification } from "../schemas/record.js";
-import { outputJson } from "../utils/json-output.js";
+import type { Command } from "commander";
+import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { readExpertiseFile, writeExpertiseFile } from "../utils/expertise.ts";
+import { outputJson } from "../utils/json-output.ts";
+import { withFileLock } from "../utils/lock.ts";
 
 interface PruneResult {
   domain: string;
@@ -106,7 +106,9 @@ export function registerPruneCommand(program: Command): void {
       }
 
       if (totalPruned === 0) {
-        console.log(chalk.green("No stale records found. All records are current."));
+        console.log(
+          chalk.green("No stale records found. All records are current."),
+        );
         return;
       }
 

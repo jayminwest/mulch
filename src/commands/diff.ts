@@ -1,10 +1,10 @@
-import { Command } from "commander";
 import { execFileSync } from "node:child_process";
 import chalk from "chalk";
-import type { ExpertiseRecord } from "../schemas/record.js";
-import { isGitRepo } from "../utils/git.js";
-import { getRecordSummary } from "../utils/format.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
+import type { Command } from "commander";
+import type { ExpertiseRecord } from "../schemas/record.ts";
+import { getRecordSummary } from "../utils/format.ts";
+import { isGitRepo } from "../utils/git.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
 
 export interface DiffEntry {
   domain: string;
@@ -35,7 +35,11 @@ export function parseExpertiseDiff(diffOutput: string): DiffEntry[] {
     }
 
     // Skip file metadata lines
-    if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) {
+    if (
+      line.startsWith("+++") ||
+      line.startsWith("---") ||
+      line.startsWith("@@")
+    ) {
       continue;
     }
 
@@ -66,7 +70,6 @@ export function parseExpertiseDiff(diffOutput: string): DiffEntry[] {
       } catch {
         // Skip lines that fail JSON.parse (context lines, hunk headers, etc.)
       }
-      continue;
     }
   }
 

@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
-import type { ExpertiseRecord } from "../schemas/record.js";
+import type { ExpertiseRecord } from "../schemas/record.ts";
 
 export function isGitRepo(cwd: string): boolean {
   try {
-    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd, stdio: "pipe" });
+    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd,
+      stdio: "pipe",
+    });
     return true;
   } catch {
     return false;
@@ -64,15 +67,10 @@ export function getChangedFiles(cwd: string, since: string): string[] {
   return [...files].sort();
 }
 
-export function fileMatchesAny(
-  file: string,
-  changedFiles: string[],
-): boolean {
+export function fileMatchesAny(file: string, changedFiles: string[]): boolean {
   return changedFiles.some(
     (changed) =>
-      changed === file ||
-      changed.endsWith(file) ||
-      file.endsWith(changed),
+      changed === file || changed.endsWith(file) || file.endsWith(changed),
   );
 }
 

@@ -1,15 +1,15 @@
-import { Command } from "commander";
-import { readFile, writeFile, access, mkdir } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import chalk from "chalk";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
+import type { Command } from "commander";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import {
-  MARKER_START,
   MARKER_END,
+  MARKER_START,
   hasMarkerSection,
   replaceMarkerSection,
   wrapInMarkers,
-} from "../utils/markers.js";
+} from "../utils/markers.ts";
 
 export const ONBOARD_VERSION = 1;
 export const VERSION_MARKER = `<!-- mulch-onboard-v:${String(ONBOARD_VERSION)} -->`;
@@ -56,7 +56,8 @@ Mulch write commands use file locking and atomic writes — multiple agents can 
 `;
 
 const LEGACY_HEADER = "## Project Expertise (Mulch)";
-const LEGACY_TAIL = 'mulch validate && git add .mulch/ && git commit -m "mulch: record learnings"';
+const LEGACY_TAIL =
+  'mulch validate && git add .mulch/ && git commit -m "mulch: record learnings"';
 
 function getSnippet(provider: string | undefined): string {
   if (!provider || provider === "default") {
@@ -157,14 +158,22 @@ async function resolveTargetFile(cwd: string): Promise<{
   // No snippet found anywhere. Prefer existing CLAUDE.md, else AGENTS.md
   if (await fileExists(join(cwd, "CLAUDE.md"))) {
     return {
-      target: { fileName: "CLAUDE.md", path: join(cwd, "CLAUDE.md"), exists: true },
+      target: {
+        fileName: "CLAUDE.md",
+        path: join(cwd, "CLAUDE.md"),
+        exists: true,
+      },
       duplicates: [],
     };
   }
 
   const agentsExists = await fileExists(join(cwd, "AGENTS.md"));
   return {
-    target: { fileName: "AGENTS.md", path: join(cwd, "AGENTS.md"), exists: agentsExists },
+    target: {
+      fileName: "AGENTS.md",
+      path: join(cwd, "AGENTS.md"),
+      exists: agentsExists,
+    },
     duplicates: [],
   };
 }
@@ -254,7 +263,7 @@ export async function runOnboard(options: {
   if (!target.exists) {
     // Create new file
     await mkdir(dirname(target.path), { recursive: true });
-    await writeFile(target.path, wrappedSnippet + "\n", "utf-8");
+    await writeFile(target.path, `${wrappedSnippet}\n`, "utf-8");
     action = "created";
   } else {
     const content = await readFile(target.path, "utf-8");
@@ -273,14 +282,14 @@ export async function runOnboard(options: {
       }
     } else if (hasLegacySnippet(content)) {
       // Migrate legacy snippet
-      const migrated = replaceLegacySnippet(content, wrappedSnippet + "\n");
+      const migrated = replaceLegacySnippet(content, `${wrappedSnippet}\n`);
       await writeFile(target.path, migrated, "utf-8");
       action = "migrated";
     } else {
       // Append to existing file
       await writeFile(
         target.path,
-        content.trimEnd() + "\n\n" + wrappedSnippet + "\n",
+        `${content.trimEnd()}\n\n${wrappedSnippet}\n`,
         "utf-8",
       );
       action = "appended";
@@ -327,18 +336,27 @@ export function registerOnboardCommand(program: Command): void {
       "--provider <provider>",
       "customize snippet for a specific provider (e.g. claude)",
     )
-    .option("--check", "check if onboarding snippet is installed and up to date")
-    .action(async (options: { stdout?: boolean; provider?: string; check?: boolean }) => {
-      const jsonMode = program.opts().json === true;
-      try {
-        await runOnboard({ ...options, jsonMode });
-      } catch (err) {
-        if (jsonMode) {
-          outputJsonError("onboard", (err as Error).message);
-        } else {
-          console.error(`Error: ${(err as Error).message}`);
+    .option(
+      "--check",
+      "check if onboarding snippet is installed and up to date",
+    )
+    .action(
+      async (options: {
+        stdout?: boolean;
+        provider?: string;
+        check?: boolean;
+      }) => {
+        const jsonMode = program.opts().json === true;
+        try {
+          await runOnboard({ ...options, jsonMode });
+        } catch (err) {
+          if (jsonMode) {
+            outputJsonError("onboard", (err as Error).message);
+          } else {
+            console.error(`Error: ${(err as Error).message}`);
+          }
+          process.exitCode = 1;
         }
-        process.exitCode = 1;
-      }
-    });
+      },
+    );
 }

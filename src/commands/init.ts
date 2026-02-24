@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
-import { Command } from "commander";
 import chalk from "chalk";
-import { getMulchDir, initMulchDir } from "../utils/config.js";
-import { outputJson } from "../utils/json-output.js";
+import type { Command } from "commander";
+import { getMulchDir, initMulchDir } from "../utils/config.ts";
+import { outputJson } from "../utils/json-output.ts";
 
 export function registerInitCommand(program: Command): void {
   program

@@ -1,33 +1,33 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Import all exports from src/index.ts
 import type {
-  RecordType,
   Classification,
-  Evidence,
   ConventionRecord,
-  PatternRecord,
-  FailureRecord,
   DecisionRecord,
+  Evidence,
   ExpertiseRecord,
+  FailureRecord,
   MulchConfig,
-} from "../src/index.js";
+  PatternRecord,
+  RecordType,
+} from "../src/index.ts";
 
 import {
   DEFAULT_CONFIG,
-  recordSchema,
-  readConfig,
-  getExpertisePath,
-  readExpertiseFile,
-  searchRecords,
   appendRecord,
-  writeExpertiseFile,
   findDuplicate,
   generateRecordId,
-} from "../src/index.js";
+  getExpertisePath,
+  readConfig,
+  readExpertiseFile,
+  recordSchema,
+  searchRecords,
+  writeExpertiseFile,
+} from "../src/index.ts";
 
 describe("src/index.ts exports", () => {
   let tmpDir: string;
@@ -178,7 +178,7 @@ governance:
         classification: "foundational",
         recorded_at: new Date().toISOString(),
       };
-      await writeFile(filePath, JSON.stringify(record) + "\n", "utf-8");
+      await writeFile(filePath, `${JSON.stringify(record)}\n`, "utf-8");
 
       const records = await readExpertiseFile(filePath);
       expect(records).toHaveLength(1);

@@ -1,21 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  initMulchDir,
-  writeConfig,
-  getExpertisePath,
-} from "../src/utils/config.js";
-import { createExpertiseFile, appendRecord } from "../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../src/schemas/config.js";
-import {
+  editRecord,
+  queryDomain,
   recordExpertise,
   searchExpertise,
-  queryDomain,
-  editRecord,
-} from "../src/api.js";
-import type { ExpertiseRecord } from "../src/schemas/record.js";
+} from "../src/api.ts";
+import { DEFAULT_CONFIG } from "../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../src/schemas/record.ts";
+import {
+  getExpertisePath,
+  initMulchDir,
+  writeConfig,
+} from "../src/utils/config.ts";
+import { appendRecord, createExpertiseFile } from "../src/utils/expertise.ts";
 
 describe("programmatic API", () => {
   let tmpDir: string;
@@ -99,9 +99,9 @@ describe("programmatic API", () => {
 
       const records = await queryDomain("testing", { cwd: tmpDir });
       expect(records).toHaveLength(1);
-      expect(
-        (records[0] as { description: string }).description,
-      ).toBe("Use withFileLock helper");
+      expect((records[0] as { description: string }).description).toBe(
+        "Use withFileLock helper",
+      );
     });
 
     it("force-creates duplicate convention records when force=true", async () => {
@@ -290,9 +290,9 @@ describe("programmatic API", () => {
     });
 
     it("throws on unknown domain", async () => {
-      await expect(
-        queryDomain("nonexistent", { cwd: tmpDir }),
-      ).rejects.toThrow(/Domain "nonexistent" not found/);
+      await expect(queryDomain("nonexistent", { cwd: tmpDir })).rejects.toThrow(
+        /Domain "nonexistent" not found/,
+      );
     });
 
     it("returns empty array for empty domain", async () => {
@@ -340,9 +340,9 @@ describe("programmatic API", () => {
         { cwd: tmpDir },
       );
 
-      expect(
-        (updated as { description: string }).description,
-      ).toBe("Updated description");
+      expect((updated as { description: string }).description).toBe(
+        "Updated description",
+      );
     });
 
     it("edits classification", async () => {
@@ -383,9 +383,9 @@ describe("programmatic API", () => {
         { cwd: tmpDir },
       );
 
-      expect(
-        (updated as { resolution: string }).resolution,
-      ).toBe("Use process.exitCode = 1");
+      expect((updated as { resolution: string }).resolution).toBe(
+        "Use process.exitCode = 1",
+      );
     });
 
     it("throws on unknown domain", async () => {
@@ -410,12 +410,15 @@ describe("programmatic API", () => {
       const created = await recordExpertise("testing", record, { cwd: tmpDir });
       const id = created.record.id!;
 
-      await editRecord("testing", id, { content: "Persisted" }, { cwd: tmpDir });
+      await editRecord(
+        "testing",
+        id,
+        { content: "Persisted" },
+        { cwd: tmpDir },
+      );
 
       const records = await queryDomain("testing", { cwd: tmpDir });
-      expect(
-        (records[0] as { content: string }).content,
-      ).toBe("Persisted");
+      expect((records[0] as { content: string }).content).toBe("Persisted");
     });
   });
 });

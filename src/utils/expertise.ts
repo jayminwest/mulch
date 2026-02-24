@@ -1,7 +1,18 @@
-import { readFile, appendFile, writeFile, stat, rename, unlink } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
-import type { ExpertiseRecord, RecordType, Classification } from "../schemas/record.js";
-import { searchBM25, DEFAULT_BM25_PARAMS } from "./bm25.js";
+import {
+  appendFile,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import type {
+  Classification,
+  ExpertiseRecord,
+  RecordType,
+} from "../schemas/record.ts";
+import { DEFAULT_BM25_PARAMS, searchBM25 } from "./bm25.ts";
 
 export async function readExpertiseFile(
   filePath: string,
@@ -18,15 +29,26 @@ export async function readExpertiseFile(
   for (const line of lines) {
     const raw = JSON.parse(line) as Record<string, unknown>;
     // Normalize legacy outcome (singular) to outcomes (array) for backward compat
-    if ("outcome" in raw && raw.outcome !== null && raw.outcome !== undefined && !("outcomes" in raw)) {
+    if (
+      "outcome" in raw &&
+      raw.outcome !== null &&
+      raw.outcome !== undefined &&
+      !("outcomes" in raw)
+    ) {
       const legacy = raw.outcome as Record<string, unknown>;
-      raw.outcomes = [{
-        status: legacy.status,
-        ...(legacy.duration !== undefined ? { duration: legacy.duration } : {}),
-        ...(legacy.test_results !== undefined ? { test_results: legacy.test_results } : {}),
-        ...(legacy.agent !== undefined ? { agent: legacy.agent } : {}),
-      }];
-      delete raw.outcome;
+      raw.outcomes = [
+        {
+          status: legacy.status,
+          ...(legacy.duration !== undefined
+            ? { duration: legacy.duration }
+            : {}),
+          ...(legacy.test_results !== undefined
+            ? { test_results: legacy.test_results }
+            : {}),
+          ...(legacy.agent !== undefined ? { agent: legacy.agent } : {}),
+        },
+      ];
+      raw.outcome = undefined;
     }
     records.push(raw as unknown as ExpertiseRecord);
   }
@@ -65,7 +87,7 @@ export async function appendRecord(
   if (!record.id) {
     record.id = generateRecordId(record);
   }
-  const line = JSON.stringify(record) + "\n";
+  const line = `${JSON.stringify(record)}\n`;
   await appendFile(filePath, line, "utf-8");
 }
 
@@ -91,13 +113,19 @@ export async function writeExpertiseFile(
       r.id = generateRecordId(r);
     }
   }
-  const content = records.map((r) => JSON.stringify(r)).join("\n") + (records.length > 0 ? "\n" : "");
+  const content =
+    records.map((r) => JSON.stringify(r)).join("\n") +
+    (records.length > 0 ? "\n" : "");
   const tmpPath = `${filePath}.tmp.${randomBytes(8).toString("hex")}`;
   await writeFile(tmpPath, content, "utf-8");
   try {
     await rename(tmpPath, filePath);
   } catch (err) {
-    try { await unlink(tmpPath); } catch { /* best-effort cleanup */ }
+    try {
+      await unlink(tmpPath);
+    } catch {
+      /* best-effort cleanup */
+    }
     throw err;
   }
 }
@@ -143,18 +171,12 @@ export function findDuplicate(
 
     switch (record.type) {
       case "pattern":
-        if (
-          newRecord.type === "pattern" &&
-          record.name === newRecord.name
-        ) {
+        if (newRecord.type === "pattern" && record.name === newRecord.name) {
           return { index: i, record };
         }
         break;
       case "decision":
-        if (
-          newRecord.type === "decision" &&
-          record.title === newRecord.title
-        ) {
+        if (newRecord.type === "decision" && record.title === newRecord.title) {
           return { index: i, record };
         }
         break;
@@ -175,18 +197,12 @@ export function findDuplicate(
         }
         break;
       case "reference":
-        if (
-          newRecord.type === "reference" &&
-          record.name === newRecord.name
-        ) {
+        if (newRecord.type === "reference" && record.name === newRecord.name) {
           return { index: i, record };
         }
         break;
       case "guide":
-        if (
-          newRecord.type === "guide" &&
-          record.name === newRecord.name
-        ) {
+        if (newRecord.type === "guide" && record.name === newRecord.name) {
           return { index: i, record };
         }
         break;
@@ -209,9 +225,7 @@ export function resolveRecordId(
   identifier: string,
 ): ResolveResult {
   // Normalize: strip mx- prefix if present to get the hash part
-  const hash = identifier.startsWith("mx-")
-    ? identifier.slice(3)
-    : identifier;
+  const hash = identifier.startsWith("mx-") ? identifier.slice(3) : identifier;
 
   // Try exact match first
   const exactIndex = records.findIndex((r) => r.id === `mx-${hash}`);
@@ -223,7 +237,7 @@ export function resolveRecordId(
   const matches: Array<{ index: number; record: ExpertiseRecord }> = [];
   for (let i = 0; i < records.length; i++) {
     const rid = records[i].id;
-    if (rid && rid.startsWith(`mx-${hash}`)) {
+    if (rid?.startsWith(`mx-${hash}`)) {
       matches.push({ index: i, record: records[i] });
     }
   }
@@ -351,9 +365,8 @@ export function calculateDomainHealth(
   }
 
   // Governance utilization (as percentage, 0-100)
-  const governanceUtilization = maxEntries > 0
-    ? Math.round((records.length / maxEntries) * 100)
-    : 0;
+  const governanceUtilization =
+    maxEntries > 0 ? Math.round((records.length / maxEntries) * 100) : 0;
 
   return {
     governance_utilization: governanceUtilization,

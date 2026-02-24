@@ -1,5 +1,5 @@
 node_modules/
-dist/
 *.tgz
 .DS_Store
 *.log
+bun.lockb

@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { parseExpertiseDiff, formatDiffOutput } from "../../src/commands/diff.js";
+import { describe, expect, it } from "bun:test";
+import {
+  formatDiffOutput,
+  parseExpertiseDiff,
+} from "../../src/commands/diff.ts";
 
 describe("diff command", () => {
   describe("parseExpertiseDiff", () => {

@@ -1,18 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { initMulchDir } from "../../src/utils/config.js";
 import {
-  recipes,
-  CURSOR_RULE_CONTENT,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
   CLAUDE_HOOK_COMMAND,
+  CURSOR_RULE_CONTENT,
   MULCH_HOOK_SECTION,
-  installGitHook,
   checkGitHook,
+  installGitHook,
+  recipes,
   removeGitHook,
-} from "../../src/commands/setup.js";
+} from "../../src/commands/setup.ts";
+import { initMulchDir } from "../../src/utils/config.ts";
 
 describe("setup command", () => {
   let tmpDir: string;
@@ -190,7 +197,11 @@ describe("setup command", () => {
 
     it("appends to existing AGENTS.md", async () => {
       const agentsPath = join(tmpDir, "AGENTS.md");
-      await writeFile(agentsPath, "# Existing Content\n\nSome stuff.\n", "utf-8");
+      await writeFile(
+        agentsPath,
+        "# Existing Content\n\nSome stuff.\n",
+        "utf-8",
+      );
 
       await recipes.codex.install(tmpDir);
 

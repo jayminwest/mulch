@@ -13,15 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: oven-sh/setup-bun@v2
+
       - uses: actions/setup-node@v6
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
+      - run: bun install
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test
 
       - name: Check if version changed
         id: version-check

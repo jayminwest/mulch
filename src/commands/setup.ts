@@ -1,16 +1,23 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile, mkdir, chmod, unlink, stat } from "node:fs/promises";
-import { join, dirname } from "node:path";
-import { Command } from "commander";
-import chalk from "chalk";
-import { getMulchDir } from "../utils/config.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
 import {
-  MARKER_START,
+  chmod,
+  mkdir,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
+import chalk from "chalk";
+import type { Command } from "commander";
+import { getMulchDir } from "../utils/config.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import {
   MARKER_END,
+  MARKER_START,
   hasMarkerSection,
   removeMarkerSection,
-} from "../utils/markers.js";
+} from "../utils/markers.ts";
 
 /** Supported provider names. */
 const SUPPORTED_PROVIDERS = [
@@ -55,7 +62,10 @@ ${HOOK_MARKER_END}`;
 async function installGitHook(cwd: string): Promise<RecipeResult> {
   const gitDir = join(cwd, ".git");
   if (!existsSync(gitDir)) {
-    return { success: false, message: "Not a git repository — .git directory not found." };
+    return {
+      success: false,
+      message: "Not a git repository — .git directory not found.",
+    };
   }
 
   const hooksDir = join(gitDir, "hooks");
@@ -67,14 +77,17 @@ async function installGitHook(cwd: string): Promise<RecipeResult> {
   if (existsSync(hookPath)) {
     content = await readFile(hookPath, "utf-8");
     if (content.includes(HOOK_MARKER_START)) {
-      return { success: true, message: "Git pre-commit hook already installed." };
+      return {
+        success: true,
+        message: "Git pre-commit hook already installed.",
+      };
     }
   }
 
   if (content) {
-    content = content.trimEnd() + "\n\n" + MULCH_HOOK_SECTION + "\n";
+    content = `${content.trimEnd()}\n\n${MULCH_HOOK_SECTION}\n`;
   } else {
-    content = "#!/bin/sh\n\n" + MULCH_HOOK_SECTION + "\n";
+    content = `#!/bin/sh\n\n${MULCH_HOOK_SECTION}\n`;
   }
 
   await writeFile(hookPath, content, "utf-8");
@@ -91,7 +104,10 @@ async function checkGitHook(cwd: string): Promise<RecipeResult> {
 
   const content = await readFile(hookPath, "utf-8");
   if (!content.includes(HOOK_MARKER_START)) {
-    return { success: false, message: "Git pre-commit hook exists but has no mulch section." };
+    return {
+      success: false,
+      message: "Git pre-commit hook exists but has no mulch section.",
+    };
   }
 
   return { success: true, message: "Git pre-commit hook is installed." };
@@ -100,12 +116,18 @@ async function checkGitHook(cwd: string): Promise<RecipeResult> {
 async function removeGitHook(cwd: string): Promise<RecipeResult> {
   const hookPath = join(cwd, ".git", "hooks", "pre-commit");
   if (!existsSync(hookPath)) {
-    return { success: true, message: "Git pre-commit hook not found; nothing to remove." };
+    return {
+      success: true,
+      message: "Git pre-commit hook not found; nothing to remove.",
+    };
   }
 
   const content = await readFile(hookPath, "utf-8");
   if (!content.includes(HOOK_MARKER_START)) {
-    return { success: true, message: "No mulch section in pre-commit hook; nothing to remove." };
+    return {
+      success: true,
+      message: "No mulch section in pre-commit hook; nothing to remove.",
+    };
   }
 
   const startIdx = content.indexOf(HOOK_MARKER_START);
@@ -117,11 +139,17 @@ async function removeGitHook(cwd: string): Promise<RecipeResult> {
   // If only the shebang (or nothing) remains, delete the file
   if (!cleaned || cleaned === "#!/bin/sh") {
     await unlink(hookPath);
-    return { success: true, message: "Removed mulch pre-commit hook (file deleted)." };
+    return {
+      success: true,
+      message: "Removed mulch pre-commit hook (file deleted).",
+    };
   }
 
-  await writeFile(hookPath, cleaned + "\n", "utf-8");
-  return { success: true, message: "Removed mulch section from pre-commit hook." };
+  await writeFile(hookPath, `${cleaned}\n`, "utf-8");
+  return {
+    success: true,
+    message: "Removed mulch section from pre-commit hook.",
+  };
 }
 
 // ────────────────────────────────────────────────────────────
@@ -213,9 +241,16 @@ const claudeRecipe: ProviderRecipe = {
     }
 
     await mkdir(dirname(settingsPath), { recursive: true });
-    await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+    await writeFile(
+      settingsPath,
+      `${JSON.stringify(settings, null, 2)}\n`,
+      "utf-8",
+    );
 
-    return { success: true, message: "Installed Claude hooks for SessionStart and PreCompact." };
+    return {
+      success: true,
+      message: "Installed Claude hooks for SessionStart and PreCompact.",
+    };
   },
 
   async check(cwd) {
@@ -228,7 +263,10 @@ const claudeRecipe: ProviderRecipe = {
     const settings = JSON.parse(raw) as ClaudeSettings;
 
     if (!settings.hooks) {
-      return { success: false, message: "No hooks configured in Claude settings." };
+      return {
+        success: false,
+        message: "No hooks configured in Claude settings.",
+      };
     }
 
     const events = ["SessionStart", "PreCompact"];
@@ -240,22 +278,34 @@ const claudeRecipe: ProviderRecipe = {
     }
 
     if (missing.length > 0) {
-      return { success: false, message: `Missing hooks for: ${missing.join(", ")}.` };
+      return {
+        success: false,
+        message: `Missing hooks for: ${missing.join(", ")}.`,
+      };
     }
-    return { success: true, message: "Claude hooks are installed and correct." };
+    return {
+      success: true,
+      message: "Claude hooks are installed and correct.",
+    };
   },
 
   async remove(cwd) {
     const settingsPath = claudeSettingsPath(cwd);
     if (!existsSync(settingsPath)) {
-      return { success: true, message: "Claude settings.json not found; nothing to remove." };
+      return {
+        success: true,
+        message: "Claude settings.json not found; nothing to remove.",
+      };
     }
 
     const raw = await readFile(settingsPath, "utf-8");
     const settings = JSON.parse(raw) as ClaudeSettings;
 
     if (!settings.hooks) {
-      return { success: true, message: "No hooks in Claude settings; nothing to remove." };
+      return {
+        success: true,
+        message: "No hooks in Claude settings; nothing to remove.",
+      };
     }
 
     let removed = false;
@@ -271,10 +321,14 @@ const claudeRecipe: ProviderRecipe = {
     }
 
     if (Object.keys(settings.hooks).length === 0) {
-      delete settings.hooks;
+      settings.hooks = undefined;
     }
 
-    await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+    await writeFile(
+      settingsPath,
+      `${JSON.stringify(settings, null, 2)}\n`,
+      "utf-8",
+    );
 
     return {
       success: true,
@@ -340,7 +394,10 @@ const cursorRecipe: ProviderRecipe = {
     await mkdir(dirname(rulePath), { recursive: true });
     await writeFile(rulePath, CURSOR_RULE_CONTENT, "utf-8");
 
-    return { success: true, message: "Installed Cursor rule at .cursor/rules/mulch.mdc." };
+    return {
+      success: true,
+      message: "Installed Cursor rule at .cursor/rules/mulch.mdc.",
+    };
   },
 
   async check(cwd) {
@@ -350,7 +407,10 @@ const cursorRecipe: ProviderRecipe = {
     }
     const content = await readFile(rulePath, "utf-8");
     if (content !== CURSOR_RULE_CONTENT) {
-      return { success: false, message: "Cursor rule file exists but has been modified." };
+      return {
+        success: false,
+        message: "Cursor rule file exists but has been modified.",
+      };
     }
     return { success: true, message: "Cursor rule is installed and correct." };
   },
@@ -358,7 +418,10 @@ const cursorRecipe: ProviderRecipe = {
   async remove(cwd) {
     const rulePath = cursorRulePath(cwd);
     if (!existsSync(rulePath)) {
-      return { success: true, message: "Cursor rule not found; nothing to remove." };
+      return {
+        success: true,
+        message: "Cursor rule not found; nothing to remove.",
+      };
     }
     await unlink(rulePath);
     return { success: true, message: "Removed Cursor rule file." };
@@ -405,13 +468,16 @@ const codexRecipe: ProviderRecipe = {
     if (existsSync(agentsPath)) {
       content = await readFile(agentsPath, "utf-8");
       if (hasMarkerSection(content)) {
-        return { success: true, message: "AGENTS.md already contains mulch section." };
+        return {
+          success: true,
+          message: "AGENTS.md already contains mulch section.",
+        };
       }
     }
 
     const newContent = content
-      ? content.trimEnd() + "\n\n" + CODEX_SECTION + "\n"
-      : CODEX_SECTION + "\n";
+      ? `${content.trimEnd()}\n\n${CODEX_SECTION}\n`
+      : `${CODEX_SECTION}\n`;
 
     await writeFile(agentsPath, newContent, "utf-8");
 
@@ -425,7 +491,10 @@ const codexRecipe: ProviderRecipe = {
     }
     const content = await readFile(agentsPath, "utf-8");
     if (!hasMarkerSection(content)) {
-      return { success: false, message: "AGENTS.md exists but has no mulch section." };
+      return {
+        success: false,
+        message: "AGENTS.md exists but has no mulch section.",
+      };
     }
     return { success: true, message: "AGENTS.md contains mulch section." };
   },
@@ -433,11 +502,17 @@ const codexRecipe: ProviderRecipe = {
   async remove(cwd) {
     const agentsPath = codexAgentsPath(cwd);
     if (!existsSync(agentsPath)) {
-      return { success: true, message: "AGENTS.md not found; nothing to remove." };
+      return {
+        success: true,
+        message: "AGENTS.md not found; nothing to remove.",
+      };
     }
     const content = await readFile(agentsPath, "utf-8");
     if (!hasMarkerSection(content)) {
-      return { success: true, message: "No mulch section in AGENTS.md; nothing to remove." };
+      return {
+        success: true,
+        message: "No mulch section in AGENTS.md; nothing to remove.",
+      };
     }
     const cleaned = removeMarkerSection(content);
     await writeFile(agentsPath, cleaned, "utf-8");
@@ -487,18 +562,24 @@ ${MARKER_END}`;
       if (existsSync(filePath)) {
         content = await readFile(filePath, "utf-8");
         if (hasMarkerSection(content)) {
-          return { success: true, message: `${config.fileName} already contains mulch section.` };
+          return {
+            success: true,
+            message: `${config.fileName} already contains mulch section.`,
+          };
         }
       }
 
       const newContent = content
-        ? content.trimEnd() + "\n\n" + section + "\n"
-        : section + "\n";
+        ? `${content.trimEnd()}\n\n${section}\n`
+        : `${section}\n`;
 
       await mkdir(dirname(filePath), { recursive: true });
       await writeFile(filePath, newContent, "utf-8");
 
-      return { success: true, message: `Added mulch section to ${config.fileName}.` };
+      return {
+        success: true,
+        message: `Added mulch section to ${config.fileName}.`,
+      };
     },
 
     async check(cwd) {
@@ -508,24 +589,39 @@ ${MARKER_END}`;
       }
       const content = await readFile(filePath, "utf-8");
       if (!hasMarkerSection(content)) {
-        return { success: false, message: `${config.fileName} exists but has no mulch section.` };
+        return {
+          success: false,
+          message: `${config.fileName} exists but has no mulch section.`,
+        };
       }
-      return { success: true, message: `${config.fileName} contains mulch section.` };
+      return {
+        success: true,
+        message: `${config.fileName} contains mulch section.`,
+      };
     },
 
     async remove(cwd) {
       const filePath = config.filePath(cwd);
       if (!existsSync(filePath)) {
-        return { success: true, message: `${config.fileName} not found; nothing to remove.` };
+        return {
+          success: true,
+          message: `${config.fileName} not found; nothing to remove.`,
+        };
       }
       const content = await readFile(filePath, "utf-8");
       if (!hasMarkerSection(content)) {
-        return { success: true, message: `No mulch section in ${config.fileName}; nothing to remove.` };
+        return {
+          success: true,
+          message: `No mulch section in ${config.fileName}; nothing to remove.`,
+        };
       }
 
       const cleaned = removeMarkerSection(content);
       await writeFile(filePath, cleaned, "utf-8");
-      return { success: true, message: `Removed mulch section from ${config.fileName}.` };
+      return {
+        success: true,
+        message: `Removed mulch section from ${config.fileName}.`,
+      };
     },
   };
 }
@@ -577,127 +673,151 @@ export type { Provider, ProviderRecipe };
 export function registerSetupCommand(program: Command): void {
   program
     .command("setup")
-    .argument("[provider]", `agent provider (${SUPPORTED_PROVIDERS.join(", ")})`)
+    .argument(
+      "[provider]",
+      `agent provider (${SUPPORTED_PROVIDERS.join(", ")})`,
+    )
     .description("Set up mulch integration for a specific agent provider")
     .option("--check", "verify provider integration is installed")
     .option("--remove", "remove provider integration")
     .option("--hooks", "install a pre-commit git hook running mulch validate")
-    .action(async (provider: string | undefined, options: { check?: boolean; remove?: boolean; hooks?: boolean }) => {
-      const jsonMode = program.opts().json === true;
+    .action(
+      async (
+        provider: string | undefined,
+        options: { check?: boolean; remove?: boolean; hooks?: boolean },
+      ) => {
+        const jsonMode = program.opts().json === true;
 
-      // Verify .mulch/ exists
-      const mulchDir = getMulchDir();
-      if (!existsSync(mulchDir)) {
-        if (jsonMode) {
-          outputJsonError("setup", "No .mulch/ directory found. Run `mulch init` first.");
-        } else {
-          console.error(
-            chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."),
-          );
-        }
-        process.exitCode = 1;
-        return;
-      }
-
-      if (!provider && !options.hooks) {
-        if (jsonMode) {
-          outputJsonError("setup", "Specify a provider or use --hooks.");
-        } else {
-          console.error(
-            chalk.red("Error: specify a provider or use --hooks."),
-          );
-        }
-        process.exitCode = 1;
-        return;
-      }
-
-      // Handle --hooks
-      if (options.hooks) {
-        const cwd = process.cwd();
-        let hookResult: RecipeResult;
-        const action = options.check ? "check" : options.remove ? "remove" : "install";
-        if (options.check) {
-          hookResult = await checkGitHook(cwd);
-        } else if (options.remove) {
-          hookResult = await removeGitHook(cwd);
-        } else {
-          hookResult = await installGitHook(cwd);
-        }
-
-        if (jsonMode) {
-          outputJson({
-            success: hookResult.success,
-            command: "setup",
-            target: "hooks",
-            action,
-            message: hookResult.message,
-          });
-        } else if (hookResult.success) {
-          console.log(chalk.green(`\u2714 ${hookResult.message}`));
-        } else {
-          console.error(chalk.red(`\u2716 ${hookResult.message}`));
-        }
-
-        if (!hookResult.success) {
-          process.exitCode = 1;
-        }
-
-        // If no provider, stop here
-        if (!provider) return;
-      }
-
-      // Handle provider
-      if (!provider) return;
-
-      if (!isProvider(provider)) {
-        if (jsonMode) {
-          outputJsonError("setup", `Unknown provider "${provider}". Supported providers: ${SUPPORTED_PROVIDERS.join(", ")}`);
-        } else {
-          console.error(
-            chalk.red(`Error: unknown provider "${provider}".`),
-          );
-          console.error(
-            chalk.red(`Supported providers: ${SUPPORTED_PROVIDERS.join(", ")}`),
-          );
-        }
-        process.exitCode = 1;
-        return;
-      }
-
-      {
-        const recipe = recipes[provider];
-        const action = options.check ? "check" : options.remove ? "remove" : "install";
-        let result: RecipeResult;
-
-        if (options.check) {
-          result = await recipe.check(process.cwd());
-        } else if (options.remove) {
-          result = await recipe.remove(process.cwd());
-        } else {
-          result = await recipe.install(process.cwd());
-        }
-
-        if (jsonMode) {
-          outputJson({
-            success: result.success,
-            command: "setup",
-            provider,
-            action,
-            message: result.message,
-          });
-        } else if (result.success) {
-          console.log(chalk.green(`\u2714 ${result.message}`));
-        } else {
-          if (options.check) {
-            console.log(chalk.yellow(`\u2716 ${result.message}`));
+        // Verify .mulch/ exists
+        const mulchDir = getMulchDir();
+        if (!existsSync(mulchDir)) {
+          if (jsonMode) {
+            outputJsonError(
+              "setup",
+              "No .mulch/ directory found. Run `mulch init` first.",
+            );
           } else {
-            console.error(chalk.red(`Error: ${result.message}`));
+            console.error(
+              chalk.red(
+                "Error: No .mulch/ directory found. Run `mulch init` first.",
+              ),
+            );
+          }
+          process.exitCode = 1;
+          return;
+        }
+
+        if (!provider && !options.hooks) {
+          if (jsonMode) {
+            outputJsonError("setup", "Specify a provider or use --hooks.");
+          } else {
+            console.error(
+              chalk.red("Error: specify a provider or use --hooks."),
+            );
+          }
+          process.exitCode = 1;
+          return;
+        }
+
+        // Handle --hooks
+        if (options.hooks) {
+          const cwd = process.cwd();
+          let hookResult: RecipeResult;
+          const action = options.check
+            ? "check"
+            : options.remove
+              ? "remove"
+              : "install";
+          if (options.check) {
+            hookResult = await checkGitHook(cwd);
+          } else if (options.remove) {
+            hookResult = await removeGitHook(cwd);
+          } else {
+            hookResult = await installGitHook(cwd);
+          }
+
+          if (jsonMode) {
+            outputJson({
+              success: hookResult.success,
+              command: "setup",
+              target: "hooks",
+              action,
+              message: hookResult.message,
+            });
+          } else if (hookResult.success) {
+            console.log(chalk.green(`\u2714 ${hookResult.message}`));
+          } else {
+            console.error(chalk.red(`\u2716 ${hookResult.message}`));
+          }
+
+          if (!hookResult.success) {
+            process.exitCode = 1;
+          }
+
+          // If no provider, stop here
+          if (!provider) return;
+        }
+
+        // Handle provider
+        if (!provider) return;
+
+        if (!isProvider(provider)) {
+          if (jsonMode) {
+            outputJsonError(
+              "setup",
+              `Unknown provider "${provider}". Supported providers: ${SUPPORTED_PROVIDERS.join(", ")}`,
+            );
+          } else {
+            console.error(chalk.red(`Error: unknown provider "${provider}".`));
+            console.error(
+              chalk.red(
+                `Supported providers: ${SUPPORTED_PROVIDERS.join(", ")}`,
+              ),
+            );
+          }
+          process.exitCode = 1;
+          return;
+        }
+
+        {
+          const recipe = recipes[provider];
+          const action = options.check
+            ? "check"
+            : options.remove
+              ? "remove"
+              : "install";
+          let result: RecipeResult;
+
+          if (options.check) {
+            result = await recipe.check(process.cwd());
+          } else if (options.remove) {
+            result = await recipe.remove(process.cwd());
+          } else {
+            result = await recipe.install(process.cwd());
+          }
+
+          if (jsonMode) {
+            outputJson({
+              success: result.success,
+              command: "setup",
+              provider,
+              action,
+              message: result.message,
+            });
+          } else if (result.success) {
+            console.log(chalk.green(`\u2714 ${result.message}`));
+          } else {
+            if (options.check) {
+              console.log(chalk.yellow(`\u2716 ${result.message}`));
+            } else {
+              console.error(chalk.red(`Error: ${result.message}`));
+            }
+          }
+
+          if (!result.success) {
+            process.exitCode = 1;
           }
         }
-
-        if (!result.success) {
-          process.exitCode = 1;
-        }
-      }
-    });
+      },
+    );
 }

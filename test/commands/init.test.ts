@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  initMulchDir,
-  getMulchDir,
-  getConfigPath,
-  getExpertiseDir,
-  readConfig,
-  writeConfig,
   GITATTRIBUTES_LINE,
   MULCH_README,
-} from "../../src/utils/config.js";
+  getConfigPath,
+  getExpertiseDir,
+  getMulchDir,
+  initMulchDir,
+  readConfig,
+  writeConfig,
+} from "../../src/utils/config.ts";
 
 describe("init command", () => {
   let tmpDir: string;

@@ -1,9 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, readFile, stat, symlink, lstat } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import {
+  lstat,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { withFileLock } from "../../src/utils/lock.js";
+import { join } from "node:path";
+import { withFileLock } from "../../src/utils/lock.ts";
 
 describe("withFileLock", () => {
   let tmpDir: string;
@@ -58,7 +66,7 @@ describe("withFileLock", () => {
     // Run 5 concurrent increment operations
     const increments = Array.from({ length: 5 }, () =>
       withFileLock(filePath, async () => {
-        const val = parseInt(await readFile(filePath, "utf-8"), 10);
+        const val = Number.parseInt(await readFile(filePath, "utf-8"), 10);
         // Small delay to increase chance of race without lock
         await new Promise((resolve) => setTimeout(resolve, 5));
         await writeFile(filePath, String(val + 1), "utf-8");
@@ -67,7 +75,7 @@ describe("withFileLock", () => {
 
     await Promise.all(increments);
 
-    const finalVal = parseInt(await readFile(filePath, "utf-8"), 10);
+    const finalVal = Number.parseInt(await readFile(filePath, "utf-8"), 10);
     expect(finalVal).toBe(5);
   });
 

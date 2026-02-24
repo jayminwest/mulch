@@ -1,13 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "bun:test";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
   DEFAULT_BUDGET,
   applyBudget,
   estimateTokens,
   formatBudgetSummary,
-} from "../../src/utils/budget.js";
-import type { DomainRecords } from "../../src/utils/budget.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
-import type { ScoredRecord, Outcome } from "../../src/utils/scoring.js";
+} from "../../src/utils/budget.ts";
+import type { DomainRecords } from "../../src/utils/budget.ts";
+import type { Outcome, ScoredRecord } from "../../src/utils/scoring.ts";
 
 function makeRecord(
   type: ExpertiseRecord["type"],
@@ -20,17 +20,52 @@ function makeRecord(
   };
   switch (type) {
     case "convention":
-      return { ...base, type: "convention", content: overrides.content as string ?? "A convention", ...overrides } as ScoredRecord;
+      return {
+        ...base,
+        type: "convention",
+        content: (overrides.content as string) ?? "A convention",
+        ...overrides,
+      } as ScoredRecord;
     case "decision":
-      return { ...base, type: "decision", title: overrides.title as string ?? "A decision", rationale: overrides.rationale as string ?? "Because reasons", ...overrides } as ScoredRecord;
+      return {
+        ...base,
+        type: "decision",
+        title: (overrides.title as string) ?? "A decision",
+        rationale: (overrides.rationale as string) ?? "Because reasons",
+        ...overrides,
+      } as ScoredRecord;
     case "pattern":
-      return { ...base, type: "pattern", name: overrides.name as string ?? "A pattern", description: overrides.description as string ?? "A pattern desc", ...overrides } as ScoredRecord;
+      return {
+        ...base,
+        type: "pattern",
+        name: (overrides.name as string) ?? "A pattern",
+        description: (overrides.description as string) ?? "A pattern desc",
+        ...overrides,
+      } as ScoredRecord;
     case "guide":
-      return { ...base, type: "guide", name: overrides.name as string ?? "A guide", description: overrides.description as string ?? "A guide desc", ...overrides } as ScoredRecord;
+      return {
+        ...base,
+        type: "guide",
+        name: (overrides.name as string) ?? "A guide",
+        description: (overrides.description as string) ?? "A guide desc",
+        ...overrides,
+      } as ScoredRecord;
     case "failure":
-      return { ...base, type: "failure", description: overrides.description as string ?? "A failure", resolution: overrides.resolution as string ?? "Fix it", ...overrides } as ScoredRecord;
+      return {
+        ...base,
+        type: "failure",
+        description: (overrides.description as string) ?? "A failure",
+        resolution: (overrides.resolution as string) ?? "Fix it",
+        ...overrides,
+      } as ScoredRecord;
     case "reference":
-      return { ...base, type: "reference", name: overrides.name as string ?? "A reference", description: overrides.description as string ?? "A ref desc", ...overrides } as ScoredRecord;
+      return {
+        ...base,
+        type: "reference",
+        name: (overrides.name as string) ?? "A reference",
+        description: (overrides.description as string) ?? "A ref desc",
+        ...overrides,
+      } as ScoredRecord;
   }
 }
 
@@ -96,9 +131,11 @@ describe("budget utility", () => {
     it("drops records when budget is exceeded", () => {
       const records: ExpertiseRecord[] = [];
       for (let i = 0; i < 50; i++) {
-        records.push(makeRecord("convention", "foundational", {
-          content: `Convention ${i} with a reasonable amount of text padding`,
-        }));
+        records.push(
+          makeRecord("convention", "foundational", {
+            content: `Convention ${i} with a reasonable amount of text padding`,
+          }),
+        );
       }
       const domains: DomainRecords[] = [{ domain: "d1", records }];
 
@@ -109,12 +146,29 @@ describe("budget utility", () => {
 
     it("prioritizes by type: convention > decision > pattern > guide > failure > reference", () => {
       // One record of each type, all foundational
-      const convention = makeRecord("convention", "foundational", { content: "conv" });
-      const decision = makeRecord("decision", "foundational", { title: "dec", rationale: "rat" });
-      const pattern = makeRecord("pattern", "foundational", { name: "pat", description: "desc" });
-      const guide = makeRecord("guide", "foundational", { name: "gui", description: "desc" });
-      const failure = makeRecord("failure", "foundational", { description: "fail", resolution: "fix" });
-      const reference = makeRecord("reference", "foundational", { name: "ref", description: "desc" });
+      const convention = makeRecord("convention", "foundational", {
+        content: "conv",
+      });
+      const decision = makeRecord("decision", "foundational", {
+        title: "dec",
+        rationale: "rat",
+      });
+      const pattern = makeRecord("pattern", "foundational", {
+        name: "pat",
+        description: "desc",
+      });
+      const guide = makeRecord("guide", "foundational", {
+        name: "gui",
+        description: "desc",
+      });
+      const failure = makeRecord("failure", "foundational", {
+        description: "fail",
+        resolution: "fix",
+      });
+      const reference = makeRecord("reference", "foundational", {
+        name: "ref",
+        description: "desc",
+      });
 
       // Put them in reverse priority order
       const domains: DomainRecords[] = [
@@ -125,7 +179,9 @@ describe("budget utility", () => {
       ];
 
       // Budget that fits 3 records
-      const costs = [convention, decision, pattern].map((r) => estimateTokens(simpleEstimate(r)));
+      const costs = [convention, decision, pattern].map((r) =>
+        estimateTokens(simpleEstimate(r)),
+      );
       const budget = costs.reduce((a, b) => a + b, 0) + 1;
 
       const result = applyBudget(domains, budget, simpleEstimate);
@@ -137,9 +193,15 @@ describe("budget utility", () => {
     });
 
     it("prioritizes by classification within same type", () => {
-      const obs = makeRecord("convention", "observational", { content: "observational conv" });
-      const tac = makeRecord("convention", "tactical", { content: "tactical conv" });
-      const found = makeRecord("convention", "foundational", { content: "foundational conv" });
+      const obs = makeRecord("convention", "observational", {
+        content: "observational conv",
+      });
+      const tac = makeRecord("convention", "tactical", {
+        content: "tactical conv",
+      });
+      const found = makeRecord("convention", "foundational", {
+        content: "foundational conv",
+      });
 
       const domains: DomainRecords[] = [
         { domain: "d1", records: [obs, tac, found] },
@@ -149,7 +211,9 @@ describe("budget utility", () => {
       const cost = estimateTokens(simpleEstimate(found));
       const result = applyBudget(domains, cost * 2 + 1, simpleEstimate);
 
-      const keptClassifications = result.kept[0].records.map((r) => r.classification);
+      const keptClassifications = result.kept[0].records.map(
+        (r) => r.classification,
+      );
       expect(keptClassifications).toContain("foundational");
       expect(keptClassifications).toContain("tactical");
       expect(keptClassifications).not.toContain("observational");
@@ -173,12 +237,16 @@ describe("budget utility", () => {
       const result = applyBudget(domains, cost + 1, simpleEstimate);
 
       expect(result.kept[0].records).toHaveLength(1);
-      expect((result.kept[0].records[0] as { content: string }).content).toBe("new convention");
+      expect((result.kept[0].records[0] as { content: string }).content).toBe(
+        "new convention",
+      );
     });
 
     it("preserves original record order within kept records", () => {
       const r1 = makeRecord("convention", "foundational", { content: "first" });
-      const r2 = makeRecord("convention", "foundational", { content: "second" });
+      const r2 = makeRecord("convention", "foundational", {
+        content: "second",
+      });
       const r3 = makeRecord("convention", "foundational", { content: "third" });
 
       const domains: DomainRecords[] = [
@@ -186,14 +254,22 @@ describe("budget utility", () => {
       ];
 
       const result = applyBudget(domains, 100000, simpleEstimate);
-      const contents = result.kept[0].records.map((r) => (r as { content: string }).content);
+      const contents = result.kept[0].records.map(
+        (r) => (r as { content: string }).content,
+      );
       expect(contents).toEqual(["first", "second", "third"]);
     });
 
     it("preserves original domain order", () => {
       const domains: DomainRecords[] = [
-        { domain: "zebra", records: [makeRecord("convention", "foundational", { content: "z" })] },
-        { domain: "alpha", records: [makeRecord("convention", "foundational", { content: "a" })] },
+        {
+          domain: "zebra",
+          records: [makeRecord("convention", "foundational", { content: "z" })],
+        },
+        {
+          domain: "alpha",
+          records: [makeRecord("convention", "foundational", { content: "a" })],
+        },
       ];
 
       const result = applyBudget(domains, 100000, simpleEstimate);
@@ -203,13 +279,21 @@ describe("budget utility", () => {
 
     it("omits domains whose records are all dropped", () => {
       const domains: DomainRecords[] = [
-        { domain: "keep", records: [makeRecord("convention", "foundational", { content: "hi" })] },
+        {
+          domain: "keep",
+          records: [
+            makeRecord("convention", "foundational", { content: "hi" }),
+          ],
+        },
         {
           domain: "drop",
-          records: [makeRecord("reference", "observational", {
-            name: "big ref",
-            description: "A very long reference description that takes up a lot of budget space",
-          })],
+          records: [
+            makeRecord("reference", "observational", {
+              name: "big ref",
+              description:
+                "A very long reference description that takes up a lot of budget space",
+            }),
+          ],
         },
       ];
 
@@ -246,7 +330,10 @@ describe("budget utility", () => {
     });
 
     it("prioritizes records with higher confirmation scores over unscored records of the same type/classification", () => {
-      const unscored = makeRecord("pattern", "foundational", { name: "unscored", description: "no outcomes" });
+      const unscored = makeRecord("pattern", "foundational", {
+        name: "unscored",
+        description: "no outcomes",
+      });
       const confirmed = makeRecord("pattern", "foundational", {
         name: "confirmed",
         description: "has outcomes",
@@ -263,7 +350,9 @@ describe("budget utility", () => {
       const result = applyBudget(domains, cost + 1, simpleEstimate);
 
       expect(result.kept[0].records).toHaveLength(1);
-      expect((result.kept[0].records[0] as { name: string }).name).toBe("confirmed");
+      expect((result.kept[0].records[0] as { name: string }).name).toBe(
+        "confirmed",
+      );
     });
 
     it("prioritizes records with more confirmations over those with fewer", () => {
@@ -275,7 +364,11 @@ describe("budget utility", () => {
       const threeSuccesses = makeRecord("pattern", "foundational", {
         name: "three-successes",
         description: "three outcomes",
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
 
       const domains: DomainRecords[] = [
@@ -286,7 +379,9 @@ describe("budget utility", () => {
       const result = applyBudget(domains, cost + 1, simpleEstimate);
 
       expect(result.kept[0].records).toHaveLength(1);
-      expect((result.kept[0].records[0] as { name: string }).name).toBe("three-successes");
+      expect((result.kept[0].records[0] as { name: string }).name).toBe(
+        "three-successes",
+      );
     });
 
     it("partial outcomes contribute 0.5 to confirmation score", () => {
@@ -310,7 +405,9 @@ describe("budget utility", () => {
 
       // success (score=1) > partial (score=0.5)
       expect(result.kept[0].records).toHaveLength(1);
-      expect((result.kept[0].records[0] as { name: string }).name).toBe("one-success");
+      expect((result.kept[0].records[0] as { name: string }).name).toBe(
+        "one-success",
+      );
     });
 
     it("type priority still takes precedence over confirmation score", () => {
@@ -319,10 +416,15 @@ describe("budget utility", () => {
         description: "very well confirmed reference",
         outcomes: Array.from({ length: 10 }, () => makeOutcome("success")),
       });
-      const unscoredConvention = makeRecord("convention", "foundational", { content: "plain convention" });
+      const unscoredConvention = makeRecord("convention", "foundational", {
+        content: "plain convention",
+      });
 
       const domains: DomainRecords[] = [
-        { domain: "d1", records: [highlyConfirmedReference, unscoredConvention] },
+        {
+          domain: "d1",
+          records: [highlyConfirmedReference, unscoredConvention],
+        },
       ];
 
       const cost = estimateTokens(simpleEstimate(unscoredConvention));

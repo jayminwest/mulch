@@ -1,15 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "bun:test";
 import {
-  getSuccessCount,
-  getFailureCount,
-  getTotalApplications,
-  getSuccessRate,
-  computeConfirmationScore,
-  applyConfirmationBoost,
-  sortByConfirmationScore,
   type Outcome,
   type ScoredRecord,
-} from "../../src/utils/scoring.js";
+  applyConfirmationBoost,
+  computeConfirmationScore,
+  getFailureCount,
+  getSuccessCount,
+  getSuccessRate,
+  getTotalApplications,
+  sortByConfirmationScore,
+} from "../../src/utils/scoring.ts";
 
 // Helpers for building test records
 function makePattern(overrides: Partial<ScoredRecord> = {}): ScoredRecord {
@@ -23,7 +23,10 @@ function makePattern(overrides: Partial<ScoredRecord> = {}): ScoredRecord {
   };
 }
 
-function makeOutcome(status: Outcome["status"], extra: Partial<Outcome> = {}): Outcome {
+function makeOutcome(
+  status: Outcome["status"],
+  extra: Partial<Outcome> = {},
+): Outcome {
   return {
     status,
     recorded_at: "2024-01-01T00:00:00Z",
@@ -62,7 +65,11 @@ describe("scoring", () => {
 
     it("returns full count when all outcomes are successes", () => {
       const record = makePattern({
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
       expect(getSuccessCount(record)).toBe(3);
     });
@@ -182,14 +189,22 @@ describe("scoring", () => {
 
     it("returns 0 when all outcomes are failures", () => {
       const record = makePattern({
-        outcomes: [makeOutcome("failure"), makeOutcome("failure"), makeOutcome("failure")],
+        outcomes: [
+          makeOutcome("failure"),
+          makeOutcome("failure"),
+          makeOutcome("failure"),
+        ],
       });
       expect(computeConfirmationScore(record)).toBe(0);
     });
 
     it("returns success count for all-success records", () => {
       const record = makePattern({
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
       expect(computeConfirmationScore(record)).toBe(3);
     });
@@ -282,7 +297,11 @@ describe("scoring", () => {
 
     it("boost factor of 0 returns base score unchanged", () => {
       const record = makePattern({
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
       expect(applyConfirmationBoost(2.5, record, 0)).toBe(2.5);
     });
@@ -308,20 +327,28 @@ describe("scoring", () => {
       });
       const manySuccesses = makePattern({
         name: "many-successes",
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
 
-      const sorted = sortByConfirmationScore([noOutcomes, oneSuccess, manySuccesses]);
+      const sorted = sortByConfirmationScore([
+        noOutcomes,
+        oneSuccess,
+        manySuccesses,
+      ]);
 
-      expect(sorted[0].type === "pattern" && (sorted[0] as { name: string }).name).toBe(
-        "many-successes",
-      );
-      expect(sorted[1].type === "pattern" && (sorted[1] as { name: string }).name).toBe(
-        "one-success",
-      );
-      expect(sorted[2].type === "pattern" && (sorted[2] as { name: string }).name).toBe(
-        "no-outcomes",
-      );
+      expect(
+        sorted[0].type === "pattern" && (sorted[0] as { name: string }).name,
+      ).toBe("many-successes");
+      expect(
+        sorted[1].type === "pattern" && (sorted[1] as { name: string }).name,
+      ).toBe("one-success");
+      expect(
+        sorted[2].type === "pattern" && (sorted[2] as { name: string }).name,
+      ).toBe("no-outcomes");
     });
 
     it("records with no outcomes sort to the end", () => {
@@ -332,17 +359,24 @@ describe("scoring", () => {
       const noOutcomes1 = makePattern({ name: "no-outcomes-1" });
       const noOutcomes2 = makePattern({ name: "no-outcomes-2" });
 
-      const sorted = sortByConfirmationScore([noOutcomes1, withSuccess, noOutcomes2]);
+      const sorted = sortByConfirmationScore([
+        noOutcomes1,
+        withSuccess,
+        noOutcomes2,
+      ]);
 
-      expect(sorted[0].type === "pattern" && (sorted[0] as { name: string }).name).toBe(
-        "with-success",
-      );
+      expect(
+        sorted[0].type === "pattern" && (sorted[0] as { name: string }).name,
+      ).toBe("with-success");
     });
 
     it("does not mutate the original array", () => {
       const records = [
         makePattern({ name: "b", outcomes: [makeOutcome("success")] }),
-        makePattern({ name: "a", outcomes: [makeOutcome("success"), makeOutcome("success")] }),
+        makePattern({
+          name: "a",
+          outcomes: [makeOutcome("success"), makeOutcome("success")],
+        }),
       ];
       const original = [...records];
       sortByConfirmationScore(records);
@@ -390,9 +424,9 @@ describe("scoring", () => {
       const sorted = sortByConfirmationScore([unreliable, reliable]);
 
       // reliable has 3 successes vs unreliable's 1, so reliable comes first
-      expect(sorted[0].type === "pattern" && (sorted[0] as { name: string }).name).toBe(
-        "reliable",
-      );
+      expect(
+        sorted[0].type === "pattern" && (sorted[0] as { name: string }).name,
+      ).toBe("reliable");
     });
   });
 });

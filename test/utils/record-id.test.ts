@@ -1,18 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
-  generateRecordId,
+  getExpertisePath,
+  initMulchDir,
+  writeConfig,
+} from "../../src/utils/config.ts";
+import {
   appendRecord,
-  readExpertiseFile,
-  writeExpertiseFile,
   createExpertiseFile,
+  generateRecordId,
+  readExpertiseFile,
   resolveRecordId,
-} from "../../src/utils/expertise.js";
-import { initMulchDir, writeConfig, getExpertisePath } from "../../src/utils/config.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+  writeExpertiseFile,
+} from "../../src/utils/expertise.ts";
 
 let tmpDir: string;
 

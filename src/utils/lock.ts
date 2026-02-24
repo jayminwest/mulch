@@ -1,5 +1,5 @@
-import { open, unlink, lstat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { lstat, open, unlink } from "node:fs/promises";
 
 const LOCK_STALE_MS = 30_000; // 30 seconds
 const LOCK_RETRY_INTERVAL_MS = 50;
@@ -27,7 +27,10 @@ async function acquireLock(lockPath: string): Promise<void> {
 
   while (true) {
     try {
-      const fd = await open(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY);
+      const fd = await open(
+        lockPath,
+        constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+      );
       await fd.close();
       return;
     } catch (err) {

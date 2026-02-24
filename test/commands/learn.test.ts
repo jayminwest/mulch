@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { matchFilesToDomains } from "../../src/commands/learn.ts";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
   createExpertiseFile,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import { matchFilesToDomains } from "../../src/commands/learn.js";
+} from "../../src/utils/expertise.ts";
 
 describe("learn command", () => {
   let tmpDir: string;
@@ -56,14 +56,22 @@ describe("learn command", () => {
       });
 
       const { matches, unmatched } = await matchFilesToDomains(
-        ["src/cli.ts", "src/commands/record.ts", "test/utils/config.test.ts", "README.md"],
+        [
+          "src/cli.ts",
+          "src/commands/record.ts",
+          "test/utils/config.test.ts",
+          "README.md",
+        ],
         tmpDir,
       );
 
       expect(matches).toHaveLength(2);
       const cliMatch = matches.find((m) => m.domain === "cli");
       expect(cliMatch).toBeDefined();
-      expect(cliMatch!.matchedFiles).toEqual(["src/cli.ts", "src/commands/record.ts"]);
+      expect(cliMatch!.matchedFiles).toEqual([
+        "src/cli.ts",
+        "src/commands/record.ts",
+      ]);
 
       const testMatch = matches.find((m) => m.domain === "testing");
       expect(testMatch).toBeDefined();
@@ -73,10 +81,7 @@ describe("learn command", () => {
     });
 
     it("returns all files as unmatched when no records have files", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["cli"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
       const cliPath = getExpertisePath("cli", tmpDir);
       await createExpertiseFile(cliPath);
 
@@ -97,10 +102,7 @@ describe("learn command", () => {
     });
 
     it("returns empty results for no changed files", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["cli"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
       const cliPath = getExpertisePath("cli", tmpDir);
       await createExpertiseFile(cliPath);
 
@@ -151,10 +153,7 @@ describe("learn command", () => {
     });
 
     it("handles domains with no expertise file", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["empty"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["empty"] }, tmpDir);
       // Don't create expertise file — readExpertiseFile returns [] on ENOENT
 
       const { matches, unmatched } = await matchFilesToDomains(
@@ -167,10 +166,7 @@ describe("learn command", () => {
     });
 
     it("matches suffix paths (record stores short path)", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["cli"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
       const cliPath = getExpertisePath("cli", tmpDir);
       await createExpertiseFile(cliPath);
 

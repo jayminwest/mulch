@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
-  readExpertiseFile,
   appendRecord,
-  writeExpertiseFile,
-  filterByType,
   countRecords,
   createExpertiseFile,
+  filterByType,
+  readExpertiseFile,
   searchRecords,
-} from "../../src/utils/expertise.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+  writeExpertiseFile,
+} from "../../src/utils/expertise.ts";
 
 const makeConvention = (content: string): ExpertiseRecord => ({
   type: "convention",
@@ -56,7 +56,7 @@ describe("expertise utils", () => {
       const filePath = join(tmpDir, "records.jsonl");
       const record1 = makeConvention("Use single quotes");
       const record2 = makeConvention("Use semicolons");
-      const content = JSON.stringify(record1) + "\n" + JSON.stringify(record2) + "\n";
+      const content = `${JSON.stringify(record1)}\n${JSON.stringify(record2)}\n`;
       await writeFile(filePath, content, "utf-8");
 
       const result = await readExpertiseFile(filePath);
@@ -68,7 +68,7 @@ describe("expertise utils", () => {
     it("handles JSONL with trailing newlines", async () => {
       const filePath = join(tmpDir, "trailing.jsonl");
       const record = makeConvention("trailing newline test");
-      await writeFile(filePath, JSON.stringify(record) + "\n\n\n", "utf-8");
+      await writeFile(filePath, `${JSON.stringify(record)}\n\n\n`, "utf-8");
 
       const result = await readExpertiseFile(filePath);
       expect(result).toHaveLength(1);
@@ -247,7 +247,9 @@ describe("expertise utils", () => {
 
       const result = await readExpertiseFile(filePath);
       expect(result).toHaveLength(2);
-      expect((result[0] as { content: string }).content).toBe("Use single quotes");
+      expect((result[0] as { content: string }).content).toBe(
+        "Use single quotes",
+      );
       expect((result[1] as { name: string }).name).toBe("atomic-pattern");
     });
   });

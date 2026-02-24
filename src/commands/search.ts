@@ -1,10 +1,19 @@
-import { Command, Option } from "commander";
-import { readConfig, getExpertisePath } from "../utils/config.js";
-import { readExpertiseFile, getFileModTime, filterByType, filterByClassification, filterByFile } from "../utils/expertise.js";
-import { searchRecords } from "../utils/expertise.js";
-import { formatDomainExpertise } from "../utils/format.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
-import { sortByConfirmationScore, type ScoredRecord } from "../utils/scoring.js";
+import { type Command, Option } from "commander";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
+import {
+  filterByClassification,
+  filterByFile,
+  filterByType,
+  getFileModTime,
+  readExpertiseFile,
+} from "../utils/expertise.ts";
+import { searchRecords } from "../utils/expertise.ts";
+import { formatDomainExpertise } from "../utils/format.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import {
+  type ScoredRecord,
+  sortByConfirmationScore,
+} from "../utils/scoring.ts";
 
 export function registerSearchCommand(program: Command): void {
   program
@@ -24,29 +33,55 @@ export function registerSearchCommand(program: Command): void {
     )
     .option("--tag <tag>", "filter by tag")
     .addOption(
-      new Option("--classification <classification>", "filter by classification").choices([
-        "foundational",
-        "tactical",
-        "observational",
-      ]),
+      new Option(
+        "--classification <classification>",
+        "filter by classification",
+      ).choices(["foundational", "tactical", "observational"]),
     )
     .option("--file <file>", "filter by associated file path (substring match)")
     .addOption(
-      new Option("--outcome-status <status>", "filter by outcome status").choices(["success", "failure", "partial"]),
+      new Option(
+        "--outcome-status <status>",
+        "filter by outcome status",
+      ).choices(["success", "failure", "partial"]),
     )
-    .option("--sort-by-score", "sort results by confirmation-frequency score (highest first)")
+    .option(
+      "--sort-by-score",
+      "sort results by confirmation-frequency score (highest first)",
+    )
     .action(
       async (
         query: string | undefined,
-        options: { domain?: string; type?: string; tag?: string; classification?: string; file?: string; outcomeStatus?: string; sortByScore?: boolean },
+        options: {
+          domain?: string;
+          type?: string;
+          tag?: string;
+          classification?: string;
+          file?: string;
+          outcomeStatus?: string;
+          sortByScore?: boolean;
+        },
       ) => {
         const jsonMode = program.opts().json === true;
         try {
-          if (!query && !options.type && !options.domain && !options.tag && !options.classification && !options.file && !options.outcomeStatus) {
+          if (
+            !query &&
+            !options.type &&
+            !options.domain &&
+            !options.tag &&
+            !options.classification &&
+            !options.file &&
+            !options.outcomeStatus
+          ) {
             if (jsonMode) {
-              outputJsonError("search", "Provide a search query or use --type, --domain, --tag, --classification, --file, or --outcome-status to filter.");
+              outputJsonError(
+                "search",
+                "Provide a search query or use --type, --domain, --tag, --classification, --file, or --outcome-status to filter.",
+              );
             } else {
-              console.error("Error: Provide a search query or use --type, --domain, --tag, --classification, --file, or --outcome-status to filter.");
+              console.error(
+                "Error: Provide a search query or use --type, --domain, --tag, --classification, --file, or --outcome-status to filter.",
+              );
             }
             process.exitCode = 1;
             return;
@@ -59,7 +94,10 @@ export function registerSearchCommand(program: Command): void {
           if (options.domain) {
             if (!config.domains.includes(options.domain)) {
               if (jsonMode) {
-                outputJsonError("search", `Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`);
+                outputJsonError(
+                  "search",
+                  `Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
+                );
               } else {
                 console.error(
                   `Error: Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
@@ -90,13 +128,18 @@ export function registerSearchCommand(program: Command): void {
                 );
               }
               if (options.classification) {
-                records = filterByClassification(records, options.classification);
+                records = filterByClassification(
+                  records,
+                  options.classification,
+                );
               }
               if (options.file) {
                 records = filterByFile(records, options.file);
               }
               if (options.outcomeStatus) {
-                records = records.filter((r) => r.outcomes?.some((o) => o.status === options.outcomeStatus));
+                records = records.filter((r) =>
+                  r.outcomes?.some((o) => o.status === options.outcomeStatus),
+                );
               }
               let matches = query ? searchRecords(records, query) : records;
               if (options.sortByScore) {
@@ -130,13 +173,18 @@ export function registerSearchCommand(program: Command): void {
                 );
               }
               if (options.classification) {
-                records = filterByClassification(records, options.classification);
+                records = filterByClassification(
+                  records,
+                  options.classification,
+                );
               }
               if (options.file) {
                 records = filterByFile(records, options.file);
               }
               if (options.outcomeStatus) {
-                records = records.filter((r) => r.outcomes?.some((o) => o.status === options.outcomeStatus));
+                records = records.filter((r) =>
+                  r.outcomes?.some((o) => o.status === options.outcomeStatus),
+                );
               }
               let matches = query ? searchRecords(records, query) : records;
               if (options.sortByScore) {
@@ -155,13 +203,18 @@ export function registerSearchCommand(program: Command): void {
               console.log(`No records ${label} found.`);
             } else {
               console.log(sections.join("\n\n"));
-              console.log(`\n${totalMatches} match${totalMatches === 1 ? "" : "es"} found.`);
+              console.log(
+                `\n${totalMatches} match${totalMatches === 1 ? "" : "es"} found.`,
+              );
             }
           }
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === "ENOENT") {
             if (jsonMode) {
-              outputJsonError("search", "No .mulch/ directory found. Run `mulch init` first.");
+              outputJsonError(
+                "search",
+                "No .mulch/ directory found. Run `mulch init` first.",
+              );
             } else {
               console.error(
                 "Error: No .mulch/ directory found. Run `mulch init` first.",

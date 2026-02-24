@@ -1,4 +1,4 @@
-import type { ExpertiseRecord, Outcome } from "../schemas/record.js";
+import type { ExpertiseRecord, Outcome } from "../schemas/record.ts";
 
 export type { Outcome };
 
@@ -40,7 +40,8 @@ export function getTotalApplications(record: ScoredRecord): number {
 export function getSuccessRate(record: ScoredRecord): number {
   const total = getTotalApplications(record);
   if (total === 0) return 0;
-  const partialCount = record.outcomes?.filter((o) => o.status === "partial").length ?? 0;
+  const partialCount =
+    record.outcomes?.filter((o) => o.status === "partial").length ?? 0;
   const successCount = getSuccessCount(record);
   return (successCount + partialCount * 0.5) / total;
 }
@@ -58,7 +59,9 @@ export function getSuccessRate(record: ScoredRecord): number {
 export function computeConfirmationScore(record: ScoredRecord): number {
   if (!record.outcomes || record.outcomes.length === 0) return 0;
   const successCount = getSuccessCount(record);
-  const partialCount = record.outcomes.filter((o) => o.status === "partial").length;
+  const partialCount = record.outcomes.filter(
+    (o) => o.status === "partial",
+  ).length;
   return successCount + partialCount * 0.5;
 }
 
@@ -89,7 +92,9 @@ export function applyConfirmationBoost(
  * Records with equal scores maintain their original relative order (stable sort).
  * Records with no outcomes (score = 0) sort to the end.
  */
-export function sortByConfirmationScore<T extends ScoredRecord>(records: T[]): T[] {
+export function sortByConfirmationScore<T extends ScoredRecord>(
+  records: T[],
+): T[] {
   return [...records].sort(
     (a, b) => computeConfirmationScore(b) - computeConfirmationScore(a),
   );

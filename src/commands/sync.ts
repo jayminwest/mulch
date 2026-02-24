@@ -1,16 +1,18 @@
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { Command } from "commander";
-import _Ajv from "ajv";
-const Ajv = _Ajv.default ?? _Ajv;
+import Ajv from "ajv";
 import chalk from "chalk";
-import { readConfig, getExpertisePath } from "../utils/config.js";
-import { recordSchema } from "../schemas/record-schema.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
+import type { Command } from "commander";
+import { recordSchema } from "../schemas/record-schema.ts";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
 
 function isGitRepo(cwd: string): boolean {
   try {
-    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd, stdio: "pipe" });
+    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd,
+      stdio: "pipe",
+    });
     return true;
   } catch {
     return false;
@@ -19,7 +21,11 @@ function isGitRepo(cwd: string): boolean {
 
 function gitHasChanges(cwd: string): boolean {
   try {
-    const status = execFileSync("git", ["status", "--porcelain", ".mulch/"], { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+    const status = execFileSync("git", ["status", "--porcelain", ".mulch/"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     return status.trim().length > 0;
   } catch {
     return false;
@@ -31,7 +37,11 @@ function gitAdd(cwd: string): void {
 }
 
 function gitCommit(cwd: string, message: string): string {
-  return execFileSync("git", ["commit", "-m", message], { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+  return execFileSync("git", ["commit", "-m", message], {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 }
 
 interface ValidateResult {
@@ -70,12 +80,22 @@ async function validateExpertise(cwd?: string): Promise<ValidateResult> {
       try {
         parsed = JSON.parse(line);
       } catch {
-        errors.push({ domain, line: lineNumber, message: "Invalid JSON: failed to parse" });
+        errors.push({
+          domain,
+          line: lineNumber,
+          message: "Invalid JSON: failed to parse",
+        });
         continue;
       }
       if (!validate(parsed)) {
-        const schemaErrors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`).join("; ");
-        errors.push({ domain, line: lineNumber, message: `Schema validation failed: ${schemaErrors}` });
+        const schemaErrors = (validate.errors ?? [])
+          .map((err) => `${err.instancePath} ${err.message}`)
+          .join("; ");
+        errors.push({
+          domain,
+          line: lineNumber,
+          message: `Schema validation failed: ${schemaErrors}`,
+        });
       }
     }
   }
@@ -96,7 +116,10 @@ export function registerSyncCommand(program: Command): void {
       // Check if we're in a git repo
       if (!isGitRepo(cwd)) {
         if (jsonMode) {
-          outputJsonError("sync", "Not in a git repository. Run this command from within a git repository.");
+          outputJsonError(
+            "sync",
+            "Not in a git repository. Run this command from within a git repository.",
+          );
         } else {
           console.error(chalk.red("Error: not in a git repository."));
         }
@@ -120,21 +143,34 @@ export function registerSyncCommand(program: Command): void {
             } else {
               console.error(chalk.red("Validation failed:"));
               for (const err of result.errors) {
-                console.error(chalk.red(`  ${err.domain}:${err.line} - ${err.message}`));
+                console.error(
+                  chalk.red(`  ${err.domain}:${err.line} - ${err.message}`),
+                );
               }
-              console.error(chalk.red("\nFix errors and retry, or use --no-validate to skip."));
+              console.error(
+                chalk.red(
+                  "\nFix errors and retry, or use --no-validate to skip.",
+                ),
+              );
             }
             process.exitCode = 1;
             return;
           }
           if (!jsonMode) {
-            console.log(chalk.green(`✔ Validated ${result.totalRecords} records`));
+            console.log(
+              chalk.green(`✔ Validated ${result.totalRecords} records`),
+            );
           }
         } catch (err) {
           if (jsonMode) {
-            outputJsonError("sync", `Validation error: ${(err as Error).message}`);
+            outputJsonError(
+              "sync",
+              `Validation error: ${(err as Error).message}`,
+            );
           } else {
-            console.error(chalk.red(`Validation error: ${(err as Error).message}`));
+            console.error(
+              chalk.red(`Validation error: ${(err as Error).message}`),
+            );
           }
           process.exitCode = 1;
           return;
@@ -172,7 +208,9 @@ export function registerSyncCommand(program: Command): void {
             message: commitMessage,
           });
         } else {
-          console.log(chalk.green(`✔ Committed .mulch/ changes: "${commitMessage}"`));
+          console.log(
+            chalk.green(`✔ Committed .mulch/ changes: "${commitMessage}"`),
+          );
         }
       } catch (err) {
         if (jsonMode) {

@@ -1,12 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "bun:test";
 import {
-  MARKER_START,
   MARKER_END,
+  MARKER_START,
   hasMarkerSection,
-  replaceMarkerSection,
   removeMarkerSection,
+  replaceMarkerSection,
   wrapInMarkers,
-} from "../../src/utils/markers.js";
+} from "../../src/utils/markers.ts";
 
 describe("markers utility", () => {
   it("hasMarkerSection detects markers", () => {
@@ -21,7 +21,10 @@ describe("markers utility", () => {
 
   it("replaceMarkerSection swaps content between markers", () => {
     const content = `# Header\n\n${MARKER_START}\nold content\n${MARKER_END}\n\n# Footer\n`;
-    const result = replaceMarkerSection(content, `${MARKER_START}\nnew content\n${MARKER_END}`);
+    const result = replaceMarkerSection(
+      content,
+      `${MARKER_START}\nnew content\n${MARKER_END}`,
+    );
     expect(result).not.toBeNull();
     expect(result).toContain("new content");
     expect(result).not.toContain("old content");

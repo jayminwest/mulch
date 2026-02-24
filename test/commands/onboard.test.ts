@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { runOnboard, VERSION_MARKER } from "../../src/commands/onboard.js";
-import { MARKER_START, MARKER_END } from "../../src/utils/markers.js";
+import { join } from "node:path";
+import { VERSION_MARKER, runOnboard } from "../../src/commands/onboard.ts";
+import { MARKER_END, MARKER_START } from "../../src/utils/markers.ts";
 
 describe("onboard command", () => {
   let tmpDir: string;
@@ -20,7 +20,7 @@ describe("onboard command", () => {
   // ── Basic creation ────────────────────────────────────────
 
   it("creates AGENTS.md by default when no agent file exists", async () => {
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
     try {
       await runOnboard({ cwd: tmpDir });
 
@@ -39,7 +39,7 @@ describe("onboard command", () => {
 
   it("writes to CLAUDE.md if it already exists", async () => {
     await writeFile(join(tmpDir, "CLAUDE.md"), "# Existing content\n", "utf-8");
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
     try {
       await runOnboard({ cwd: tmpDir });
 
@@ -57,7 +57,7 @@ describe("onboard command", () => {
   it("appends to existing file without overwriting", async () => {
     const existingContent = "# My Project\n\nSome important info.\n";
     await writeFile(join(tmpDir, "AGENTS.md"), existingContent, "utf-8");
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
     try {
       await runOnboard({ cwd: tmpDir });
 
@@ -71,7 +71,7 @@ describe("onboard command", () => {
   });
 
   it("does not duplicate snippet if already present", async () => {
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
     try {
       // Run onboard twice
       await runOnboard({ cwd: tmpDir });
@@ -88,7 +88,9 @@ describe("onboard command", () => {
   // ── Stdout mode ───────────────────────────────────────────
 
   it("prints to stdout with --stdout flag", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
     try {
       await runOnboard({ stdout: true, cwd: tmpDir });
 
@@ -103,7 +105,9 @@ describe("onboard command", () => {
   });
 
   it("stdout output includes markers", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
     try {
       await runOnboard({ stdout: true, cwd: tmpDir });
 
@@ -118,7 +122,9 @@ describe("onboard command", () => {
   // ── Provider snippets ─────────────────────────────────────
 
   it("generates claude-specific snippet with --provider claude", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
     try {
       await runOnboard({ stdout: true, provider: "claude", cwd: tmpDir });
 
@@ -131,9 +137,15 @@ describe("onboard command", () => {
   });
 
   it("uses default snippet for unknown provider", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
     try {
-      await runOnboard({ stdout: true, provider: "unknown-provider", cwd: tmpDir });
+      await runOnboard({
+        stdout: true,
+        provider: "unknown-provider",
+        cwd: tmpDir,
+      });
 
       const output = (stdoutSpy.mock.calls[0] as string[])[0];
       expect(output).toContain("At the start of every session");
@@ -146,7 +158,9 @@ describe("onboard command", () => {
   // ── Snippet content ───────────────────────────────────────
 
   it("snippet includes before-you-finish checklist", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
     try {
       await runOnboard({ stdout: true, cwd: tmpDir });
 
@@ -160,7 +174,9 @@ describe("onboard command", () => {
   });
 
   it("claude snippet includes before-you-finish checklist", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
     try {
       await runOnboard({ stdout: true, provider: "claude", cwd: tmpDir });
 
@@ -174,7 +190,9 @@ describe("onboard command", () => {
   });
 
   it("snippet contains all essential commands", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+      () => true,
+    );
     try {
       await runOnboard({ stdout: true, cwd: tmpDir });
 
@@ -192,9 +210,13 @@ describe("onboard command", () => {
   describe("marker-based update", () => {
     it("updates an existing marker-wrapped snippet when content changes", async () => {
       const oldSnippet = `${MARKER_START}\n## Project Expertise (Mulch)\n\nOld content here.\n${MARKER_END}`;
-      await writeFile(join(tmpDir, "CLAUDE.md"), `# My Project\n\n${oldSnippet}\n`, "utf-8");
+      await writeFile(
+        join(tmpDir, "CLAUDE.md"),
+        `# My Project\n\n${oldSnippet}\n`,
+        "utf-8",
+      );
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -213,7 +235,7 @@ describe("onboard command", () => {
     });
 
     it("reports up_to_date when snippet matches current version", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir }); // creates with current content
         await runOnboard({ cwd: tmpDir }); // should report up_to_date
@@ -230,7 +252,7 @@ describe("onboard command", () => {
       const oldSnippet = `${MARKER_START}\nOld content.\n${MARKER_END}`;
       await writeFile(join(tmpDir, "CLAUDE.md"), oldSnippet, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, jsonMode: true });
 
@@ -247,7 +269,7 @@ describe("onboard command", () => {
       const fileContent = `# Header\n\nSome intro text.\n\n${oldSnippet}\n\n## Other Section\n\nMore content.\n`;
       await writeFile(join(tmpDir, "CLAUDE.md"), fileContent, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -267,7 +289,7 @@ describe("onboard command", () => {
 
   describe("version marker", () => {
     it("includes version marker in created file", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -279,7 +301,9 @@ describe("onboard command", () => {
     });
 
     it("includes version marker in stdout output", async () => {
-      const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(
+        () => true,
+      );
       try {
         await runOnboard({ stdout: true, cwd: tmpDir });
 
@@ -294,7 +318,7 @@ describe("onboard command", () => {
       const oldContent = `# Project\n\n${MARKER_START}\n## Project Expertise (Mulch)\n<!-- mulch-onboard-v:0 -->\nold content\n${MARKER_END}\n`;
       await writeFile(join(tmpDir, "CLAUDE.md"), oldContent, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -312,7 +336,7 @@ describe("onboard command", () => {
       const oldContent = `${MARKER_START}\n## Project Expertise (Mulch)\n<!-- mulch-onboard-v:0 -->\nold\n${MARKER_END}`;
       await writeFile(join(tmpDir, "AGENTS.md"), oldContent, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, check: true });
 
@@ -364,7 +388,7 @@ Run \`mulch --help\` for full usage.
       const fileContent = `# My Project\n\n${LEGACY_SNIPPET}`;
       await writeFile(join(tmpDir, "CLAUDE.md"), fileContent, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -381,9 +405,13 @@ Run \`mulch --help\` for full usage.
     });
 
     it("reports migrated action in JSON mode", async () => {
-      await writeFile(join(tmpDir, "CLAUDE.md"), `# Project\n\n${LEGACY_SNIPPET}`, "utf-8");
+      await writeFile(
+        join(tmpDir, "CLAUDE.md"),
+        `# Project\n\n${LEGACY_SNIPPET}`,
+        "utf-8",
+      );
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, jsonMode: true });
 
@@ -395,10 +423,11 @@ Run \`mulch --help\` for full usage.
     });
 
     it("handles edited legacy snippet (falls back to header-to-EOF)", async () => {
-      const editedLegacy = `# My Project\n\n## Project Expertise (Mulch)\n\nSome custom text the user wrote.\n`;
+      const editedLegacy =
+        "# My Project\n\n## Project Expertise (Mulch)\n\nSome custom text the user wrote.\n";
       await writeFile(join(tmpDir, "CLAUDE.md"), editedLegacy, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -415,7 +444,7 @@ Run \`mulch --help\` for full usage.
       const fileContent = `# My Project\n\nImportant setup info.\n\n${LEGACY_SNIPPET}`;
       await writeFile(join(tmpDir, "CLAUDE.md"), fileContent, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -435,13 +464,20 @@ Run \`mulch --help\` for full usage.
     it("detects snippet in .claude/CLAUDE.md and updates there", async () => {
       await mkdir(join(tmpDir, ".claude"), { recursive: true });
       const oldSnippet = `${MARKER_START}\nOld.\n${MARKER_END}`;
-      await writeFile(join(tmpDir, ".claude", "CLAUDE.md"), oldSnippet, "utf-8");
+      await writeFile(
+        join(tmpDir, ".claude", "CLAUDE.md"),
+        oldSnippet,
+        "utf-8",
+      );
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
-        const content = await readFile(join(tmpDir, ".claude", "CLAUDE.md"), "utf-8");
+        const content = await readFile(
+          join(tmpDir, ".claude", "CLAUDE.md"),
+          "utf-8",
+        );
         expect(content).toContain("mulch prime");
         // Should NOT create root files
         expect(existsSync(join(tmpDir, "CLAUDE.md"))).toBe(false);
@@ -453,11 +489,15 @@ Run \`mulch --help\` for full usage.
 
     it("prefers root CLAUDE.md over .claude/CLAUDE.md when both have snippets", async () => {
       const snippet = `${MARKER_START}\nOld.\n${MARKER_END}`;
-      await writeFile(join(tmpDir, "CLAUDE.md"), `# Root\n\n${snippet}\n`, "utf-8");
+      await writeFile(
+        join(tmpDir, "CLAUDE.md"),
+        `# Root\n\n${snippet}\n`,
+        "utf-8",
+      );
       await mkdir(join(tmpDir, ".claude"), { recursive: true });
       await writeFile(join(tmpDir, ".claude", "CLAUDE.md"), snippet, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
@@ -479,14 +519,20 @@ Run \`mulch --help\` for full usage.
       const snippet = `${MARKER_START}\nOld.\n${MARKER_END}`;
       await writeFile(join(tmpDir, "AGENTS.md"), snippet, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
         // Should update AGENTS.md, not add to CLAUDE.md
-        const agentsContent = await readFile(join(tmpDir, "AGENTS.md"), "utf-8");
+        const agentsContent = await readFile(
+          join(tmpDir, "AGENTS.md"),
+          "utf-8",
+        );
         expect(agentsContent).toContain("mulch prime");
-        const claudeContent = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
+        const claudeContent = await readFile(
+          join(tmpDir, "CLAUDE.md"),
+          "utf-8",
+        );
         expect(claudeContent).not.toContain("mulch");
       } finally {
         consoleSpy.mockRestore();
@@ -501,11 +547,14 @@ Run \`mulch --help\` for full usage.
         "utf-8",
       );
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir });
 
-        const content = await readFile(join(tmpDir, ".claude", "CLAUDE.md"), "utf-8");
+        const content = await readFile(
+          join(tmpDir, ".claude", "CLAUDE.md"),
+          "utf-8",
+        );
         expect(content).toContain(MARKER_START);
         expect(content).toContain("mulch prime");
         expect(existsSync(join(tmpDir, "CLAUDE.md"))).toBe(false);
@@ -520,7 +569,7 @@ Run \`mulch --help\` for full usage.
 
   describe("--check flag", () => {
     it("reports not installed when no snippet exists", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, check: true });
 
@@ -535,7 +584,7 @@ Run \`mulch --help\` for full usage.
     });
 
     it("reports up to date when current version is installed", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir }); // install first
         await runOnboard({ cwd: tmpDir, check: true });
@@ -552,7 +601,7 @@ Run \`mulch --help\` for full usage.
       const oldSnippet = `${MARKER_START}\nOld content.\n${MARKER_END}`;
       await writeFile(join(tmpDir, "AGENTS.md"), oldSnippet, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, check: true });
 
@@ -574,7 +623,7 @@ Run \`mulch --help\` for full usage.
         "utf-8",
       );
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, check: true });
 
@@ -590,7 +639,7 @@ Run \`mulch --help\` for full usage.
       const oldSnippet = `${MARKER_START}\nOld.\n${MARKER_END}`;
       await writeFile(join(tmpDir, "AGENTS.md"), oldSnippet, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, check: true });
 
@@ -605,7 +654,7 @@ Run \`mulch --help\` for full usage.
       const oldSnippet = `${MARKER_START}\nOld.\n${MARKER_END}`;
       await writeFile(join(tmpDir, "AGENTS.md"), oldSnippet, "utf-8");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         await runOnboard({ cwd: tmpDir, check: true, jsonMode: true });
 

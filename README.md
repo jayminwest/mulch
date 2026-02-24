@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/mulch-cli)](https://www.npmjs.com/package/mulch-cli)
 [![CI](https://img.shields.io/github/actions/workflow/status/jayminwest/mulch/ci.yml?branch=main)](https://github.com/jayminwest/mulch/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![node](https://img.shields.io/node/v/mulch-cli)](https://nodejs.org)
+[![bun](https://img.shields.io/badge/runtime-bun-f472b6)](https://bun.sh)
 
 Structured expertise files that accumulate over time, live in git, work with any agent, and run locally with zero dependencies.
 
@@ -21,6 +21,17 @@ Or use directly with npx — no install required:
 
 ```bash
 npx mulch-cli <command>
+```
+
+### Development
+
+Mulch uses [Bun](https://bun.sh) as its development runtime and test runner:
+
+```bash
+bun install            # Install dependencies
+bun test               # Run all tests
+bun run lint           # Lint with Biome
+bun run typecheck      # Type-check with tsc
 ```
 
 ## Quick Start

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-24
+
+### Changed
+- **BREAKING**: Switched runtime from Node.js to Bun — `bun` is now required
+- Replaced vitest with `bun:test` for all 675 tests across 32 files
+- Replaced ESLint/Prettier with Biome for linting and formatting
+- Source `.ts` files shipped directly (no build step needed)
+- All import extensions changed from `.js` to `.ts` (145 in src/, 98 in test/)
+- Simplified Ajv imports — Bun handles ESM/CJS interop natively (removed `_Ajv.default ?? _Ajv` shim)
+- Simplified `src/utils/version.ts` — uses `import.meta.dir` instead of `fileURLToPath`/`dirname`
+- CI workflows (`ci.yml`, `publish.yml`) now use `oven-sh/setup-bun@v2`
+- Onboard snippet now includes version marker (`mulch-onboard-v:1`) for staleness detection
+- Bumped `ajv` from 8.17.1 to 8.18.0
+
+### Removed
+- `dist/` build output (Bun runs `.ts` directly)
+- `vitest.config.ts` (using `bun:test`)
+- `package-lock.json` (using `bun.lock`)
+- `.beads/` directory (replaced by `.seeds/` for issue tracking)
+
+### Testing
+- 675 tests across 32 files, 1541 expect() calls
+
 ## [0.5.0] - 2026-02-20
 
 ### Added
@@ -219,7 +242,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jayminwest/mulch/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jayminwest/mulch/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/jayminwest/mulch/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jayminwest/mulch/compare/v0.4.1...v0.4.2

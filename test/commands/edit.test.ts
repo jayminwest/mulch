@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
-  readExpertiseFile,
   createExpertiseFile,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
+  readExpertiseFile,
+} from "../../src/utils/expertise.ts";
 
 describe("edit command", () => {
   let tmpDir: string;
@@ -20,10 +20,7 @@ describe("edit command", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "mulch-edit-test-"));
     await initMulchDir(tmpDir);
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
   });
@@ -266,7 +263,11 @@ describe("edit command", () => {
       ...records[0],
       outcomes: [
         ...(records[0].outcomes ?? []),
-        { status: "success" as const, agent: "build-agent", test_results: "Resolved" },
+        {
+          status: "success" as const,
+          agent: "build-agent",
+          test_results: "Resolved",
+        },
       ],
     };
     const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
@@ -290,7 +291,10 @@ describe("edit command", () => {
     });
 
     const records = await readExpertiseFile(filePath);
-    const record = { ...records[0], outcomes: [{ status: "success" as const }] };
+    const record = {
+      ...records[0],
+      outcomes: [{ status: "success" as const }],
+    };
     const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
     await writeExpertiseFile(filePath, [record]);
 

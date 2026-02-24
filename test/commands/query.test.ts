@@ -1,25 +1,29 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, appendFile } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
+import { registerQueryCommand } from "../../src/commands/query.ts";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
-  readExpertiseFile,
   createExpertiseFile,
-  filterByType,
   filterByClassification,
   filterByFile,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
-import { sortByConfirmationScore, type ScoredRecord, type Outcome } from "../../src/utils/scoring.js";
-import { registerQueryCommand } from "../../src/commands/query.js";
+  filterByType,
+  readExpertiseFile,
+} from "../../src/utils/expertise.ts";
+import {
+  type Outcome,
+  type ScoredRecord,
+  sortByConfirmationScore,
+} from "../../src/utils/scoring.ts";
 
 describe("query command", () => {
   let tmpDir: string;
@@ -34,10 +38,7 @@ describe("query command", () => {
   });
 
   it("reads records from a single domain", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -58,10 +59,7 @@ describe("query command", () => {
   });
 
   it("filters records by type", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -94,10 +92,7 @@ describe("query command", () => {
   });
 
   it("returns empty array for domain with no records", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["empty-domain"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["empty-domain"] }, tmpDir);
     const filePath = getExpertisePath("empty-domain", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -144,10 +139,7 @@ describe("query command", () => {
 
   it("filterByType returns empty when no records match", async () => {
     const filePath = getExpertisePath("testing", tmpDir);
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     await createExpertiseFile(filePath);
 
     await appendRecord(filePath, {
@@ -164,10 +156,7 @@ describe("query command", () => {
 
   describe("classification filtering", () => {
     it("filters by foundational classification", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -208,10 +197,7 @@ describe("query command", () => {
     });
 
     it("returns empty when no records match classification", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -228,10 +214,7 @@ describe("query command", () => {
     });
 
     it("combines classification filter with type filter", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -259,7 +242,9 @@ describe("query command", () => {
       const foundational = filterByClassification(records, "foundational");
       const foundationalConventions = filterByType(foundational, "convention");
       expect(foundationalConventions).toHaveLength(1);
-      expect((foundationalConventions[0] as { content: string }).content).toBe("Foundational convention");
+      expect((foundationalConventions[0] as { content: string }).content).toBe(
+        "Foundational convention",
+      );
     });
   });
 
@@ -297,10 +282,16 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
-        await program.parseAsync(["node", "mulch", "--json", "query", "testing"]);
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "--json",
+          "query",
+          "testing",
+        ]);
 
         expect(logSpy).toHaveBeenCalledTimes(1);
         const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
@@ -342,7 +333,7 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
@@ -368,7 +359,7 @@ describe("query command", () => {
       await writeConfig({ ...DEFAULT_CONFIG, domains: [] }, tmpDir);
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
@@ -391,7 +382,7 @@ describe("query command", () => {
       await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
 
       process.chdir(tmpDir);
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync([
@@ -420,7 +411,7 @@ describe("query command", () => {
       await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
 
       process.chdir(tmpDir);
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync(["node", "mulch", "--json", "query"]);
@@ -443,16 +434,10 @@ describe("query command", () => {
       // Do not call initMulchDir — use a bare tmpDir
       const bareTmpDir = await mkdtemp(join(tmpdir(), "mulch-query-bare-"));
       process.chdir(bareTmpDir);
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
       try {
         const program = makeProgram();
-        await program.parseAsync([
-          "node",
-          "mulch",
-          "--json",
-          "query",
-          "--all",
-        ]);
+        await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
 
         expect(errorSpy).toHaveBeenCalledTimes(1);
         const output = JSON.parse(errorSpy.mock.calls[0][0] as string) as {
@@ -488,7 +473,7 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync([
@@ -532,7 +517,7 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync([
@@ -555,7 +540,9 @@ describe("query command", () => {
         };
         expect(output.success).toBe(true);
         expect(output.domains[0].records).toHaveLength(1);
-        expect(output.domains[0].records[0].classification).toBe("foundational");
+        expect(output.domains[0].records[0].classification).toBe(
+          "foundational",
+        );
       } finally {
         logSpy.mockRestore();
       }
@@ -583,7 +570,7 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync([
@@ -618,10 +605,16 @@ describe("query command", () => {
       await createExpertiseFile(filePath);
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
-        await program.parseAsync(["node", "mulch", "--json", "query", "testing"]);
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "--json",
+          "query",
+          "testing",
+        ]);
 
         expect(logSpy).toHaveBeenCalledTimes(1);
         const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
@@ -638,10 +631,7 @@ describe("query command", () => {
 
   describe("file filtering", () => {
     it("filters pattern records by file path", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -669,10 +659,7 @@ describe("query command", () => {
     });
 
     it("filters reference records by file path", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -692,10 +679,7 @@ describe("query command", () => {
     });
 
     it("records without files field are excluded", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -752,7 +736,9 @@ describe("query command", () => {
       const filteredArch = filterByFile(archRecords, "src/shared");
 
       expect(filteredTesting).toHaveLength(1);
-      expect((filteredTesting[0] as { name: string }).name).toBe("test-pattern");
+      expect((filteredTesting[0] as { name: string }).name).toBe(
+        "test-pattern",
+      );
       expect(filteredArch).toHaveLength(1);
       expect((filteredArch[0] as { name: string }).name).toBe("arch-pattern");
     });
@@ -807,19 +793,32 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
-        await program.parseAsync(["node", "mulch", "--json", "query", "testing", "--outcome-status", "success"]);
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "--json",
+          "query",
+          "testing",
+          "--outcome-status",
+          "success",
+        ]);
 
         expect(logSpy).toHaveBeenCalledTimes(1);
         const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
           success: boolean;
-          domains: Array<{ domain: string; records: Array<{ content: string }> }>;
+          domains: Array<{
+            domain: string;
+            records: Array<{ content: string }>;
+          }>;
         };
         expect(output.success).toBe(true);
         expect(output.domains[0].records).toHaveLength(1);
-        expect(output.domains[0].records[0].content).toBe("Successful approach");
+        expect(output.domains[0].records[0].content).toBe(
+          "Successful approach",
+        );
       } finally {
         logSpy.mockRestore();
       }
@@ -847,10 +846,18 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
-        await program.parseAsync(["node", "mulch", "--json", "query", "testing", "--outcome-status", "failure"]);
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "--json",
+          "query",
+          "testing",
+          "--outcome-status",
+          "failure",
+        ]);
 
         expect(logSpy).toHaveBeenCalledTimes(1);
         const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
@@ -878,10 +885,18 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
-        await program.parseAsync(["node", "mulch", "--json", "query", "testing", "--outcome-status", "success"]);
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "--json",
+          "query",
+          "testing",
+          "--outcome-status",
+          "success",
+        ]);
 
         expect(logSpy).toHaveBeenCalledTimes(1);
         const output = JSON.parse(logSpy.mock.calls[0][0] as string) as {
@@ -917,7 +932,7 @@ describe("query command", () => {
       });
 
       process.chdir(tmpDir);
-      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
       try {
         const program = makeProgram();
         await program.parseAsync([
@@ -951,8 +966,11 @@ describe("query command", () => {
       return { status, recorded_at: new Date().toISOString() };
     }
 
-    async function appendScoredRecord(filePath: string, record: ScoredRecord): Promise<void> {
-      await appendFile(filePath, JSON.stringify(record) + "\n", "utf-8");
+    async function appendScoredRecord(
+      filePath: string,
+      record: ScoredRecord,
+    ): Promise<void> {
+      await appendFile(filePath, `${JSON.stringify(record)}\n`, "utf-8");
     }
 
     it("sortByConfirmationScore places high-score records first", async () => {
@@ -974,7 +992,11 @@ describe("query command", () => {
         description: "Highly confirmed",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
 
       const records = await readExpertiseFile(filePath);
@@ -1012,7 +1034,9 @@ describe("query command", () => {
       const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
 
       expect((sorted[0] as { name: string }).name).toBe("with-outcomes");
-      expect((sorted[sorted.length - 1] as { name: string }).name).toBe("no-outcomes");
+      expect((sorted[sorted.length - 1] as { name: string }).name).toBe(
+        "no-outcomes",
+      );
     });
 
     it("sort combined with type filter works correctly", async () => {
@@ -1033,7 +1057,11 @@ describe("query command", () => {
         content: "A convention with many confirmations",
         classification: "foundational",
         recorded_at: new Date().toISOString(),
-        outcomes: [makeOutcome("success"), makeOutcome("success"), makeOutcome("success")],
+        outcomes: [
+          makeOutcome("success"),
+          makeOutcome("success"),
+          makeOutcome("success"),
+        ],
       });
       await appendScoredRecord(filePath, {
         type: "pattern",

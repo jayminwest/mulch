@@ -1,41 +1,41 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import {
-  initMulchDir,
-  writeConfig,
-  getExpertisePath,
-  readConfig,
-} from "../../src/utils/config.js";
-import {
-  appendRecord,
-  readExpertiseFile,
-  createExpertiseFile,
-  getFileModTime,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import {
-  formatDomainExpertise,
-  formatPrimeOutput,
-  formatDomainExpertiseXml,
-  formatPrimeOutputXml,
-  formatDomainExpertisePlain,
-  formatPrimeOutputPlain,
-  formatDomainExpertiseCompact,
-  formatPrimeOutputCompact,
-  formatMcpOutput,
-  getSessionEndReminder,
-} from "../../src/utils/format.js";
-import { filterByContext, fileMatchesAny } from "../../src/utils/git.js";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
   DEFAULT_BUDGET,
   applyBudget,
   estimateTokens,
   formatBudgetSummary,
-} from "../../src/utils/budget.js";
-import type { DomainRecords } from "../../src/utils/budget.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+} from "../../src/utils/budget.ts";
+import type { DomainRecords } from "../../src/utils/budget.ts";
+import {
+  getExpertisePath,
+  initMulchDir,
+  readConfig,
+  writeConfig,
+} from "../../src/utils/config.ts";
+import {
+  appendRecord,
+  createExpertiseFile,
+  getFileModTime,
+  readExpertiseFile,
+} from "../../src/utils/expertise.ts";
+import {
+  formatDomainExpertise,
+  formatDomainExpertiseCompact,
+  formatDomainExpertisePlain,
+  formatDomainExpertiseXml,
+  formatMcpOutput,
+  formatPrimeOutput,
+  formatPrimeOutputCompact,
+  formatPrimeOutputPlain,
+  formatPrimeOutputXml,
+  getSessionEndReminder,
+} from "../../src/utils/format.ts";
+import { fileMatchesAny, filterByContext } from "../../src/utils/git.ts";
 
 describe("prime command", () => {
   let tmpDir: string;
@@ -57,10 +57,7 @@ describe("prime command", () => {
   });
 
   it("generates prime output with a single domain", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -130,10 +127,7 @@ describe("prime command", () => {
   });
 
   it("--full includes classification and evidence in output", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -157,10 +151,7 @@ describe("prime command", () => {
   });
 
   it("--full=false omits classification and evidence", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -181,10 +172,7 @@ describe("prime command", () => {
   });
 
   it("--mcp outputs valid JSON with domain records", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -209,10 +197,7 @@ describe("prime command", () => {
   });
 
   it("--format xml outputs XML with domain tags", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -238,16 +223,15 @@ describe("prime command", () => {
     expect(output).toContain("<expertise>");
     expect(output).toContain("</expertise>");
     expect(output).toContain('<domain name="testing"');
-    expect(output).toMatch(/<convention id="mx-[0-9a-f]+" classification="foundational">/);
+    expect(output).toMatch(
+      /<convention id="mx-[0-9a-f]+" classification="foundational">/,
+    );
     expect(output).toContain("Use vitest");
     expect(output).toContain("<resolution>Use streaming</resolution>");
   });
 
   it("--format xml escapes special characters", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -266,10 +250,7 @@ describe("prime command", () => {
   });
 
   it("--format plain outputs plain text", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -351,10 +332,7 @@ describe("prime command", () => {
     });
 
     it("validates domain exists in config", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const config = await readConfig(tmpDir);
       const domainArg = "nonexistent";
 
@@ -388,7 +366,11 @@ describe("prime command", () => {
 
       // Scope to just "architecture" in MCP mode
       const targetDomains = ["architecture"];
-      const domains: { domain: string; entry_count: number; records: unknown[] }[] = [];
+      const domains: {
+        domain: string;
+        entry_count: number;
+        records: unknown[];
+      }[] = [];
       for (const domain of targetDomains) {
         const filePath = getExpertisePath(domain, tmpDir);
         const records = await readExpertiseFile(filePath);
@@ -443,10 +425,7 @@ describe("prime command", () => {
   });
 
   it("formats domain with all record types", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["fulltest"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["fulltest"] }, tmpDir);
     const filePath = getExpertisePath("fulltest", tmpDir);
     await createExpertiseFile(filePath);
 
@@ -494,10 +473,7 @@ describe("prime command", () => {
 
   describe("reference and guide record formatting", () => {
     it("formats reference records under References heading", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -520,10 +496,7 @@ describe("prime command", () => {
     });
 
     it("formats guide records under Guides heading", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -540,14 +513,13 @@ describe("prime command", () => {
       const section = formatDomainExpertise("testing", records, lastUpdated);
 
       expect(section).toContain("### Guides");
-      expect(section).toContain("**add-command**: How to add a new CLI command");
+      expect(section).toContain(
+        "**add-command**: How to add a new CLI command",
+      );
     });
 
     it("XML format handles reference and guide records", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -571,20 +543,21 @@ describe("prime command", () => {
       const lastUpdated = await getFileModTime(filePath);
       const section = formatDomainExpertiseXml("testing", records, lastUpdated);
 
-      expect(section).toMatch(/<reference id="mx-[0-9a-f]+" classification="foundational">/);
+      expect(section).toMatch(
+        /<reference id="mx-[0-9a-f]+" classification="foundational">/,
+      );
       expect(section).toContain("<name>config-file</name>");
       expect(section).toContain("<files>config.yaml</files>");
       expect(section).toContain("</reference>");
-      expect(section).toMatch(/<guide id="mx-[0-9a-f]+" classification="tactical">/);
+      expect(section).toMatch(
+        /<guide id="mx-[0-9a-f]+" classification="tactical">/,
+      );
       expect(section).toContain("<name>setup-guide</name>");
       expect(section).toContain("</guide>");
     });
 
     it("plain text format handles reference and guide records", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -606,19 +579,22 @@ describe("prime command", () => {
 
       const records = await readExpertiseFile(filePath);
       const lastUpdated = await getFileModTime(filePath);
-      const section = formatDomainExpertisePlain("testing", records, lastUpdated);
+      const section = formatDomainExpertisePlain(
+        "testing",
+        records,
+        lastUpdated,
+      );
 
       expect(section).toContain("References:");
-      expect(section).toMatch(/- \[mx-[0-9a-f]+\] entry-point: Main entry \(src\/index\.ts\)/);
+      expect(section).toMatch(
+        /- \[mx-[0-9a-f]+\] entry-point: Main entry \(src\/index\.ts\)/,
+      );
       expect(section).toContain("Guides:");
       expect(section).toMatch(/- \[mx-[0-9a-f]+\] deploy-guide: How to deploy/);
     });
 
     it("MCP output includes reference and guide records", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -650,17 +626,14 @@ describe("prime command", () => {
 
     it("recording instructions include reference and guide examples", () => {
       const output = formatPrimeOutput([]);
-      expect(output).toContain('--type reference');
-      expect(output).toContain('--type guide');
+      expect(output).toContain("--type reference");
+      expect(output).toContain("--type guide");
     });
   });
 
   describe("domain exclusion", () => {
     it("validates excluded domain exists in config", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const config = await readConfig(tmpDir);
       const excludedDomain = "nonexistent";
 
@@ -704,7 +677,7 @@ describe("prime command", () => {
       // Exclude architecture domain
       const config = await readConfig(tmpDir);
       const excluded = ["architecture"];
-      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+      const targetDomains = config.domains.filter((d) => !excluded.includes(d));
 
       const sections: string[] = [];
       for (const domain of targetDomains) {
@@ -725,7 +698,10 @@ describe("prime command", () => {
 
     it("excludes multiple domains from output", async () => {
       await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing", "architecture", "api", "database"] },
+        {
+          ...DEFAULT_CONFIG,
+          domains: ["testing", "architecture", "api", "database"],
+        },
         tmpDir,
       );
 
@@ -768,7 +744,7 @@ describe("prime command", () => {
       // Exclude architecture and api domains
       const config = await readConfig(tmpDir);
       const excluded = ["architecture", "api"];
-      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+      const targetDomains = config.domains.filter((d) => !excluded.includes(d));
 
       const sections: string[] = [];
       for (const domain of targetDomains) {
@@ -791,7 +767,10 @@ describe("prime command", () => {
 
     it("combines --domain and --exclude-domain flags", async () => {
       await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing", "architecture", "api", "database"] },
+        {
+          ...DEFAULT_CONFIG,
+          domains: ["testing", "architecture", "api", "database"],
+        },
         tmpDir,
       );
 
@@ -826,7 +805,7 @@ describe("prime command", () => {
       // Select testing and architecture, then exclude architecture
       const requested = ["testing", "architecture"];
       const excluded = ["architecture"];
-      const targetDomains = requested.filter(d => !excluded.includes(d));
+      const targetDomains = requested.filter((d) => !excluded.includes(d));
 
       const sections: string[] = [];
       for (const domain of targetDomains) {
@@ -871,7 +850,7 @@ describe("prime command", () => {
 
       const config = await readConfig(tmpDir);
       const excluded = ["architecture"];
-      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+      const targetDomains = config.domains.filter((d) => !excluded.includes(d));
 
       const sections: string[] = [];
       for (const domain of targetDomains) {
@@ -913,9 +892,13 @@ describe("prime command", () => {
 
       const config = await readConfig(tmpDir);
       const excluded = ["architecture"];
-      const targetDomains = config.domains.filter(d => !excluded.includes(d));
+      const targetDomains = config.domains.filter((d) => !excluded.includes(d));
 
-      const domains: { domain: string; entry_count: number; records: unknown[] }[] = [];
+      const domains: {
+        domain: string;
+        entry_count: number;
+        records: unknown[];
+      }[] = [];
       for (const domain of targetDomains) {
         const filePath = getExpertisePath(domain, tmpDir);
         const records = await readExpertiseFile(filePath);
@@ -1008,10 +991,7 @@ describe("prime command", () => {
 
   describe("compact mode", () => {
     it("outputs one-liner per record with type tags", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["database"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["database"] }, tmpDir);
       const filePath = getExpertisePath("database", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -1061,24 +1041,33 @@ describe("prime command", () => {
 
       const records = await readExpertiseFile(filePath);
       const lastUpdated = await getFileModTime(filePath);
-      const section = formatDomainExpertiseCompact("database", records, lastUpdated);
+      const section = formatDomainExpertiseCompact(
+        "database",
+        records,
+        lastUpdated,
+      );
 
       expect(section).toContain("## database (6 records");
       expect(section).toContain("- [convention] Use WAL mode for SQLite");
-      expect(section).toContain("- [pattern] fts5-external-content: External content FTS5 with triggers (src/db/fts.ts)");
-      expect(section).toContain("- [failure] FTS5 queries crash without escaping → Use escapeFts5Term()");
-      expect(section).toContain("- [decision] SQLite over PostgreSQL: Simpler deployment");
+      expect(section).toContain(
+        "- [pattern] fts5-external-content: External content FTS5 with triggers (src/db/fts.ts)",
+      );
+      expect(section).toContain(
+        "- [failure] FTS5 queries crash without escaping → Use escapeFts5Term()",
+      );
+      expect(section).toContain(
+        "- [decision] SQLite over PostgreSQL: Simpler deployment",
+      );
       expect(section).toContain("- [reference] schema-file: src/db/schema.sql");
-      expect(section).toContain("- [guide] add-migration: NNN_description.sql naming convention");
+      expect(section).toContain(
+        "- [guide] add-migration: NNN_description.sql naming convention",
+      );
       // No section headers like ### Conventions
       expect(section).not.toContain("###");
     });
 
     it("reference without files falls back to description", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -1092,9 +1081,15 @@ describe("prime command", () => {
 
       const records = await readExpertiseFile(filePath);
       const lastUpdated = await getFileModTime(filePath);
-      const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
+      const section = formatDomainExpertiseCompact(
+        "testing",
+        records,
+        lastUpdated,
+      );
 
-      expect(section).toContain("- [reference] api-docs: External API documentation");
+      expect(section).toContain(
+        "- [reference] api-docs: External API documentation",
+      );
     });
 
     it("compact wrapper omits verbose recording instructions", () => {
@@ -1117,10 +1112,7 @@ describe("prime command", () => {
     });
 
     it("compact with multiple domains", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["db", "api"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["db", "api"] }, tmpDir);
       const dbPath = getExpertisePath("db", tmpDir);
       const apiPath = getExpertisePath("api", tmpDir);
       await createExpertiseFile(dbPath);
@@ -1154,16 +1146,15 @@ describe("prime command", () => {
       expect(output).toContain("## db (1 records");
       expect(output).toContain("## api (1 records");
       expect(output).toContain("- [convention] Use WAL mode");
-      expect(output).toContain("- [decision] REST over GraphQL: Simpler tooling");
+      expect(output).toContain(
+        "- [decision] REST over GraphQL: Simpler tooling",
+      );
     });
   });
 
   describe("context filtering", () => {
     it("--files option filters records by specified files", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["cli"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
       const filePath = getExpertisePath("cli", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -1398,14 +1389,15 @@ describe("prime command", () => {
         ["src/commands/prime.ts"],
       );
       expect(records).toHaveLength(3);
-      expect(records.map((r) => r.type)).toEqual(["convention", "pattern", "failure"]);
+      expect(records.map((r) => r.type)).toEqual([
+        "convention",
+        "pattern",
+        "failure",
+      ]);
     });
 
     it("filtered records integrate with formatting pipeline", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["cli"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
       const filePath = getExpertisePath("cli", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -1562,7 +1554,11 @@ describe("prime command", () => {
 
       const records = await readExpertiseFile(filePath);
       const lastUpdated = await getFileModTime(filePath);
-      const output = formatDomainExpertiseCompact("testing", records, lastUpdated);
+      const output = formatDomainExpertiseCompact(
+        "testing",
+        records,
+        lastUpdated,
+      );
       expect(output).toContain("[relates to: mx-abc123]");
     });
 
@@ -1601,7 +1597,11 @@ describe("prime command", () => {
 
       const records = await readExpertiseFile(filePath);
       const lastUpdated = await getFileModTime(filePath);
-      const output = formatDomainExpertisePlain("testing", records, lastUpdated);
+      const output = formatDomainExpertisePlain(
+        "testing",
+        records,
+        lastUpdated,
+      );
       expect(output).toContain("[supersedes: mx-old111]");
     });
 
@@ -1710,17 +1710,52 @@ describe("prime command", () => {
       };
       switch (type) {
         case "convention":
-          return { ...base, type: "convention", content: overrides.content as string ?? "A convention", ...overrides } as ExpertiseRecord;
+          return {
+            ...base,
+            type: "convention",
+            content: (overrides.content as string) ?? "A convention",
+            ...overrides,
+          } as ExpertiseRecord;
         case "decision":
-          return { ...base, type: "decision", title: overrides.title as string ?? "A decision", rationale: overrides.rationale as string ?? "Because reasons", ...overrides } as ExpertiseRecord;
+          return {
+            ...base,
+            type: "decision",
+            title: (overrides.title as string) ?? "A decision",
+            rationale: (overrides.rationale as string) ?? "Because reasons",
+            ...overrides,
+          } as ExpertiseRecord;
         case "pattern":
-          return { ...base, type: "pattern", name: overrides.name as string ?? "A pattern", description: overrides.description as string ?? "A pattern desc", ...overrides } as ExpertiseRecord;
+          return {
+            ...base,
+            type: "pattern",
+            name: (overrides.name as string) ?? "A pattern",
+            description: (overrides.description as string) ?? "A pattern desc",
+            ...overrides,
+          } as ExpertiseRecord;
         case "guide":
-          return { ...base, type: "guide", name: overrides.name as string ?? "A guide", description: overrides.description as string ?? "A guide desc", ...overrides } as ExpertiseRecord;
+          return {
+            ...base,
+            type: "guide",
+            name: (overrides.name as string) ?? "A guide",
+            description: (overrides.description as string) ?? "A guide desc",
+            ...overrides,
+          } as ExpertiseRecord;
         case "failure":
-          return { ...base, type: "failure", description: overrides.description as string ?? "A failure", resolution: overrides.resolution as string ?? "Fix it", ...overrides } as ExpertiseRecord;
+          return {
+            ...base,
+            type: "failure",
+            description: (overrides.description as string) ?? "A failure",
+            resolution: (overrides.resolution as string) ?? "Fix it",
+            ...overrides,
+          } as ExpertiseRecord;
         case "reference":
-          return { ...base, type: "reference", name: overrides.name as string ?? "A reference", description: overrides.description as string ?? "A ref desc", ...overrides } as ExpertiseRecord;
+          return {
+            ...base,
+            type: "reference",
+            name: (overrides.name as string) ?? "A reference",
+            description: (overrides.description as string) ?? "A ref desc",
+            ...overrides,
+          } as ExpertiseRecord;
       }
     }
 
@@ -1832,7 +1867,9 @@ describe("prime command", () => {
       expect(result.droppedCount).toBe(0);
 
       // Budget that fits exactly one convention-sized record
-      const convCost = estimateTokens(simpleEstimate(records.find((r) => r.type === "convention")!));
+      const convCost = estimateTokens(
+        simpleEstimate(records.find((r) => r.type === "convention")!),
+      );
       const tinyResult = applyBudget(domains, convCost + 1, simpleEstimate);
       expect(tinyResult.kept.length).toBeGreaterThan(0);
       expect(tinyResult.kept[0].records[0].type).toBe("convention");
@@ -1858,11 +1895,17 @@ describe("prime command", () => {
 
       // Budget that fits about 2 records
       const oneRecordCost = estimateTokens(simpleEstimate(foundational));
-      const result = applyBudget(domains, oneRecordCost * 2 + 1, simpleEstimate);
+      const result = applyBudget(
+        domains,
+        oneRecordCost * 2 + 1,
+        simpleEstimate,
+      );
 
       expect(result.kept[0].records).toHaveLength(2);
       // The kept records should be foundational and tactical (in original file order)
-      const keptClassifications = result.kept[0].records.map((r) => r.classification);
+      const keptClassifications = result.kept[0].records.map(
+        (r) => r.classification,
+      );
       expect(keptClassifications).toContain("foundational");
       expect(keptClassifications).toContain("tactical");
       expect(keptClassifications).not.toContain("observational");
@@ -1890,18 +1933,24 @@ describe("prime command", () => {
       const result = applyBudget(domains, oneRecordCost + 1, simpleEstimate);
 
       expect(result.kept[0].records).toHaveLength(1);
-      expect((result.kept[0].records[0] as { content: string }).content).toBe("New convention");
+      expect((result.kept[0].records[0] as { content: string }).content).toBe(
+        "New convention",
+      );
     });
 
     it("applyBudget preserves original domain order", () => {
       const domains: DomainRecords[] = [
         {
           domain: "alpha",
-          records: [makeRecord("convention", "foundational", { content: "Alpha conv" })],
+          records: [
+            makeRecord("convention", "foundational", { content: "Alpha conv" }),
+          ],
         },
         {
           domain: "beta",
-          records: [makeRecord("convention", "foundational", { content: "Beta conv" })],
+          records: [
+            makeRecord("convention", "foundational", { content: "Beta conv" }),
+          ],
         },
       ];
 
@@ -1914,11 +1963,21 @@ describe("prime command", () => {
       const domains: DomainRecords[] = [
         {
           domain: "alpha",
-          records: [makeRecord("convention", "foundational", { content: "Alpha convention" })],
+          records: [
+            makeRecord("convention", "foundational", {
+              content: "Alpha convention",
+            }),
+          ],
         },
         {
           domain: "beta",
-          records: [makeRecord("reference", "observational", { name: "Beta ref", description: "Beta reference description that is fairly long to make it costly" })],
+          records: [
+            makeRecord("reference", "observational", {
+              name: "Beta ref",
+              description:
+                "Beta reference description that is fairly long to make it costly",
+            }),
+          ],
         },
       ];
 
@@ -1945,10 +2004,7 @@ describe("prime command", () => {
     });
 
     it("budget integrates with compact formatting pipeline", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -1976,7 +2032,11 @@ describe("prime command", () => {
 
       // Format the kept records
       const lastUpdated = await getFileModTime(filePath);
-      const section = formatDomainExpertiseCompact("testing", result.kept[0].records, lastUpdated);
+      const section = formatDomainExpertiseCompact(
+        "testing",
+        result.kept[0].records,
+        lastUpdated,
+      );
       const output = formatPrimeOutputCompact([section]);
 
       expect(output).toContain("# Project Expertise (via Mulch)");
@@ -1984,10 +2044,7 @@ describe("prime command", () => {
     });
 
     it("budget summary line appears in final output when records are dropped", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -2009,17 +2066,17 @@ describe("prime command", () => {
       });
 
       if (result.droppedCount > 0) {
-        const summary = formatBudgetSummary(result.droppedCount, result.droppedDomainCount);
+        const summary = formatBudgetSummary(
+          result.droppedCount,
+          result.droppedDomainCount,
+        );
         expect(summary).toContain("more record");
         expect(summary).toContain("--budget <n>");
       }
     });
 
     it("session-end reminder is always shown regardless of budget", async () => {
-      await writeConfig(
-        { ...DEFAULT_CONFIG, domains: ["testing"] },
-        tmpDir,
-      );
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
       const filePath = getExpertisePath("testing", tmpDir);
       await createExpertiseFile(filePath);
 
@@ -2075,7 +2132,9 @@ describe("prime command", () => {
         {
           domain: "alpha",
           records: [
-            makeRecord("convention", "foundational", { content: "Alpha convention" }),
+            makeRecord("convention", "foundational", {
+              content: "Alpha convention",
+            }),
           ],
         },
         {
@@ -2083,7 +2142,8 @@ describe("prime command", () => {
           records: [
             makeRecord("reference", "observational", {
               name: "Beta ref",
-              description: "A reference with a longer description to make it costly",
+              description:
+                "A reference with a longer description to make it costly",
             }),
           ],
         },

@@ -1,20 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
+} from "../../src/utils/config.ts";
 import {
-  createExpertiseFile,
   appendRecord,
+  createExpertiseFile,
   readExpertiseFile,
-} from "../../src/utils/expertise.js";
-import { formatTimeAgo, getRecordSummary } from "../../src/utils/format.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+} from "../../src/utils/expertise.ts";
+import { formatTimeAgo, getRecordSummary } from "../../src/utils/format.ts";
 
 let tmpDir: string;
 
@@ -33,10 +33,7 @@ function daysAgo(days: number): string {
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "mulch-ready-test-"));
   await initMulchDir(tmpDir);
-  await writeConfig(
-    { ...DEFAULT_CONFIG, domains: ["testing", "api"] },
-    tmpDir,
-  );
+  await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "api"] }, tmpDir);
 });
 
 afterEach(async () => {
@@ -62,10 +59,13 @@ describe("ready command logic", () => {
     });
 
     const records = await readExpertiseFile(filePath);
-    const sorted = [...records].sort((a, b) =>
-      new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime(),
+    const sorted = [...records].sort(
+      (a, b) =>
+        new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime(),
     );
-    expect(sorted[0].type === "convention" && sorted[0].content).toBe("New record");
+    expect(sorted[0].type === "convention" && sorted[0].content).toBe(
+      "New record",
+    );
   });
 
   it("collects records across multiple domains", async () => {

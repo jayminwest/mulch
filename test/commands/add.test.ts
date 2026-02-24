@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import {
-  initMulchDir,
-  writeConfig,
-  readConfig,
   getExpertisePath,
   getMulchDir,
-} from "../../src/utils/config.js";
-import { createExpertiseFile } from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
+  initMulchDir,
+  readConfig,
+  writeConfig,
+} from "../../src/utils/config.ts";
+import { createExpertiseFile } from "../../src/utils/expertise.ts";
 
 describe("add command", () => {
   let tmpDir: string;
@@ -45,10 +45,7 @@ describe("add command", () => {
   });
 
   it("detects duplicate domain in config", async () => {
-    await writeConfig(
-      { ...DEFAULT_CONFIG, domains: ["testing"] },
-      tmpDir,
-    );
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
 
     const config = await readConfig(tmpDir);
     const isDuplicate = config.domains.includes("testing");

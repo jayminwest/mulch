@@ -1,17 +1,16 @@
-import { Command, Option } from "commander";
-import _Ajv from "ajv";
-const Ajv = _Ajv.default ?? _Ajv;
+import Ajv from "ajv";
 import chalk from "chalk";
-import { readConfig, getExpertisePath } from "../utils/config.js";
+import { type Command, Option } from "commander";
+import { recordSchema } from "../schemas/record-schema.ts";
+import type { Classification, Outcome } from "../schemas/record.ts";
+import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
   readExpertiseFile,
-  writeExpertiseFile,
   resolveRecordId,
-} from "../utils/expertise.js";
-import { withFileLock } from "../utils/lock.js";
-import { recordSchema } from "../schemas/record-schema.js";
-import type { Classification, Outcome } from "../schemas/record.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
+  writeExpertiseFile,
+} from "../utils/expertise.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { withFileLock } from "../utils/lock.ts";
 
 export function registerEditCommand(program: Command): void {
   program
@@ -33,26 +32,32 @@ export function registerEditCommand(program: Command): void {
     .option("--rationale <rationale>", "update rationale (decision)")
     .option("--files <files>", "update related files (comma-separated)")
     .option("--relates-to <ids>", "update linked record IDs (comma-separated)")
-    .option("--supersedes <ids>", "update superseded record IDs (comma-separated)")
+    .option(
+      "--supersedes <ids>",
+      "update superseded record IDs (comma-separated)",
+    )
     .addOption(
-      new Option("--outcome-status <status>", "set outcome status").choices(["success", "failure", "partial"]),
+      new Option("--outcome-status <status>", "set outcome status").choices([
+        "success",
+        "failure",
+        "partial",
+      ]),
     )
     .option("--outcome-duration <ms>", "set outcome duration in milliseconds")
     .option("--outcome-test-results <text>", "set outcome test results summary")
     .option("--outcome-agent <agent>", "set outcome agent name")
     .action(
-      async (
-        domain: string,
-        id: string,
-        options: Record<string, unknown>,
-      ) => {
+      async (domain: string, id: string, options: Record<string, unknown>) => {
         const jsonMode = program.opts().json === true;
         try {
           const config = await readConfig();
 
           if (!config.domains.includes(domain)) {
             if (jsonMode) {
-              outputJsonError("edit", `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`);
+              outputJsonError(
+                "edit",
+                `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+              );
             } else {
               console.error(
                 chalk.red(`Error: domain "${domain}" not found in config.`),
@@ -102,9 +107,16 @@ export function registerEditCommand(program: Command): void {
                 .filter(Boolean);
             }
             if (options.outcomeStatus) {
-              const o: Outcome = { status: options.outcomeStatus as "success" | "failure" | "partial" };
+              const o: Outcome = {
+                status: options.outcomeStatus as
+                  | "success"
+                  | "failure"
+                  | "partial",
+              };
               if (options.outcomeDuration !== undefined) {
-                o.duration = parseFloat(options.outcomeDuration as string);
+                o.duration = Number.parseFloat(
+                  options.outcomeDuration as string,
+                );
               }
               if (options.outcomeTestResults) {
                 o.test_results = options.outcomeTestResults as string;
@@ -173,9 +185,14 @@ export function registerEditCommand(program: Command): void {
             const ajv = new Ajv();
             const validate = ajv.compile(recordSchema);
             if (!validate(record)) {
-              const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
+              const errors = (validate.errors ?? []).map(
+                (err) => `${err.instancePath} ${err.message}`,
+              );
               if (jsonMode) {
-                outputJsonError("edit", `Updated record failed schema validation: ${errors.join("; ")}`);
+                outputJsonError(
+                  "edit",
+                  `Updated record failed schema validation: ${errors.join("; ")}`,
+                );
               } else {
                 console.error(
                   chalk.red("Error: updated record failed schema validation:"),
@@ -213,7 +230,10 @@ export function registerEditCommand(program: Command): void {
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === "ENOENT") {
             if (jsonMode) {
-              outputJsonError("edit", "No .mulch/ directory found. Run `mulch init` first.");
+              outputJsonError(
+                "edit",
+                "No .mulch/ directory found. Run `mulch init` first.",
+              );
             } else {
               console.error(
                 "Error: No .mulch/ directory found. Run `mulch init` first.",

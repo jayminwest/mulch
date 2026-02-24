@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { compareSemver, getCurrentVersion, getLatestVersion } from "../../src/utils/version.js";
+import { describe, expect, it } from "bun:test";
+import {
+  compareSemver,
+  getCurrentVersion,
+  getLatestVersion,
+} from "../../src/utils/version.ts";
 
 describe("compareSemver", () => {
   it("returns 0 for equal versions", () => {
@@ -52,7 +56,9 @@ describe("getCurrentVersion", () => {
     const { join, dirname } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
     const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as { version: string };
+    const pkg = JSON.parse(
+      readFileSync(join(root, "package.json"), "utf-8"),
+    ) as { version: string };
     expect(getCurrentVersion()).toBe(pkg.version);
   });
 });

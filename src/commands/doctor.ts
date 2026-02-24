@@ -1,24 +1,33 @@
 import { existsSync } from "node:fs";
-import { readFile, readdir, writeFile as fsWriteFile } from "node:fs/promises";
+import { writeFile as fsWriteFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { Command } from "commander";
-import _Ajv from "ajv";
-const Ajv = _Ajv.default ?? _Ajv;
+import Ajv from "ajv";
 import chalk from "chalk";
-import { readConfig, getExpertisePath, getExpertiseDir, getMulchDir, writeConfig } from "../utils/config.js";
+import type { Command } from "commander";
+import type { MulchConfig } from "../schemas/config.ts";
+import { recordSchema } from "../schemas/record-schema.ts";
+import type { ExpertiseRecord } from "../schemas/record.ts";
 import {
+  getExpertiseDir,
+  getExpertisePath,
+  getMulchDir,
+  readConfig,
+  writeConfig,
+} from "../utils/config.ts";
+import {
+  createExpertiseFile,
+  findDuplicate,
   readExpertiseFile,
   writeExpertiseFile,
-  findDuplicate,
-  createExpertiseFile,
-} from "../utils/expertise.js";
-import { withFileLock } from "../utils/lock.js";
-import { isStale } from "./prune.js";
-import { recordSchema } from "../schemas/record-schema.js";
-import type { MulchConfig } from "../schemas/config.js";
-import type { ExpertiseRecord } from "../schemas/record.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
-import { getCurrentVersion, getLatestVersion, compareSemver } from "../utils/version.js";
+} from "../utils/expertise.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { withFileLock } from "../utils/lock.ts";
+import {
+  compareSemver,
+  getCurrentVersion,
+  getLatestVersion,
+} from "../utils/version.ts";
+import { isStale } from "./prune.ts";
 
 interface DoctorCheck {
   name: string;
@@ -32,16 +41,37 @@ async function checkConfig(cwd?: string): Promise<DoctorCheck> {
   try {
     const mulchDir = getMulchDir(cwd);
     if (!existsSync(mulchDir)) {
-      return { name: "config", status: "fail", message: "No .mulch/ directory found", fixable: false, details: [] };
+      return {
+        name: "config",
+        status: "fail",
+        message: "No .mulch/ directory found",
+        fixable: false,
+        details: [],
+      };
     }
     await readConfig(cwd);
-    return { name: "config", status: "pass", message: "Config is valid", fixable: false, details: [] };
+    return {
+      name: "config",
+      status: "pass",
+      message: "Config is valid",
+      fixable: false,
+      details: [],
+    };
   } catch (err) {
-    return { name: "config", status: "fail", message: `Config error: ${(err as Error).message}`, fixable: false, details: [] };
+    return {
+      name: "config",
+      status: "fail",
+      message: `Config error: ${(err as Error).message}`,
+      fixable: false,
+      details: [],
+    };
   }
 }
 
-async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+async function checkJsonlIntegrity(
+  config: MulchConfig,
+  cwd?: string,
+): Promise<DoctorCheck> {
   const details: string[] = [];
   for (const domain of config.domains) {
     const filePath = getExpertisePath(domain, cwd);
@@ -63,12 +93,27 @@ async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<D
     }
   }
   if (details.length > 0) {
-    return { name: "jsonl-integrity", status: "fail", message: `${details.length} invalid JSON line(s) found`, fixable: true, details };
+    return {
+      name: "jsonl-integrity",
+      status: "fail",
+      message: `${details.length} invalid JSON line(s) found`,
+      fixable: true,
+      details,
+    };
   }
-  return { name: "jsonl-integrity", status: "pass", message: "All JSONL lines are valid JSON", fixable: true, details: [] };
+  return {
+    name: "jsonl-integrity",
+    status: "pass",
+    message: "All JSONL lines are valid JSON",
+    fixable: true,
+    details: [],
+  };
 }
 
-async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+async function checkSchemaValidation(
+  config: MulchConfig,
+  cwd?: string,
+): Promise<DoctorCheck> {
   const ajv = new Ajv();
   const validate = ajv.compile(recordSchema);
   const details: string[] = [];
@@ -92,18 +137,35 @@ async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise
         continue; // Already caught by integrity check
       }
       if (!validate(parsed)) {
-        const errors = (validate.errors ?? []).map((e) => `${e.instancePath} ${e.message}`).join("; ");
+        const errors = (validate.errors ?? [])
+          .map((e) => `${e.instancePath} ${e.message}`)
+          .join("; ");
         details.push(`${domain}:${i + 1} - ${errors}`);
       }
     }
   }
   if (details.length > 0) {
-    return { name: "schema-validation", status: "fail", message: `${details.length} record(s) failed schema validation`, fixable: true, details };
+    return {
+      name: "schema-validation",
+      status: "fail",
+      message: `${details.length} record(s) failed schema validation`,
+      fixable: true,
+      details,
+    };
   }
-  return { name: "schema-validation", status: "pass", message: "All records pass schema validation", fixable: true, details: [] };
+  return {
+    name: "schema-validation",
+    status: "pass",
+    message: "All records pass schema validation",
+    fixable: true,
+    details: [],
+  };
 }
 
-async function checkStaleRecords(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+async function checkStaleRecords(
+  config: MulchConfig,
+  cwd?: string,
+): Promise<DoctorCheck> {
   const now = new Date();
   const shelfLife = config.classification_defaults.shelf_life;
   const details: string[] = [];
@@ -115,17 +177,34 @@ async function checkStaleRecords(config: MulchConfig, cwd?: string): Promise<Doc
     for (const record of records) {
       if (isStale(record, now, shelfLife)) {
         staleCount++;
-        details.push(`${domain}: stale ${record.type} (${record.classification})`);
+        details.push(
+          `${domain}: stale ${record.type} (${record.classification})`,
+        );
       }
     }
   }
   if (staleCount > 0) {
-    return { name: "stale-records", status: "warn", message: `${staleCount} stale record(s) found`, fixable: true, details };
+    return {
+      name: "stale-records",
+      status: "warn",
+      message: `${staleCount} stale record(s) found`,
+      fixable: true,
+      details,
+    };
   }
-  return { name: "stale-records", status: "pass", message: "No stale records", fixable: true, details: [] };
+  return {
+    name: "stale-records",
+    status: "pass",
+    message: "No stale records",
+    fixable: true,
+    details: [],
+  };
 }
 
-async function checkOrphanedDomains(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+async function checkOrphanedDomains(
+  config: MulchConfig,
+  cwd?: string,
+): Promise<DoctorCheck> {
   const expertiseDir = getExpertiseDir(cwd);
   const details: string[] = [];
 
@@ -136,7 +215,9 @@ async function checkOrphanedDomains(config: MulchConfig, cwd?: string): Promise<
       if (file.endsWith(".jsonl")) {
         const domain = file.replace(".jsonl", "");
         if (!config.domains.includes(domain)) {
-          details.push(`File "${file}" exists but domain "${domain}" is not in config`);
+          details.push(
+            `File "${file}" exists but domain "${domain}" is not in config`,
+          );
         }
       }
     }
@@ -153,12 +234,27 @@ async function checkOrphanedDomains(config: MulchConfig, cwd?: string): Promise<
   }
 
   if (details.length > 0) {
-    return { name: "orphaned-domains", status: "warn", message: `${details.length} orphaned domain issue(s)`, fixable: true, details };
+    return {
+      name: "orphaned-domains",
+      status: "warn",
+      message: `${details.length} orphaned domain issue(s)`,
+      fixable: true,
+      details,
+    };
   }
-  return { name: "orphaned-domains", status: "pass", message: "No orphaned domains", fixable: true, details: [] };
+  return {
+    name: "orphaned-domains",
+    status: "pass",
+    message: "No orphaned domains",
+    fixable: true,
+    details: [],
+  };
 }
 
-async function checkDuplicates(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+async function checkDuplicates(
+  config: MulchConfig,
+  cwd?: string,
+): Promise<DoctorCheck> {
   const details: string[] = [];
   let dupCount = 0;
 
@@ -169,17 +265,34 @@ async function checkDuplicates(config: MulchConfig, cwd?: string): Promise<Docto
       const dup = findDuplicate(records.slice(0, i), records[i]);
       if (dup) {
         dupCount++;
-        details.push(`${domain}: duplicate ${records[i].type} at index ${i + 1} (matches #${dup.index + 1})`);
+        details.push(
+          `${domain}: duplicate ${records[i].type} at index ${i + 1} (matches #${dup.index + 1})`,
+        );
       }
     }
   }
   if (dupCount > 0) {
-    return { name: "duplicates", status: "warn", message: `${dupCount} duplicate record(s) found`, fixable: false, details };
+    return {
+      name: "duplicates",
+      status: "warn",
+      message: `${dupCount} duplicate record(s) found`,
+      fixable: false,
+      details,
+    };
   }
-  return { name: "duplicates", status: "pass", message: "No duplicates", fixable: false, details: [] };
+  return {
+    name: "duplicates",
+    status: "pass",
+    message: "No duplicates",
+    fixable: false,
+    details: [],
+  };
 }
 
-async function checkGovernance(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+async function checkGovernance(
+  config: MulchConfig,
+  cwd?: string,
+): Promise<DoctorCheck> {
   const details: string[] = [];
   let worstStatus: "pass" | "warn" | "fail" = "pass";
 
@@ -189,21 +302,39 @@ async function checkGovernance(config: MulchConfig, cwd?: string): Promise<Docto
     const count = records.length;
 
     if (count >= config.governance.hard_limit) {
-      details.push(`${domain}: ${count} records (over hard limit of ${config.governance.hard_limit})`);
+      details.push(
+        `${domain}: ${count} records (over hard limit of ${config.governance.hard_limit})`,
+      );
       worstStatus = "fail";
     } else if (count >= config.governance.warn_entries) {
-      details.push(`${domain}: ${count} records (over warn threshold of ${config.governance.warn_entries})`);
+      details.push(
+        `${domain}: ${count} records (over warn threshold of ${config.governance.warn_entries})`,
+      );
       if (worstStatus !== "fail") worstStatus = "warn";
     } else if (count >= config.governance.max_entries) {
-      details.push(`${domain}: ${count} records (approaching limit of ${config.governance.max_entries})`);
+      details.push(
+        `${domain}: ${count} records (approaching limit of ${config.governance.max_entries})`,
+      );
       if (worstStatus !== "fail") worstStatus = "warn";
     }
   }
 
   if (details.length > 0) {
-    return { name: "governance", status: worstStatus, message: `${details.length} domain(s) over governance thresholds`, fixable: false, details };
+    return {
+      name: "governance",
+      status: worstStatus,
+      message: `${details.length} domain(s) over governance thresholds`,
+      fixable: false,
+      details,
+    };
   }
-  return { name: "governance", status: "pass", message: "All domains within governance limits", fixable: false, details: [] };
+  return {
+    name: "governance",
+    status: "pass",
+    message: "All domains within governance limits",
+    fixable: false,
+    details: [],
+  };
 }
 
 async function checkUpdateAvailable(): Promise<DoctorCheck> {
@@ -211,18 +342,40 @@ async function checkUpdateAvailable(): Promise<DoctorCheck> {
   const latest = getLatestVersion();
 
   if (latest === null) {
-    return { name: "update", status: "pass", message: `Version ${current} (unable to check registry)`, fixable: false, details: [] };
+    return {
+      name: "update",
+      status: "pass",
+      message: `Version ${current} (unable to check registry)`,
+      fixable: false,
+      details: [],
+    };
   }
 
   const cmp = compareSemver(current, latest);
   if (cmp >= 0) {
-    return { name: "update", status: "pass", message: `Version ${current} is up to date`, fixable: false, details: [] };
+    return {
+      name: "update",
+      status: "pass",
+      message: `Version ${current} is up to date`,
+      fixable: false,
+      details: [],
+    };
   }
 
-  return { name: "update", status: "warn", message: `Update available: ${current} → ${latest}`, fixable: false, details: [`Run \`mulch update\` to update`] };
+  return {
+    name: "update",
+    status: "warn",
+    message: `Update available: ${current} → ${latest}`,
+    fixable: false,
+    details: ["Run `mulch update` to update"],
+  };
 }
 
-async function applyFixes(checks: DoctorCheck[], config: MulchConfig, cwd?: string): Promise<string[]> {
+async function applyFixes(
+  checks: DoctorCheck[],
+  config: MulchConfig,
+  cwd?: string,
+): Promise<string[]> {
   const fixed: string[] = [];
 
   for (const check of checks) {
@@ -254,8 +407,14 @@ async function applyFixes(checks: DoctorCheck[], config: MulchConfig, cwd?: stri
               }
             }
             if (removed > 0) {
-              await fsWriteFile(filePath, valid.map((l) => l).join("\n") + (valid.length > 0 ? "\n" : ""), "utf-8");
-              fixed.push(`Removed ${removed} invalid JSON line(s) from ${domain}`);
+              await fsWriteFile(
+                filePath,
+                valid.map((l) => l).join("\n") + (valid.length > 0 ? "\n" : ""),
+                "utf-8",
+              );
+              fixed.push(
+                `Removed ${removed} invalid JSON line(s) from ${domain}`,
+              );
             }
           });
         }
@@ -352,7 +511,7 @@ export function registerDoctorCommand(program: Command): void {
         } else {
           console.log("Mulch Doctor");
           console.log(chalk.red(`  ✘ ${configCheck.message}`));
-          console.log(`\n0 passed, 0 warnings, 1 failed`);
+          console.log("\n0 passed, 0 warnings, 1 failed");
         }
         process.exitCode = 1;
         return;
@@ -391,14 +550,14 @@ export function registerDoctorCommand(program: Command): void {
       } else {
         console.log("Mulch Doctor");
         for (const check of checks) {
-          const icon = check.status === "pass"
-            ? chalk.green("✔")
-            : check.status === "warn"
-              ? chalk.yellow("⚠")
-              : chalk.red("✘");
-          const msg = check.status === "pass"
-            ? check.message
-            : `${check.message}`;
+          const icon =
+            check.status === "pass"
+              ? chalk.green("✔")
+              : check.status === "warn"
+                ? chalk.yellow("⚠")
+                : chalk.red("✘");
+          const msg =
+            check.status === "pass" ? check.message : `${check.message}`;
           console.log(`  ${icon} ${msg}`);
 
           // Print details for non-pass checks
@@ -408,7 +567,9 @@ export function registerDoctorCommand(program: Command): void {
             }
           }
         }
-        console.log(`\n${summary.pass} passed, ${summary.warn} warning(s), ${summary.fail} failed`);
+        console.log(
+          `\n${summary.pass} passed, ${summary.warn} warning(s), ${summary.fail} failed`,
+        );
 
         if (fixed.length > 0) {
           console.log(`\n${chalk.green("Fixed:")}`);

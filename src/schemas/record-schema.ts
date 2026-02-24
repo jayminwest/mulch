@@ -1,4 +1,7 @@
-const linkArray = { type: "array", items: { type: "string", pattern: "^([a-z0-9-]+:)?mx-[0-9a-f]{4,8}$" } } as const;
+const linkArray = {
+  type: "array",
+  items: { type: "string", pattern: "^([a-z0-9-]+:)?mx-[0-9a-f]{4,8}$" },
+} as const;
 
 export const recordSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -69,7 +72,13 @@ export const recordSchema = {
         supersedes: linkArray,
         outcomes: { type: "array", items: { $ref: "#/definitions/outcome" } },
       },
-      required: ["type", "name", "description", "classification", "recorded_at"],
+      required: [
+        "type",
+        "name",
+        "description",
+        "classification",
+        "recorded_at",
+      ],
       additionalProperties: false,
     },
     {
@@ -87,7 +96,13 @@ export const recordSchema = {
         supersedes: linkArray,
         outcomes: { type: "array", items: { $ref: "#/definitions/outcome" } },
       },
-      required: ["type", "description", "resolution", "classification", "recorded_at"],
+      required: [
+        "type",
+        "description",
+        "resolution",
+        "classification",
+        "recorded_at",
+      ],
       additionalProperties: false,
     },
     {
@@ -125,7 +140,13 @@ export const recordSchema = {
         supersedes: linkArray,
         outcomes: { type: "array", items: { $ref: "#/definitions/outcome" } },
       },
-      required: ["type", "name", "description", "classification", "recorded_at"],
+      required: [
+        "type",
+        "name",
+        "description",
+        "classification",
+        "recorded_at",
+      ],
       additionalProperties: false,
     },
     {
@@ -143,7 +164,13 @@ export const recordSchema = {
         supersedes: linkArray,
         outcomes: { type: "array", items: { $ref: "#/definitions/outcome" } },
       },
-      required: ["type", "name", "description", "classification", "recorded_at"],
+      required: [
+        "type",
+        "name",
+        "description",
+        "classification",
+        "recorded_at",
+      ],
       additionalProperties: false,
     },
   ],

@@ -1,33 +1,33 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { Command } from "commander";
-import { registerInitCommand } from "./commands/init.js";
-import { registerAddCommand } from "./commands/add.js";
-import { registerRecordCommand } from "./commands/record.js";
-import { registerEditCommand } from "./commands/edit.js";
-import { registerQueryCommand } from "./commands/query.js";
-import { registerSetupCommand } from "./commands/setup.js";
-import { registerPrimeCommand } from "./commands/prime.js";
-import { registerOnboardCommand } from "./commands/onboard.js";
-import { registerStatusCommand } from "./commands/status.js";
-import { registerValidateCommand } from "./commands/validate.js";
-import { registerPruneCommand } from "./commands/prune.js";
-import { registerSearchCommand } from "./commands/search.js";
-import { registerDoctorCommand } from "./commands/doctor.js";
-import { registerReadyCommand } from "./commands/ready.js";
-import { registerSyncCommand } from "./commands/sync.js";
-import { registerDeleteCommand } from "./commands/delete.js";
-import { registerLearnCommand } from "./commands/learn.js";
-import { registerCompactCommand } from "./commands/compact.js";
-import { registerUpdateCommand } from "./commands/update.js";
-import { registerDiffCommand } from "./commands/diff.js";
+import { registerAddCommand } from "./commands/add.ts";
+import { registerCompactCommand } from "./commands/compact.ts";
+import { registerDeleteCommand } from "./commands/delete.ts";
+import { registerDiffCommand } from "./commands/diff.ts";
+import { registerDoctorCommand } from "./commands/doctor.ts";
+import { registerEditCommand } from "./commands/edit.ts";
+import { registerInitCommand } from "./commands/init.ts";
+import { registerLearnCommand } from "./commands/learn.ts";
+import { registerOnboardCommand } from "./commands/onboard.ts";
+import { registerPrimeCommand } from "./commands/prime.ts";
+import { registerPruneCommand } from "./commands/prune.ts";
+import { registerQueryCommand } from "./commands/query.ts";
+import { registerReadyCommand } from "./commands/ready.ts";
+import { registerRecordCommand } from "./commands/record.ts";
+import { registerSearchCommand } from "./commands/search.ts";
+import { registerSetupCommand } from "./commands/setup.ts";
+import { registerStatusCommand } from "./commands/status.ts";
+import { registerSyncCommand } from "./commands/sync.ts";
+import { registerUpdateCommand } from "./commands/update.ts";
+import { registerValidateCommand } from "./commands/validate.ts";
 
 const program = new Command();
 
 program
   .name("mulch")
   .description("Let your agents grow 🌱")
-  .version("0.5.0")
+  .version("0.6.0")
   .option("--json", "output as structured JSON");
 
 registerInitCommand(program);

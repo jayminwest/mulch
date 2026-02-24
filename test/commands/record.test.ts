@@ -1,24 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { execSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Ajv from "ajv";
+import { processStdinRecords } from "../../src/commands/record.ts";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import { recordSchema } from "../../src/schemas/record-schema.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
-  readExpertiseFile,
   createExpertiseFile,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
-import _Ajv from "ajv";
-const Ajv = (_Ajv as unknown as { default: typeof _Ajv }).default ?? _Ajv;
-import { recordSchema } from "../../src/schemas/record-schema.js";
-import { processStdinRecords } from "../../src/commands/record.js";
+  readExpertiseFile,
+} from "../../src/utils/expertise.ts";
 
 describe("record command", () => {
   let tmpDir: string;
@@ -346,14 +345,30 @@ describe("record command", () => {
     const ajv = new Ajv();
     const validate = ajv.compile(recordSchema);
     const tags = ["tag1", "tag2"];
-    const base = { classification: "tactical", recorded_at: new Date().toISOString(), tags };
+    const base = {
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      tags,
+    };
 
-    expect(validate({ type: "convention", content: "test", ...base })).toBe(true);
-    expect(validate({ type: "pattern", name: "p", description: "d", ...base })).toBe(true);
-    expect(validate({ type: "failure", description: "d", resolution: "r", ...base })).toBe(true);
-    expect(validate({ type: "decision", title: "t", rationale: "r", ...base })).toBe(true);
-    expect(validate({ type: "reference", name: "r", description: "d", ...base })).toBe(true);
-    expect(validate({ type: "guide", name: "g", description: "d", ...base })).toBe(true);
+    expect(validate({ type: "convention", content: "test", ...base })).toBe(
+      true,
+    );
+    expect(
+      validate({ type: "pattern", name: "p", description: "d", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "failure", description: "d", resolution: "r", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "decision", title: "t", rationale: "r", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "reference", name: "r", description: "d", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "guide", name: "g", description: "d", ...base }),
+    ).toBe(true);
   });
 
   it("record with relates_to validates against schema", () => {
@@ -423,14 +438,30 @@ describe("record command", () => {
     const ajv = new Ajv();
     const validate = ajv.compile(recordSchema);
     const links = { relates_to: ["mx-abc123"], supersedes: ["mx-def456"] };
-    const base = { classification: "tactical", recorded_at: new Date().toISOString(), ...links };
+    const base = {
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      ...links,
+    };
 
-    expect(validate({ type: "convention", content: "test", ...base })).toBe(true);
-    expect(validate({ type: "pattern", name: "p", description: "d", ...base })).toBe(true);
-    expect(validate({ type: "failure", description: "d", resolution: "r", ...base })).toBe(true);
-    expect(validate({ type: "decision", title: "t", rationale: "r", ...base })).toBe(true);
-    expect(validate({ type: "reference", name: "r", description: "d", ...base })).toBe(true);
-    expect(validate({ type: "guide", name: "g", description: "d", ...base })).toBe(true);
+    expect(validate({ type: "convention", content: "test", ...base })).toBe(
+      true,
+    );
+    expect(
+      validate({ type: "pattern", name: "p", description: "d", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "failure", description: "d", resolution: "r", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "decision", title: "t", rationale: "r", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "reference", name: "r", description: "d", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "guide", name: "g", description: "d", ...base }),
+    ).toBe(true);
   });
 
   it("record with links is stored and read back correctly", async () => {
@@ -810,14 +841,30 @@ describe("record command", () => {
     const ajv = new Ajv();
     const validate = ajv.compile(recordSchema);
     const outcomes = [{ status: "success", duration: 100 }];
-    const base = { classification: "tactical", recorded_at: new Date().toISOString(), outcomes };
+    const base = {
+      classification: "tactical",
+      recorded_at: new Date().toISOString(),
+      outcomes,
+    };
 
-    expect(validate({ type: "convention", content: "test", ...base })).toBe(true);
-    expect(validate({ type: "pattern", name: "p", description: "d", ...base })).toBe(true);
-    expect(validate({ type: "failure", description: "d", resolution: "r", ...base })).toBe(true);
-    expect(validate({ type: "decision", title: "t", rationale: "r", ...base })).toBe(true);
-    expect(validate({ type: "reference", name: "r", description: "d", ...base })).toBe(true);
-    expect(validate({ type: "guide", name: "g", description: "d", ...base })).toBe(true);
+    expect(validate({ type: "convention", content: "test", ...base })).toBe(
+      true,
+    );
+    expect(
+      validate({ type: "pattern", name: "p", description: "d", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "failure", description: "d", resolution: "r", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "decision", title: "t", rationale: "r", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "reference", name: "r", description: "d", ...base }),
+    ).toBe(true);
+    expect(
+      validate({ type: "guide", name: "g", description: "d", ...base }),
+    ).toBe(true);
   });
 
   it("record with outcomes is stored and read back correctly", async () => {
@@ -876,7 +923,14 @@ describe("processStdinRecords", () => {
       classification: "foundational",
     };
 
-    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
@@ -907,7 +961,14 @@ describe("processStdinRecords", () => {
       },
     ];
 
-    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(records), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(records),
+      tmpDir,
+    );
 
     expect(result.created).toBe(2);
     expect(result.updated).toBe(0);
@@ -936,7 +997,14 @@ describe("processStdinRecords", () => {
       },
     ];
 
-    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(records), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(records),
+      tmpDir,
+    );
 
     expect(result.created).toBe(1); // Only valid record created
     expect(result.errors).toHaveLength(1);
@@ -962,7 +1030,14 @@ describe("processStdinRecords", () => {
     await appendRecord(filePath, record as ExpertiseRecord);
 
     // Try to add same record via stdin
-    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(0);
@@ -995,7 +1070,14 @@ describe("processStdinRecords", () => {
       recorded_at: "2025-01-02T00:00:00.000Z",
     };
 
-    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(updatedPattern), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(updatedPattern),
+      tmpDir,
+    );
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(1);
@@ -1003,7 +1085,9 @@ describe("processStdinRecords", () => {
 
     const records = await readExpertiseFile(filePath);
     expect(records).toHaveLength(1);
-    expect((records[0] as { description: string }).description).toBe("Updated description");
+    expect((records[0] as { description: string }).description).toBe(
+      "Updated description",
+    );
     expect(records[0].classification).toBe("foundational");
   });
 
@@ -1019,7 +1103,14 @@ describe("processStdinRecords", () => {
     };
 
     const before = new Date();
-    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
     const after = new Date();
 
     expect(result.created).toBe(1);
@@ -1041,7 +1132,14 @@ describe("processStdinRecords", () => {
       // no classification
     };
 
-    const result = await processStdinRecords("testing", false, false, false, JSON.stringify(record), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
 
     expect(result.created).toBe(1);
     expect(result.errors).toHaveLength(0);
@@ -1059,7 +1157,14 @@ describe("processStdinRecords", () => {
     };
 
     await expect(
-      processStdinRecords("nonexistent", false, false, false, JSON.stringify(record), tmpDir),
+      processStdinRecords(
+        "nonexistent",
+        false,
+        false,
+        false,
+        JSON.stringify(record),
+        tmpDir,
+      ),
     ).rejects.toThrow('Domain "nonexistent" not found');
   });
 
@@ -1068,7 +1173,14 @@ describe("processStdinRecords", () => {
     await createExpertiseFile(filePath);
 
     await expect(
-      processStdinRecords("testing", false, false, false, "{ invalid json }", tmpDir),
+      processStdinRecords(
+        "testing",
+        false,
+        false,
+        false,
+        "{ invalid json }",
+        tmpDir,
+      ),
     ).rejects.toThrow("Failed to parse JSON from stdin");
   });
 
@@ -1085,7 +1197,14 @@ describe("processStdinRecords", () => {
 
     await appendRecord(filePath, record as ExpertiseRecord);
 
-    const result = await processStdinRecords("testing", false, true, false, JSON.stringify(record), tmpDir); // force=true
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      true,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    ); // force=true
 
     expect(result.created).toBe(1);
     expect(result.skipped).toBe(0);
@@ -1104,7 +1223,14 @@ describe("processStdinRecords", () => {
       classification: "foundational",
     };
 
-    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(record), tmpDir); // dryRun=true
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      true,
+      JSON.stringify(record),
+      tmpDir,
+    ); // dryRun=true
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
@@ -1137,7 +1263,14 @@ describe("processStdinRecords", () => {
       classification: "foundational",
     };
 
-    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(updatedPattern), tmpDir); // dryRun=true
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      true,
+      JSON.stringify(updatedPattern),
+      tmpDir,
+    ); // dryRun=true
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(1);
@@ -1146,7 +1279,9 @@ describe("processStdinRecords", () => {
     // Verify original record was not modified
     const records = await readExpertiseFile(filePath);
     expect(records).toHaveLength(1);
-    expect((records[0] as { description: string }).description).toBe("Original description");
+    expect((records[0] as { description: string }).description).toBe(
+      "Original description",
+    );
   });
 
   it("dry-run shows what would be skipped without writing", async () => {
@@ -1162,7 +1297,14 @@ describe("processStdinRecords", () => {
 
     await appendRecord(filePath, record as ExpertiseRecord);
 
-    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(record), tmpDir); // dryRun=true
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      true,
+      JSON.stringify(record),
+      tmpDir,
+    ); // dryRun=true
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(0);
@@ -1191,7 +1333,14 @@ describe("processStdinRecords", () => {
       },
     ];
 
-    const result = await processStdinRecords("testing", false, false, true, JSON.stringify(records), tmpDir); // dryRun=true
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      true,
+      JSON.stringify(records),
+      tmpDir,
+    ); // dryRun=true
 
     expect(result.created).toBe(2);
     expect(result.updated).toBe(0);
@@ -1205,7 +1354,7 @@ describe("processStdinRecords", () => {
 
 describe("record command help text", () => {
   it("--help displays required fields per record type", () => {
-    const helpOutput = execSync("node dist/cli.js record --help", {
+    const helpOutput = execSync("bun src/cli.ts record --help", {
       encoding: "utf-8",
       timeout: 5000,
     });
@@ -1231,7 +1380,7 @@ describe("record command help text", () => {
   });
 
   it("--help displays batch recording examples", () => {
-    const helpOutput = execSync("node dist/cli.js record --help", {
+    const helpOutput = execSync("bun src/cli.ts record --help", {
       encoding: "utf-8",
       timeout: 5000,
     });
@@ -1271,7 +1420,14 @@ describe("batch mode (--batch)", () => {
     const batchFile = join(tmpDir, "batch.json");
     await writeFile(batchFile, JSON.stringify(record));
 
-    const result = await processStdinRecords("testing", false, false, false, await readFile(batchFile, "utf-8"), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      await readFile(batchFile, "utf-8"),
+      tmpDir,
+    );
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
@@ -1281,7 +1437,9 @@ describe("batch mode (--batch)", () => {
     const records = await readExpertiseFile(filePath);
     expect(records).toHaveLength(1);
     expect(records[0].type).toBe("convention");
-    expect((records[0] as { content: string }).content).toBe("Use vitest for testing");
+    expect((records[0] as { content: string }).content).toBe(
+      "Use vitest for testing",
+    );
   });
 
   it("processes array of JSON objects from batch file", async () => {
@@ -1305,7 +1463,14 @@ describe("batch mode (--batch)", () => {
     const batchFile = join(tmpDir, "batch.json");
     await writeFile(batchFile, JSON.stringify(records));
 
-    const result = await processStdinRecords("testing", false, false, false, await readFile(batchFile, "utf-8"), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      await readFile(batchFile, "utf-8"),
+      tmpDir,
+    );
 
     expect(result.created).toBe(2);
     expect(result.updated).toBe(0);
@@ -1329,7 +1494,14 @@ describe("batch mode (--batch)", () => {
     const batchFile = join(tmpDir, "batch.json");
     await writeFile(batchFile, JSON.stringify(record));
 
-    const result = await processStdinRecords("testing", false, false, true, await readFile(batchFile, "utf-8"), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      true,
+      await readFile(batchFile, "utf-8"),
+      tmpDir,
+    );
 
     expect(result.created).toBe(1);
     expect(result.updated).toBe(0);
@@ -1359,7 +1531,14 @@ describe("batch mode (--batch)", () => {
     const batchFile = join(tmpDir, "batch.json");
     await writeFile(batchFile, JSON.stringify(record));
 
-    const result = await processStdinRecords("testing", false, false, false, await readFile(batchFile, "utf-8"), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      await readFile(batchFile, "utf-8"),
+      tmpDir,
+    );
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(0);
@@ -1395,7 +1574,14 @@ describe("batch mode (--batch)", () => {
     const batchFile = join(tmpDir, "batch.json");
     await writeFile(batchFile, JSON.stringify(updatedPattern));
 
-    const result = await processStdinRecords("testing", false, false, false, await readFile(batchFile, "utf-8"), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      await readFile(batchFile, "utf-8"),
+      tmpDir,
+    );
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(1);
@@ -1403,7 +1589,9 @@ describe("batch mode (--batch)", () => {
 
     const records = await readExpertiseFile(filePath);
     expect(records).toHaveLength(1);
-    expect((records[0] as { description: string }).description).toBe("Updated description");
+    expect((records[0] as { description: string }).description).toBe(
+      "Updated description",
+    );
     expect(records[0].classification).toBe("foundational");
   });
 
@@ -1428,7 +1616,14 @@ describe("batch mode (--batch)", () => {
     const batchFile = join(tmpDir, "batch.json");
     await writeFile(batchFile, JSON.stringify(records));
 
-    const result = await processStdinRecords("testing", false, false, false, await readFile(batchFile, "utf-8"), tmpDir);
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      await readFile(batchFile, "utf-8"),
+      tmpDir,
+    );
 
     expect(result.created).toBe(1); // Only valid record created
     expect(result.errors).toHaveLength(1);
@@ -1455,7 +1650,14 @@ describe("batch mode (--batch)", () => {
     const batchFile = join(tmpDir, "batch.json");
     await writeFile(batchFile, JSON.stringify(record));
 
-    const result = await processStdinRecords("testing", false, true, false, await readFile(batchFile, "utf-8"), tmpDir); // force=true
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      true,
+      false,
+      await readFile(batchFile, "utf-8"),
+      tmpDir,
+    ); // force=true
 
     expect(result.created).toBe(1);
     expect(result.skipped).toBe(0);

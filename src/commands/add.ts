@@ -1,9 +1,14 @@
 import { existsSync } from "node:fs";
-import { Command } from "commander";
 import chalk from "chalk";
-import { getMulchDir, readConfig, writeConfig, getExpertisePath } from "../utils/config.js";
-import { createExpertiseFile } from "../utils/expertise.js";
-import { outputJson, outputJsonError } from "../utils/json-output.js";
+import type { Command } from "commander";
+import {
+  getExpertisePath,
+  getMulchDir,
+  readConfig,
+  writeConfig,
+} from "../utils/config.ts";
+import { createExpertiseFile } from "../utils/expertise.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
 
 export function registerAddCommand(program: Command): void {
   program
@@ -16,7 +21,10 @@ export function registerAddCommand(program: Command): void {
 
       if (!existsSync(mulchDir)) {
         if (jsonMode) {
-          outputJsonError("add", "No .mulch/ directory found. Run `mulch init` first.");
+          outputJsonError(
+            "add",
+            "No .mulch/ directory found. Run `mulch init` first.",
+          );
         } else {
           console.error(
             chalk.red("No .mulch/ directory found. Run `mulch init` first."),
@@ -32,9 +40,7 @@ export function registerAddCommand(program: Command): void {
         if (jsonMode) {
           outputJsonError("add", `Domain "${domain}" already exists.`);
         } else {
-          console.error(
-            chalk.red(`Domain "${domain}" already exists.`),
-          );
+          console.error(chalk.red(`Domain "${domain}" already exists.`));
         }
         process.exitCode = 1;
         return;

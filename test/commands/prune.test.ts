@@ -1,20 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
+  getExpertisePath,
   initMulchDir,
   writeConfig,
-  getExpertisePath,
-} from "../../src/utils/config.js";
+} from "../../src/utils/config.ts";
 import {
   appendRecord,
-  readExpertiseFile,
   createExpertiseFile,
+  readExpertiseFile,
   writeExpertiseFile,
-} from "../../src/utils/expertise.js";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.js";
-import type { ExpertiseRecord } from "../../src/schemas/record.js";
+} from "../../src/utils/expertise.ts";
 
 function daysAgo(days: number): string {
   const date = new Date();
@@ -63,7 +63,9 @@ describe("prune command", () => {
       const readBack = await readExpertiseFile(filePath);
       expect(readBack).toHaveLength(2);
       expect((readBack[0] as { content: string }).content).toBe("First record");
-      expect((readBack[1] as { content: string }).content).toBe("Second record");
+      expect((readBack[1] as { content: string }).content).toBe(
+        "Second record",
+      );
     });
 
     it("writes empty array results in empty file", async () => {
