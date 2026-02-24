@@ -593,7 +593,7 @@ describe("record command", () => {
       classification: "tactical",
       recorded_at: new Date().toISOString(),
       evidence: {
-        bead: "beads-abc123",
+        bead: "seeds-abc123",
       },
     };
 
@@ -611,14 +611,14 @@ describe("record command", () => {
       classification: "tactical",
       recorded_at: new Date().toISOString(),
       evidence: {
-        bead: "beads-xyz789",
+        bead: "seeds-xyz789",
       },
     };
     await appendRecord(filePath, record);
 
     const records = await readExpertiseFile(filePath);
     expect(records).toHaveLength(1);
-    expect(records[0].evidence?.bead).toBe("beads-xyz789");
+    expect(records[0].evidence?.bead).toBe("seeds-xyz789");
   });
 
   it("record with evidence.bead and other evidence fields validates", () => {
@@ -634,7 +634,7 @@ describe("record command", () => {
         commit: "abc123def",
         issue: "#42",
         file: "src/test.ts",
-        bead: "beads-999",
+        bead: "seeds-999",
       },
     };
 
@@ -652,7 +652,7 @@ describe("record command", () => {
       classification: "tactical",
       recorded_at: new Date().toISOString(),
       evidence: {
-        bead: "beads-solo",
+        bead: "seeds-solo",
       },
     };
 

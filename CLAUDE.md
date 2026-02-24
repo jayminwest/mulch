@@ -58,17 +58,6 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 - **Test location**: `test/commands/` mirrors `src/commands/`, `test/utils/` mirrors `src/utils/`
 - Use `process.exitCode = 1` instead of `process.exit(1)` for testability
 
-## Issue Tracking
-
-This project uses **bd (beads)** for issue tracking.
-Run `bd prime` for workflow context.
-
-**Quick reference:**
-- `bd ready` - Find unblocked work
-- `bd create "Title" --type task --priority 2` - Create issue
-- `bd close <id>` - Complete work
-- `bd sync` - Sync with git (run at session end)
-
 <!-- mulch:start -->
 ## Project Expertise (Mulch)
 
@@ -109,3 +98,29 @@ Mulch write commands use file locking and atomic writes — multiple agents can 
    mulch sync
    ```
 <!-- mulch:end -->
+
+<!-- seeds:start -->
+## Issue Tracking (Seeds)
+<!-- seeds-onboard-v:1 -->
+
+This project uses [Seeds](https://github.com/jayminwest/seeds) for git-native issue tracking.
+
+**At the start of every session**, run:
+```
+sd prime
+```
+
+This injects session context: rules, command reference, and workflows.
+
+**Quick reference:**
+- `sd ready` — Find unblocked work
+- `sd create --title "..." --type task --priority 2` — Create issue
+- `sd update <id> --status in_progress` — Claim work
+- `sd close <id>` — Complete work
+- `sd sync` — Sync with git (run before pushing)
+
+### Before You Finish
+1. Close completed issues: `sd close <id>`
+2. File issues for remaining work: `sd create --title "..."`
+3. Sync and push: `sd sync && git push`
+<!-- seeds:end -->

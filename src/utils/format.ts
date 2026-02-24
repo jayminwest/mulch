@@ -321,7 +321,7 @@ export function formatPrimeOutput(
   lines.push("");
   lines.push("```bash");
   lines.push('mulch record <domain> --type pattern --name "..." --description "..." --evidence-commit abc123');
-  lines.push('mulch record <domain> --type decision --title "..." --rationale "..." --evidence-bead beads-xxx');
+  lines.push('mulch record <domain> --type decision --title "..." --rationale "..." --evidence-bead seeds-xxx');
   lines.push("```");
   lines.push("");
   lines.push("**Batch record** multiple records at once:");
