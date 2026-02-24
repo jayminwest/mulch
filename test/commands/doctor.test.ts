@@ -149,10 +149,16 @@ describe("doctor health checks", () => {
   });
 
   it("detects governance threshold violations", async () => {
-    const config = { ...DEFAULT_CONFIG, domains: ["testing"] };
-    config.governance.warn_entries = 5;
-    config.governance.max_entries = 10;
-    config.governance.hard_limit = 15;
+    const config = {
+      ...DEFAULT_CONFIG,
+      domains: ["testing"],
+      governance: {
+        ...DEFAULT_CONFIG.governance,
+        warn_entries: 5,
+        max_entries: 10,
+        hard_limit: 15,
+      },
+    };
     await writeConfig(config, tmpDir);
 
     const filePath = getExpertisePath("testing", tmpDir);
