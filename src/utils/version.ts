@@ -17,7 +17,7 @@ export function getCurrentVersion(): string {
  */
 export function getLatestVersion(): string | null {
   try {
-    const result = execSync("npm view mulch-cli version", {
+    const result = execSync("npm view @os-eco/mulch-cli version", {
       encoding: "utf-8",
       timeout: 10000,
       stdio: ["pipe", "pipe", "pipe"],

@@ -21,6 +21,7 @@ import { registerSetupCommand } from "./commands/setup.ts";
 import { registerStatusCommand } from "./commands/status.ts";
 import { registerSyncCommand } from "./commands/sync.ts";
 import { registerUpdateCommand } from "./commands/update.ts";
+import { registerUpgradeCommand } from "./commands/upgrade.ts";
 import { registerValidateCommand } from "./commands/validate.ts";
 import { accent, brand, muted, setQuiet } from "./utils/palette.ts";
 
@@ -139,5 +140,6 @@ registerLearnCommand(program);
 registerCompactCommand(program);
 registerDiffCommand(program);
 registerUpdateCommand(program);
+registerUpgradeCommand(program);
 
 program.parse();
