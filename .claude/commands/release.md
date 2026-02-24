@@ -1,5 +1,7 @@
 Prepare a release by updating docs and bumping the version.
 
+User specified: $ARGUMENTS
+
 ## Steps
 
 ### 1. Analyze changes since last release
@@ -11,8 +13,8 @@ Prepare a release by updating docs and bumping the version.
 
 ### 2. Determine version bump
 
-- If the user specified `major`, `minor`, or `patch`, use that
-- Default: `patch` if not specified
+- If the user specified `major`, `minor`, or `patch` above, use that
+- Default: `patch` if nothing was specified
 - Current version is in `package.json` (`"version"` field) and `src/cli.ts` (`.version()` call)
 
 ### 3. Bump version in both locations
