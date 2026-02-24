@@ -11,7 +11,11 @@ import {
   wrapInMarkers,
 } from "../utils/markers.js";
 
+export const ONBOARD_VERSION = 1;
+export const VERSION_MARKER = `<!-- mulch-onboard-v:${String(ONBOARD_VERSION)} -->`;
+
 const SNIPPET_DEFAULT = `## Project Expertise (Mulch)
+${VERSION_MARKER}
 
 This project uses [Mulch](https://github.com/jayminwest/mulch) for structured expertise management.
 
@@ -111,17 +115,9 @@ function replaceLegacySnippet(content: string, newSection: string): string {
   return before + newSection + after;
 }
 
-function isSnippetCurrent(content: string, currentSnippet: string): boolean {
-  const startIdx = content.indexOf(MARKER_START);
-  const endIdx = content.indexOf(MARKER_END);
-  if (startIdx === -1 || endIdx === -1) return false;
-
-  const existingInner = content.substring(
-    startIdx + MARKER_START.length + 1, // +1 for newline after marker
-    endIdx,
-  );
-
-  return existingInner.trim() === currentSnippet.trim();
+function isSnippetCurrent(content: string): boolean {
+  if (!hasMarkerSection(content)) return false;
+  return content.includes(VERSION_MARKER);
 }
 
 async function findSnippetLocations(cwd: string): Promise<OnboardTarget[]> {
@@ -210,7 +206,7 @@ export async function runOnboard(options: {
     } else {
       const content = await readFile(target.path, "utf-8");
       if (hasMarkerSection(content)) {
-        action = isSnippetCurrent(content, snippet) ? "up_to_date" : "outdated";
+        action = isSnippetCurrent(content) ? "up_to_date" : "outdated";
       } else if (hasLegacySnippet(content)) {
         action = "legacy";
       } else {
@@ -265,7 +261,7 @@ export async function runOnboard(options: {
 
     if (hasMarkerSection(content)) {
       // Check if current
-      if (isSnippetCurrent(content, snippet)) {
+      if (isSnippetCurrent(content)) {
         action = "up_to_date";
       } else {
         // Replace marker section

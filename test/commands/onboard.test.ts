@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { runOnboard } from "../../src/commands/onboard.js";
+import { runOnboard, VERSION_MARKER } from "../../src/commands/onboard.js";
 import { MARKER_START, MARKER_END } from "../../src/utils/markers.js";
 
 describe("onboard command", () => {
@@ -257,6 +257,68 @@ describe("onboard command", () => {
         expect(content).toContain("## Other Section");
         expect(content).toContain("More content.");
         expect(content).toContain("mulch prime");
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+  });
+
+  // ── Version marker ──────────────────────────────────────
+
+  describe("version marker", () => {
+    it("includes version marker in created file", async () => {
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await runOnboard({ cwd: tmpDir });
+
+        const content = await readFile(join(tmpDir, "AGENTS.md"), "utf-8");
+        expect(content).toContain(VERSION_MARKER);
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it("includes version marker in stdout output", async () => {
+      const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      try {
+        await runOnboard({ stdout: true, cwd: tmpDir });
+
+        const output = (stdoutSpy.mock.calls[0] as string[])[0];
+        expect(output).toContain(VERSION_MARKER);
+      } finally {
+        stdoutSpy.mockRestore();
+      }
+    });
+
+    it("updates outdated section when version changes", async () => {
+      const oldContent = `# Project\n\n${MARKER_START}\n## Project Expertise (Mulch)\n<!-- mulch-onboard-v:0 -->\nold content\n${MARKER_END}\n`;
+      await writeFile(join(tmpDir, "CLAUDE.md"), oldContent, "utf-8");
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await runOnboard({ cwd: tmpDir });
+
+        const content = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
+        expect(content).toContain("# Project");
+        expect(content).toContain(VERSION_MARKER);
+        expect(content).not.toContain("mulch-onboard-v:0");
+        expect(content).not.toContain("old content");
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it("--check reports outdated for old version marker", async () => {
+      const oldContent = `${MARKER_START}\n## Project Expertise (Mulch)\n<!-- mulch-onboard-v:0 -->\nold\n${MARKER_END}`;
+      await writeFile(join(tmpDir, "AGENTS.md"), oldContent, "utf-8");
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await runOnboard({ cwd: tmpDir, check: true });
+
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining("outdated"),
+        );
       } finally {
         consoleSpy.mockRestore();
       }
