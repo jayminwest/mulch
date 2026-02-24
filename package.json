@@ -1,13 +1,17 @@
 {
-  "name": "mulch-cli",
+  "name": "@os-eco/mulch-cli",
   "version": "0.6.0",
   "description": "Let your agents grow 🌱 — structured expertise files that accumulate over time, live in git, work with any agent",
   "type": "module",
   "bin": {
-    "mulch": "src/cli.ts"
+    "mulch": "src/cli.ts",
+    "ml": "src/cli.ts"
   },
   "main": "src/index.ts",
   "files": ["src"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "bun test",
     "lint": "bunx biome check .",

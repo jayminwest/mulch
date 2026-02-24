@@ -12,12 +12,14 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       - run: bun install
@@ -29,24 +31,43 @@ jobs:
         id: version-check
         run: |
           LOCAL_VERSION=$(node -p "require('./package.json').version")
-          NPM_VERSION=$(npm view mulch-cli version 2>/dev/null || echo "0.0.0")
+          NPM_VERSION=$(npm view @os-eco/mulch-cli version 2>/dev/null || echo "0.0.0")
           if [ "$LOCAL_VERSION" = "$NPM_VERSION" ]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "Version $LOCAL_VERSION already published, skipping."
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "version=$LOCAL_VERSION" >> "$GITHUB_OUTPUT"
             echo "Publishing $LOCAL_VERSION (npm has $NPM_VERSION)."
+          fi
+
+      - name: Verify version sync
+        if: steps.version-check.outputs.publish == 'true'
+        run: |
+          PKG_VERSION="${{ steps.version-check.outputs.version }}"
+          SRC_VERSION=$(grep -oP 'const VERSION = "\K[^"]+' src/cli.ts)
+          if [ "$PKG_VERSION" != "$SRC_VERSION" ]; then
+            echo "::error::Version mismatch! package.json=$PKG_VERSION src/cli.ts=$SRC_VERSION"
+            exit 1
           fi
 
       - name: Publish to npm
         if: steps.version-check.outputs.publish == 'true'
-        run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
 
       - name: Tag release
         if: steps.version-check.outputs.publish == 'true'
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION="${{ steps.version-check.outputs.version }}"
           git tag "v$VERSION"
           git push origin "v$VERSION"
+
+      - name: Create GitHub release
+        if: steps.version-check.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version-check.outputs.version }}"
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --generate-notes
