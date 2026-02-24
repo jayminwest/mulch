@@ -14,7 +14,7 @@ bun run typecheck     # tsc --noEmit
 
 ## Architecture
 
-Mulch is a passive CLI tool (`mulch-cli`) that manages structured expertise files for coding agents. It has no LLM dependency — agents call `mulch record` / `mulch query`, and Mulch handles storage and retrieval. Bun is the runtime — source `.ts` files are executed directly with no build step.
+Mulch is a passive CLI tool (`@os-eco/mulch-cli`) that manages structured expertise files for coding agents. It has no LLM dependency — agents call `mulch record` / `mulch query`, and Mulch handles storage and retrieval. Bun is the runtime — source `.ts` files are executed directly with no build step.
 
 ### Storage Model
 

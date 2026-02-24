@@ -1,6 +1,6 @@
 # Mulch — Let your agents grow 🌱
 
-[![npm version](https://img.shields.io/npm/v/mulch-cli)](https://www.npmjs.com/package/mulch-cli)
+[![npm version](https://img.shields.io/npm/v/@os-eco/mulch-cli)](https://www.npmjs.com/package/@os-eco/mulch-cli)
 [![CI](https://img.shields.io/github/actions/workflow/status/jayminwest/mulch/ci.yml?branch=main)](https://github.com/jayminwest/mulch/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![bun](https://img.shields.io/badge/runtime-bun-f472b6)](https://bun.sh)
@@ -14,13 +14,13 @@ Agents start every session from zero. The pattern your agent discovered yesterda
 ## Install
 
 ```bash
-npm install -g mulch-cli
+npm install -g @os-eco/mulch-cli
 ```
 
 Or use directly with npx — no install required:
 
 ```bash
-npx mulch-cli <command>
+npx @os-eco/mulch-cli <command>
 ```
 
 ### Development
@@ -217,7 +217,7 @@ import {
   searchExpertise,   // Search records across domains
   queryDomain,       // Query all records for a domain
   editRecord,        // Edit an existing record by ID
-} from "mulch-cli";
+} from "@os-eco/mulch-cli";
 
 // Low-level utilities
 import {
@@ -230,7 +230,7 @@ import {
   findDuplicate,
   generateRecordId,
   recordSchema,
-} from "mulch-cli";
+} from "@os-eco/mulch-cli";
 ```
 
 Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `ScoredRecord`, `Outcome`, `RecordOptions`, `RecordResult`, `SearchOptions`, `SearchResult`, `QueryOptions`, `EditOptions`, `RecordUpdates`, etc.) are also exported.

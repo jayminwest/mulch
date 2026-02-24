@@ -9,8 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2026-02-24
 
+### Added
+- Branding system (`src/utils/palette.ts`) — brand color (brown/soil), accent (amber for IDs), muted (stone gray), status icons, and message formatters (`printSuccess`, `printError`, `printWarning`)
+- `--quiet` / `-q` global option to suppress non-error output
+- `-v` shorthand for `--version`
+- `--version --json` outputs structured JSON (`name`, `version`, `runtime`, `platform`)
+- `VERSION` constant exported from `src/cli.ts` for programmatic access
+- Custom help screen formatting with branded colors and column layout
+- `ml` binary alias for `mulch`
+- Release slash command (`.claude/commands/release.md`)
+
 ### Changed
+- **BREAKING**: Package renamed from `mulch-cli` to `@os-eco/mulch-cli` (scoped under `@os-eco` npm org)
 - **BREAKING**: Switched runtime from Node.js to Bun — `bun` is now required
+- All commands updated to use shared palette utilities instead of inline chalk calls
 - Replaced vitest with `bun:test` for all 675 tests across 32 files
 - Replaced ESLint/Prettier with Biome for linting and formatting
 - Source `.ts` files shipped directly (no build step needed)
@@ -18,8 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simplified Ajv imports — Bun handles ESM/CJS interop natively (removed `_Ajv.default ?? _Ajv` shim)
 - Simplified `src/utils/version.ts` — uses `import.meta.dir` instead of `fileURLToPath`/`dirname`
 - CI workflows (`ci.yml`, `publish.yml`) now use `oven-sh/setup-bun@v2`
+- Publish workflow updated for scoped package with provenance signing
 - Onboard snippet now includes version marker (`mulch-onboard-v:1`) for staleness detection
 - Bumped `ajv` from 8.17.1 to 8.18.0
+
+### Fixed
+- Test pollution from shallow copy of `DEFAULT_CONFIG.governance` — now deep-cloned
 
 ### Removed
 - `dist/` build output (Bun runs `.ts` directly)
