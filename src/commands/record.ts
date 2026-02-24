@@ -19,6 +19,7 @@ import {
 } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { brand, isQuiet } from "../utils/palette.ts";
 
 /**
  * Process records from stdin (JSON single object or array)
@@ -302,47 +303,50 @@ Batch recording examples:
               if (dryRun) {
                 const total = result.created + result.updated;
                 if (total > 0 || result.skipped > 0) {
-                  console.log(
-                    chalk.green(
-                      `✓ Dry-run complete. Would process ${total} record(s) in ${domain}:`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      `${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
+                    );
                   if (result.created > 0) {
-                    console.log(chalk.dim(`  Create: ${result.created}`));
+                    if (!isQuiet())
+                      console.log(chalk.dim(`  Create: ${result.created}`));
                   }
                   if (result.updated > 0) {
-                    console.log(chalk.dim(`  Update: ${result.updated}`));
+                    if (!isQuiet())
+                      console.log(chalk.dim(`  Update: ${result.updated}`));
                   }
                   if (result.skipped > 0) {
-                    console.log(chalk.dim(`  Skip: ${result.skipped}`));
+                    if (!isQuiet())
+                      console.log(chalk.dim(`  Skip: ${result.skipped}`));
                   }
-                  console.log(
-                    chalk.dim("  Run without --dry-run to apply changes."),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      chalk.dim("  Run without --dry-run to apply changes."),
+                    );
                 } else {
-                  console.log(chalk.yellow("No records would be processed."));
+                  if (!isQuiet())
+                    console.log(chalk.yellow("No records would be processed."));
                 }
               } else {
                 if (result.created > 0) {
-                  console.log(
-                    chalk.green(
-                      `✔ Created ${result.created} record(s) in ${domain}`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      `${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
+                    );
                 }
                 if (result.updated > 0) {
-                  console.log(
-                    chalk.green(
-                      `✔ Updated ${result.updated} record(s) in ${domain}`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      `${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
+                    );
                 }
                 if (result.skipped > 0) {
-                  console.log(
-                    chalk.yellow(
-                      `Skipped ${result.skipped} duplicate(s) in ${domain}`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      chalk.yellow(
+                        `Skipped ${result.skipped} duplicate(s) in ${domain}`,
+                      ),
+                    );
                 }
               }
             }
@@ -414,47 +418,50 @@ Batch recording examples:
               if (dryRun) {
                 const total = result.created + result.updated;
                 if (total > 0 || result.skipped > 0) {
-                  console.log(
-                    chalk.green(
-                      `✓ Dry-run complete. Would process ${total} record(s) in ${domain}:`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      `${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
+                    );
                   if (result.created > 0) {
-                    console.log(chalk.dim(`  Create: ${result.created}`));
+                    if (!isQuiet())
+                      console.log(chalk.dim(`  Create: ${result.created}`));
                   }
                   if (result.updated > 0) {
-                    console.log(chalk.dim(`  Update: ${result.updated}`));
+                    if (!isQuiet())
+                      console.log(chalk.dim(`  Update: ${result.updated}`));
                   }
                   if (result.skipped > 0) {
-                    console.log(chalk.dim(`  Skip: ${result.skipped}`));
+                    if (!isQuiet())
+                      console.log(chalk.dim(`  Skip: ${result.skipped}`));
                   }
-                  console.log(
-                    chalk.dim("  Run without --dry-run to apply changes."),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      chalk.dim("  Run without --dry-run to apply changes."),
+                    );
                 } else {
-                  console.log(chalk.yellow("No records would be processed."));
+                  if (!isQuiet())
+                    console.log(chalk.yellow("No records would be processed."));
                 }
               } else {
                 if (result.created > 0) {
-                  console.log(
-                    chalk.green(
-                      `✔ Created ${result.created} record(s) in ${domain}`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      `${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
+                    );
                 }
                 if (result.updated > 0) {
-                  console.log(
-                    chalk.green(
-                      `✔ Updated ${result.updated} record(s) in ${domain}`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      `${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
+                    );
                 }
                 if (result.skipped > 0) {
-                  console.log(
-                    chalk.yellow(
-                      `Skipped ${result.skipped} duplicate(s) in ${domain}`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      chalk.yellow(
+                        `Skipped ${result.skipped} duplicate(s) in ${domain}`,
+                      ),
+                    );
                 }
               }
             }
@@ -862,25 +869,27 @@ Batch recording examples:
             });
           } else {
             if (action === "created") {
-              console.log(
-                chalk.green(
-                  `✓ Dry-run: Would create ${recordType} in ${domain}`,
-                ),
-              );
+              if (!isQuiet())
+                console.log(
+                  `${brand("✓")} ${brand(`Dry-run: Would create ${recordType} in ${domain}`)}`,
+                );
             } else if (action === "updated") {
-              console.log(
-                chalk.green(
-                  `✓ Dry-run: Would update existing ${recordType} in ${domain}`,
-                ),
-              );
+              if (!isQuiet())
+                console.log(
+                  `${brand("✓")} ${brand(`Dry-run: Would update existing ${recordType} in ${domain}`)}`,
+                );
             } else {
-              console.log(
-                chalk.yellow(
-                  `Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`,
-                ),
-              );
+              if (!isQuiet())
+                console.log(
+                  chalk.yellow(
+                    `Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`,
+                  ),
+                );
             }
-            console.log(chalk.dim("  Run without --dry-run to apply changes."));
+            if (!isQuiet())
+              console.log(
+                chalk.dim("  Run without --dry-run to apply changes."),
+              );
           }
         } else {
           // Normal mode: write with file locking
@@ -910,11 +919,10 @@ Batch recording examples:
                     record,
                   });
                 } else {
-                  console.log(
-                    chalk.green(
-                      `\u2714 Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      `${brand("✓")} ${brand(`Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`)}`,
+                    );
                 }
               } else {
                 // Exact match: skip
@@ -928,11 +936,12 @@ Batch recording examples:
                     index: dup.index + 1,
                   });
                 } else {
-                  console.log(
-                    chalk.yellow(
-                      `Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
-                    ),
-                  );
+                  if (!isQuiet())
+                    console.log(
+                      chalk.yellow(
+                        `Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
+                      ),
+                    );
                 }
               }
             } else {
@@ -947,9 +956,10 @@ Batch recording examples:
                   record,
                 });
               } else {
-                console.log(
-                  chalk.green(`\u2714 Recorded ${recordType} in ${domain}`),
-                );
+                if (!isQuiet())
+                  console.log(
+                    `${brand("✓")} ${brand(`Recorded ${recordType} in ${domain}`)}`,
+                  );
               }
             }
           });

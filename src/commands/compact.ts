@@ -14,6 +14,7 @@ import {
 import { getRecordSummary } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { accent, brand, isQuiet } from "../utils/palette.ts";
 
 interface CompactCandidate {
   domain: string;
@@ -209,7 +210,7 @@ async function handleAnalyze(
   }
 
   if (allCandidates.length === 0) {
-    console.log(chalk.green("No compaction candidates found."));
+    if (!isQuiet()) console.log(brand("No compaction candidates found."));
     return;
   }
 
@@ -240,7 +241,9 @@ async function handleAnalyze(
     for (const c of candidates) {
       console.log(`  ${chalk.cyan(c.type)} (${c.records.length} records)`);
       for (const r of c.records.slice(0, 3)) {
-        console.log(`    ${r.id ?? "(no id)"}: ${r.summary}`);
+        console.log(
+          `    ${r.id ? accent(r.id) : chalk.dim("(no id)")}: ${r.summary}`,
+        );
       }
       if (c.records.length > 3) {
         console.log(chalk.dim(`    ... and ${c.records.length - 3} more`));
@@ -313,7 +316,7 @@ async function handleAuto(
         results: [],
       });
     } else {
-      console.log(chalk.green("No compaction candidates found."));
+      if (!isQuiet()) console.log(brand("No compaction candidates found."));
     }
     return;
   }
@@ -346,7 +349,9 @@ async function handleAuto(
         `${chalk.cyan(`${domain}/${candidate.type}`)} (${candidate.records.length} records)`,
       );
       for (const r of candidate.records.slice(0, 3)) {
-        console.log(`  ${r.id ?? "(no id)"}: ${r.summary}`);
+        console.log(
+          `  ${r.id ? accent(r.id) : chalk.dim("(no id)")}: ${r.summary}`,
+        );
       }
       if (candidate.records.length > 3) {
         console.log(
@@ -393,7 +398,9 @@ async function handleAuto(
           `${chalk.cyan(`${domain}/${candidate.type}`)} (${candidate.records.length} records)`,
         );
         for (const r of candidate.records.slice(0, 3)) {
-          console.log(`  ${r.id ?? "(no id)"}: ${r.summary}`);
+          console.log(
+            `  ${r.id ? accent(r.id) : chalk.dim("(no id)")}: ${r.summary}`,
+          );
         }
         if (candidate.records.length > 3) {
           console.log(
@@ -412,12 +419,12 @@ async function handleAuto(
         );
       }
 
-      console.log(
-        chalk.green(
-          `✓ Dry-run complete. Would compact ${totalRecordsToCompact} records across ${candidatesToProcess.length} groups.`,
-        ),
-      );
-      console.log(chalk.dim("  Run without --dry-run to apply changes."));
+      if (!isQuiet())
+        console.log(
+          `${brand("✓")} ${brand(`Dry-run complete. Would compact ${totalRecordsToCompact} records across ${candidatesToProcess.length} groups.`)}`,
+        );
+      if (!isQuiet())
+        console.log(chalk.dim("  Run without --dry-run to apply changes."));
     }
     return;
   }
@@ -498,13 +505,13 @@ async function handleAuto(
     return;
   }
 
-  console.log(
-    chalk.green(
-      `\n✓ Auto-compacted ${totalCompacted} records across ${results.length} groups`,
-    ),
-  );
+  if (!isQuiet())
+    console.log(
+      `\n${brand("✓")} ${brand(`Auto-compacted ${totalCompacted} records across ${results.length} groups`)}`,
+    );
   for (const r of results) {
-    console.log(chalk.dim(`  ${r.domain}/${r.type}: ${r.count} records → 1`));
+    if (!isQuiet())
+      console.log(chalk.dim(`  ${r.domain}/${r.type}: ${r.count} records → 1`));
   }
 }
 
@@ -914,11 +921,10 @@ async function handleApply(
         replacement,
       });
     } else {
-      console.log(
-        chalk.green(
-          `\u2714 Compacted ${indicesToRemove.length} ${recordType} records into 1 in ${domain}`,
-        ),
-      );
+      if (!isQuiet())
+        console.log(
+          `${brand("✓")} ${brand(`Compacted ${indicesToRemove.length} ${recordType} records into 1 in ${domain}`)}`,
+        );
     }
   });
 }

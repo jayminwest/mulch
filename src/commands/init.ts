@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
-import chalk from "chalk";
 import type { Command } from "commander";
 import { getMulchDir, initMulchDir } from "../utils/config.ts";
 import { outputJson } from "../utils/json-output.ts";
+import { brand, isQuiet } from "../utils/palette.ts";
 
 export function registerInitCommand(program: Command): void {
   program
@@ -23,11 +23,13 @@ export function registerInitCommand(program: Command): void {
           path: mulchDir,
         });
       } else if (alreadyExists) {
-        console.log(
-          chalk.green("Updated .mulch/ — filled in any missing artifacts."),
-        );
+        if (!isQuiet())
+          console.log(
+            brand("Updated .mulch/ — filled in any missing artifacts."),
+          );
       } else {
-        console.log(chalk.green(`Initialized .mulch/ in ${process.cwd()}`));
+        if (!isQuiet())
+          console.log(brand(`Initialized .mulch/ in ${process.cwd()}`));
       }
     });
 }

@@ -22,6 +22,7 @@ import {
 } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { brand, icons, isQuiet } from "../utils/palette.ts";
 import {
   compareSemver,
   getCurrentVersion,
@@ -509,9 +510,9 @@ export function registerDoctorCommand(program: Command): void {
         if (jsonMode) {
           outputJson({ success: false, command: "doctor", checks, summary });
         } else {
-          console.log("Mulch Doctor");
-          console.log(chalk.red(`  ✘ ${configCheck.message}`));
-          console.log("\n0 passed, 0 warnings, 1 failed");
+          if (!isQuiet()) console.log("Mulch Doctor");
+          console.error(`  ${icons.fail} ${chalk.red(configCheck.message)}`);
+          if (!isQuiet()) console.log("\n0 passed, 0 warnings, 1 failed");
         }
         process.exitCode = 1;
         return;
@@ -548,33 +549,34 @@ export function registerDoctorCommand(program: Command): void {
           ...(options.fix && { fixed }),
         });
       } else {
-        console.log("Mulch Doctor");
+        if (!isQuiet()) console.log("Mulch Doctor");
         for (const check of checks) {
           const icon =
             check.status === "pass"
-              ? chalk.green("✔")
+              ? icons.pass
               : check.status === "warn"
-                ? chalk.yellow("⚠")
-                : chalk.red("✘");
+                ? icons.warn
+                : icons.fail;
           const msg =
             check.status === "pass" ? check.message : `${check.message}`;
-          console.log(`  ${icon} ${msg}`);
+          if (!isQuiet()) console.log(`  ${icon} ${msg}`);
 
           // Print details for non-pass checks
           if (check.status !== "pass" && check.details.length > 0) {
             for (const detail of check.details) {
-              console.log(`      ${detail}`);
+              if (!isQuiet()) console.log(`      ${detail}`);
             }
           }
         }
-        console.log(
-          `\n${summary.pass} passed, ${summary.warn} warning(s), ${summary.fail} failed`,
-        );
+        if (!isQuiet())
+          console.log(
+            `\n${summary.pass} passed, ${summary.warn} warning(s), ${summary.fail} failed`,
+          );
 
         if (fixed.length > 0) {
-          console.log(`\n${chalk.green("Fixed:")}`);
+          if (!isQuiet()) console.log(`\n${brand("Fixed:")}`);
           for (const f of fixed) {
-            console.log(`  ${chalk.green("✔")} ${f}`);
+            if (!isQuiet()) console.log(`  ${icons.pass} ${f}`);
           }
         }
       }

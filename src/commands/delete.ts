@@ -9,6 +9,7 @@ import {
 import { getRecordSummary } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { accent, brand, isQuiet } from "../utils/palette.ts";
 
 export function registerDeleteCommand(program: Command): void {
   program
@@ -71,11 +72,12 @@ export function registerDeleteCommand(program: Command): void {
               summary: getRecordSummary(deleted),
             });
           } else {
-            console.log(
-              chalk.green(
-                `✔ Deleted ${deleted.type} ${deleted.id ?? ""} from ${domain}: ${getRecordSummary(deleted)}`,
-              ),
-            );
+            if (!isQuiet()) {
+              const id = deleted.id ? ` ${accent(deleted.id)}` : "";
+              console.log(
+                `${brand("✓")} ${brand(`Deleted ${deleted.type}`)}${id} ${brand(`from ${domain}`)}: ${getRecordSummary(deleted)}`,
+              );
+            }
           }
         });
       } catch (err) {

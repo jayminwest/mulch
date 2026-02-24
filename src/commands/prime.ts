@@ -1,5 +1,4 @@
 import { writeFile } from "node:fs/promises";
-import chalk from "chalk";
 import { type Command, Option } from "commander";
 import {
   DEFAULT_BUDGET,
@@ -24,10 +23,12 @@ import {
 import type { McpDomain, PrimeFormat } from "../utils/format.ts";
 import { filterByContext, getChangedFiles, isGitRepo } from "../utils/git.ts";
 import { outputJsonError } from "../utils/json-output.ts";
+import { brand, isQuiet } from "../utils/palette.ts";
 
 interface PrimeOptions {
   full?: boolean;
   verbose?: boolean;
+  compact?: boolean;
   mcp?: boolean;
   format?: PrimeFormat;
   export?: string;
@@ -77,6 +78,7 @@ export function registerPrimeCommand(program: Command): void {
     .command("prime")
     .description("Generate a priming prompt from expertise records")
     .argument("[domains...]", "optional domain(s) to scope output to")
+    .option("--compact", "condensed quick-reference output (default)")
     .option("--full", "include full record details (classification, evidence)")
     .option(
       "-v, --verbose",
@@ -296,8 +298,10 @@ export function registerPrimeCommand(program: Command): void {
 
         if (options.export) {
           await writeFile(options.export, `${output}\n`, "utf-8");
-          if (!jsonMode) {
-            console.log(chalk.green(`Exported to ${options.export}`));
+          if (!jsonMode && !isQuiet()) {
+            console.log(
+              `${brand("✓")} ${brand(`Exported to ${options.export}`)}`,
+            );
           }
         } else {
           console.log(output);

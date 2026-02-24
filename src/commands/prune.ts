@@ -5,6 +5,7 @@ import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, writeExpertiseFile } from "../utils/expertise.ts";
 import { outputJson } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { brand, isQuiet } from "../utils/palette.ts";
 
 interface PruneResult {
   domain: string;
@@ -106,9 +107,10 @@ export function registerPruneCommand(program: Command): void {
       }
 
       if (totalPruned === 0) {
-        console.log(
-          chalk.green("No stale records found. All records are current."),
-        );
+        if (!isQuiet())
+          console.log(
+            brand("No stale records found. All records are current."),
+          );
         return;
       }
 
@@ -116,13 +118,15 @@ export function registerPruneCommand(program: Command): void {
       const prefix = options.dryRun ? chalk.yellow("[DRY RUN] ") : "";
 
       for (const result of results) {
-        console.log(
-          `${prefix}${chalk.cyan(result.domain)}: ${label} ${chalk.red(String(result.pruned))} of ${result.before} records (${result.after} remaining)`,
-        );
+        if (!isQuiet())
+          console.log(
+            `${prefix}${chalk.cyan(result.domain)}: ${label} ${chalk.red(String(result.pruned))} of ${result.before} records (${result.after} remaining)`,
+          );
       }
 
-      console.log(
-        `\n${prefix}${chalk.bold(`Total: ${label.toLowerCase()} ${totalPruned} stale ${totalPruned === 1 ? "record" : "records"}.`)}`,
-      );
+      if (!isQuiet())
+        console.log(
+          `\n${prefix}${chalk.bold(`Total: ${label.toLowerCase()} ${totalPruned} stale ${totalPruned === 1 ? "record" : "records"}.`)}`,
+        );
     });
 }

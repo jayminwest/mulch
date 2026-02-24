@@ -5,6 +5,7 @@ import type { ExpertiseRecord } from "../schemas/record.ts";
 import { getRecordSummary } from "../utils/format.ts";
 import { isGitRepo } from "../utils/git.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { accent, isQuiet } from "../utils/palette.ts";
 
 export interface DiffEntry {
   domain: string;
@@ -177,25 +178,32 @@ export function registerDiffCommand(program: Command): void {
         for (const entry of entries) {
           const changeCount = entry.added.length + entry.removed.length;
           const plural = changeCount === 1 ? "change" : "changes";
-          console.log(
-            chalk.cyan(`${entry.domain} (${changeCount} ${plural}):`),
-          );
+          if (!isQuiet())
+            console.log(
+              chalk.cyan(`${entry.domain} (${changeCount} ${plural}):`),
+            );
 
           for (const record of entry.added) {
             const summary = getRecordSummary(record);
-            console.log(
-              chalk.green(`  + [${record.type}] ${record.id} ${summary}`),
-            );
+            if (!isQuiet())
+              console.log(
+                chalk.green(
+                  `  + [${record.type}] ${accent(record.id ?? "")} ${summary}`,
+                ),
+              );
           }
 
           for (const record of entry.removed) {
             const summary = getRecordSummary(record);
-            console.log(
-              chalk.red(`  - [${record.type}] ${record.id} ${summary}`),
-            );
+            if (!isQuiet())
+              console.log(
+                chalk.red(
+                  `  - [${record.type}] ${accent(record.id ?? "")} ${summary}`,
+                ),
+              );
           }
 
-          console.log("");
+          if (!isQuiet()) console.log("");
         }
       } catch (err) {
         if (jsonMode) {

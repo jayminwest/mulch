@@ -6,6 +6,7 @@ import type { Command } from "commander";
 import { recordSchema } from "../schemas/record-schema.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { brand, isQuiet } from "../utils/palette.ts";
 
 function isGitRepo(cwd: string): boolean {
   try {
@@ -156,9 +157,9 @@ export function registerSyncCommand(program: Command): void {
             process.exitCode = 1;
             return;
           }
-          if (!jsonMode) {
+          if (!jsonMode && !isQuiet()) {
             console.log(
-              chalk.green(`✔ Validated ${result.totalRecords} records`),
+              `${brand("✓")} ${brand(`Validated ${result.totalRecords} records`)}`,
             );
           }
         } catch (err) {
@@ -188,7 +189,7 @@ export function registerSyncCommand(program: Command): void {
             message: "No changes to commit",
           });
         } else {
-          console.log("No .mulch/ changes to commit.");
+          if (!isQuiet()) console.log("No .mulch/ changes to commit.");
         }
         return;
       }
@@ -208,9 +209,10 @@ export function registerSyncCommand(program: Command): void {
             message: commitMessage,
           });
         } else {
-          console.log(
-            chalk.green(`✔ Committed .mulch/ changes: "${commitMessage}"`),
-          );
+          if (!isQuiet())
+            console.log(
+              `${brand("✓")} ${brand(`Committed .mulch/ changes: "${commitMessage}"`)}`,
+            );
         }
       } catch (err) {
         if (jsonMode) {

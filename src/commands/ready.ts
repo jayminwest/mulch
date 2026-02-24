@@ -5,6 +5,7 @@ import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile } from "../utils/expertise.ts";
 import { formatTimeAgo, getRecordSummary } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { accent, isQuiet } from "../utils/palette.ts";
 
 interface AnnotatedRecord {
   domain: string;
@@ -157,9 +158,7 @@ export function registerReadyCommand(program: Command): void {
 
             for (const entry of entries) {
               const age = formatTimeAgo(new Date(entry.record.recorded_at));
-              const id = entry.record.id
-                ? chalk.dim(`${entry.record.id}  `)
-                : "";
+              const id = entry.record.id ? `${accent(entry.record.id)}  ` : "";
               const domain = chalk.cyan(entry.domain.padEnd(14));
               const type = chalk.yellow(`[${entry.record.type}]`.padEnd(14));
               const summary = getRecordSummary(entry.record);

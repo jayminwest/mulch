@@ -11,6 +11,7 @@ import {
 } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { accent, brand, isQuiet } from "../utils/palette.ts";
 
 export function registerEditCommand(program: Command): void {
   program
@@ -220,11 +221,12 @@ export function registerEditCommand(program: Command): void {
                 record,
               });
             } else {
-              console.log(
-                chalk.green(
-                  `\u2714 Updated ${record.type} ${record.id ?? ""} in ${domain}`,
-                ),
-              );
+              if (!isQuiet()) {
+                const id = record.id ? ` ${accent(record.id)}` : "";
+                console.log(
+                  `${brand("✓")} ${brand(`Updated ${record.type}`)}${id} ${brand(`in ${domain}`)}`,
+                );
+              }
             }
           });
         } catch (err) {
