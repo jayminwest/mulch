@@ -67,6 +67,7 @@ program
   .version(VERSION, "-v, --version", "Print version")
   .option("--json", "Output as structured JSON")
   .option("-q, --quiet", "Suppress non-error output")
+  .option("--verbose", "Show full details in output")
   .option("--timing", "Print execution time to stderr")
   .configureHelp({
     formatHelp(cmd, helper): string {

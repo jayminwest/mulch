@@ -34,6 +34,10 @@
     "type": "git",
     "url": "https://github.com/jayminwest/mulch.git"
   },
+  "homepage": "https://github.com/jayminwest/mulch#readme",
+  "bugs": {
+    "url": "https://github.com/jayminwest/mulch/issues"
+  },
   "dependencies": {
     "ajv": "^8.17.1",
     "chalk": "^5.6.2",

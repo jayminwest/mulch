@@ -255,3 +255,7 @@ For security issues, see [SECURITY.md](SECURITY.md).
 ## License
 
 MIT
+
+---
+
+Part of the [os-eco](https://github.com/jayminwest/os-eco) agent tooling ecosystem.

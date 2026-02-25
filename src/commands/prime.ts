@@ -27,7 +27,6 @@ import { brand, isQuiet } from "../utils/palette.ts";
 
 interface PrimeOptions {
   full?: boolean;
-  verbose?: boolean;
   compact?: boolean;
   mcp?: boolean;
   format?: PrimeFormat;
@@ -80,10 +79,6 @@ export function registerPrimeCommand(program: Command): void {
     .argument("[domains...]", "optional domain(s) to scope output to")
     .option("--compact", "condensed quick-reference output (default)")
     .option("--full", "include full record details (classification, evidence)")
-    .option(
-      "-v, --verbose",
-      "full output with section headers and recording instructions",
-    )
     .option("--mcp", "output in MCP-compatible JSON format")
     .option("--domain <domains...>", "domain(s) to include")
     .option("--exclude-domain <domains...>", "domain(s) to exclude")
@@ -107,7 +102,9 @@ export function registerPrimeCommand(program: Command): void {
     )
     .option("--no-limit", "disable token budget limit")
     .action(async (domainsArg: string[], options: PrimeOptions) => {
-      const jsonMode = program.opts().json === true;
+      const globalOpts = program.opts();
+      const jsonMode = globalOpts.json === true;
+      const verbose = globalOpts.verbose === true;
       try {
         const config = await readConfig();
         const format = options.format ?? "markdown";
@@ -251,7 +248,7 @@ export function registerPrimeCommand(program: Command): void {
           for (const { domain, records } of domainRecordsToFormat) {
             const lastUpdated = modTimes.get(domain) ?? null;
 
-            if (options.verbose || options.full || format !== "markdown") {
+            if (verbose || options.full || format !== "markdown") {
               switch (format) {
                 case "xml":
                   domainSections.push(
@@ -278,7 +275,7 @@ export function registerPrimeCommand(program: Command): void {
             }
           }
 
-          if (options.verbose || options.full || format !== "markdown") {
+          if (verbose || options.full || format !== "markdown") {
             switch (format) {
               case "xml":
                 output = formatPrimeOutputXml(domainSections);
