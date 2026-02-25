@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { appendFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Command } from "commander";
+import { registerSearchCommand } from "../../src/commands/search.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
@@ -835,6 +837,56 @@ describe("search command", () => {
 
       // Original array unchanged
       expect((patterns[0] as { name: string }).name).toBe(originalFirst);
+    });
+  });
+
+  describe("domain-not-found hint", () => {
+    let originalCwd: string;
+
+    beforeEach(() => {
+      originalCwd = process.cwd();
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      process.exitCode = 0;
+    });
+
+    function makeProgram(): Command {
+      const program = new Command();
+      program
+        .name("mulch")
+        .option("--json", "output as structured JSON")
+        .exitOverride();
+      registerSearchCommand(program);
+      return program;
+    }
+
+    it("shows hint when --domain not found", async () => {
+      process.chdir(tmpDir);
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "search",
+          "--domain",
+          "nonexistent",
+          "query",
+        ]);
+
+        expect(errorSpy).toHaveBeenCalledTimes(2);
+        expect(errorSpy.mock.calls[0][0] as string).toContain("nonexistent");
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          "mulch add nonexistent",
+        );
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          ".mulch/mulch.config.yaml",
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 });

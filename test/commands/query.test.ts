@@ -407,6 +407,28 @@ describe("query command", () => {
       }
     });
 
+    it("shows hint when domain not found (text mode)", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+
+      process.chdir(tmpDir);
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync(["node", "mulch", "query", "nonexistent"]);
+
+        expect(errorSpy).toHaveBeenCalledTimes(2);
+        expect(errorSpy.mock.calls[0][0] as string).toContain("nonexistent");
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          "mulch add nonexistent",
+        );
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          ".mulch/mulch.config.yaml",
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
     it("returns JSON error when no domain and no --all flag", async () => {
       await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
 

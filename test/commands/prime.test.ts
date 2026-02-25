@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Command } from "commander";
+import { registerPrimeCommand } from "../../src/commands/prime.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
@@ -2159,6 +2161,77 @@ describe("prime command", () => {
       expect(result.kept[0].records[0].type).toBe("convention");
       // Reference from beta should be dropped
       expect(result.droppedCount).toBe(1);
+    });
+  });
+
+  describe("domain-not-found hint", () => {
+    let originalCwd: string;
+
+    beforeEach(() => {
+      originalCwd = process.cwd();
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      process.exitCode = 0;
+    });
+
+    function makeProgram(): Command {
+      const program = new Command();
+      program
+        .name("mulch")
+        .option("--json", "output as structured JSON")
+        .exitOverride();
+      registerPrimeCommand(program);
+      return program;
+    }
+
+    it("shows hint when domain arg not found", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      process.chdir(tmpDir);
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync(["node", "mulch", "prime", "nonexistent"]);
+
+        expect(errorSpy).toHaveBeenCalledTimes(2);
+        expect(errorSpy.mock.calls[0][0] as string).toContain("nonexistent");
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          "mulch add nonexistent",
+        );
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          ".mulch/mulch.config.yaml",
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it("shows hint when --exclude-domain not found", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      process.chdir(tmpDir);
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "prime",
+          "--exclude-domain",
+          "nonexistent",
+        ]);
+
+        expect(errorSpy).toHaveBeenCalledTimes(2);
+        expect(errorSpy.mock.calls[0][0] as string).toContain("nonexistent");
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          "mulch add nonexistent",
+        );
+        expect(errorSpy.mock.calls[1][0] as string).toContain(
+          ".mulch/mulch.config.yaml",
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 });
