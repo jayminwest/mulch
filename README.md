@@ -1,11 +1,10 @@
-# Mulch — Let your agents grow 🌱
+# Mulch
 
-[![npm version](https://img.shields.io/npm/v/@os-eco/mulch-cli)](https://www.npmjs.com/package/@os-eco/mulch-cli)
-[![CI](https://img.shields.io/github/actions/workflow/status/jayminwest/mulch/ci.yml?branch=main)](https://github.com/jayminwest/mulch/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![bun](https://img.shields.io/badge/runtime-bun-f472b6)](https://bun.sh)
+Structured expertise management for AI agent workflows.
 
-Structured expertise files that accumulate over time, live in git, work with any agent, and run locally with zero dependencies.
+[![npm](https://img.shields.io/npm/v/@os-eco/mulch-cli)](https://www.npmjs.com/package/@os-eco/mulch-cli)
+[![CI](https://github.com/jayminwest/mulch/actions/workflows/ci.yml/badge.svg)](https://github.com/jayminwest/mulch/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Agents start every session from zero. The pattern your agent discovered yesterday is forgotten today. Mulch fixes this: agents call `ml record` to write learnings, and `ml query` to read them. Expertise compounds across sessions, domains, and teammates.
 
@@ -14,24 +13,26 @@ Agents start every session from zero. The pattern your agent discovered yesterda
 ## Install
 
 ```bash
-npm install -g @os-eco/mulch-cli
+bun install -g @os-eco/mulch-cli
 ```
 
-Or use directly with npx — no install required:
+Or try without installing:
 
 ```bash
-npx @os-eco/mulch-cli <command>
+npx @os-eco/mulch-cli --help
 ```
 
 ### Development
 
-Mulch uses [Bun](https://bun.sh) as its development runtime and test runner:
-
 ```bash
-bun install            # Install dependencies
-bun test               # Run all tests
-bun run lint           # Lint with Biome
-bun run typecheck      # Type-check with tsc
+git clone https://github.com/jayminwest/mulch
+cd mulch
+bun install
+bun link              # Makes 'ml' available globally
+
+bun test              # Run all tests
+bun run lint          # Biome check
+bun run typecheck     # tsc --noEmit
 ```
 
 ## Quick Start
@@ -47,6 +48,39 @@ ml query database                                  # See accumulated expertise
 ml prime                                           # Get full context for agent injection
 ml prime database                                  # Get context for one domain only
 ```
+
+## Commands
+
+Every command supports `--json` for structured output. Global flags: `-v`/`--version`, `-q`/`--quiet`, `--verbose`, `--timing`. ANSI colors respect `NO_COLOR`.
+
+| Command | Description |
+|---------|-------------|
+| `ml init` | Initialize `.mulch/` in the current project |
+| `ml add <domain>` | Add a new expertise domain |
+| `ml record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
+| `ml edit <domain> <id>` | Edit an existing record by ID or 1-based index |
+| `ml delete <domain> <id>` | Delete a record by ID or 1-based index |
+| `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score` filters) |
+| `ml prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
+| `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`) |
+| `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
+| `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
+| `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
+| `ml validate` | Schema validation across all files |
+| `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
+| `ml setup [provider]` | Install provider-specific hooks (claude, cursor, codex, gemini, windsurf, aider) |
+| `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
+| `ml prune` | Remove stale tactical/observational entries |
+| `ml ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
+| `ml sync` | Validate, stage, and commit `.mulch/` changes |
+| `ml outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
+| `ml upgrade` | Upgrade mulch to the latest version (`--check` for dry run) |
+| `ml learn` | Show changed files and suggest domains for recording learnings |
+| `ml completions <shell>` | Output shell completion script (bash, zsh, fish) |
+
+## Architecture
+
+Mulch stores expertise as typed JSONL records in `.mulch/expertise/<domain>.jsonl` — one file per domain, one record per line. Six record types (convention, pattern, failure, decision, reference, guide) with three classification tiers (foundational, tactical, observational) govern shelf life and pruning. Advisory file locks and atomic writes ensure safe concurrent access from multiple agents. Schema validation (via Ajv) enforces type-specific required fields. See [CLAUDE.md](CLAUDE.md) for full technical details.
 
 ## How It Works
 
@@ -72,33 +106,6 @@ The critical insight: step 4 is **agent-driven**. Before completing a task, the 
 ```
 
 Everything is git-tracked. Clone a repo and your agents immediately have the project's accumulated expertise.
-
-## CLI Reference
-
-| Command | Description |
-|---------|-------------|
-| `ml init` | Initialize `.mulch/` in the current project |
-| `ml add <domain>` | Add a new expertise domain |
-| `ml record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
-| `ml edit <domain> <id>` | Edit an existing record by ID or 1-based index |
-| `ml delete <domain> <id>` | Delete a record by ID or 1-based index |
-| `ml query [domain]` | Query expertise (use `--all` for all domains, `--classification`, `--file`, `--outcome-status`, `--sort-by-score` filters) |
-| `ml prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
-| `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score` filters) |
-| `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
-| `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
-| `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
-| `ml validate` | Schema validation across all files |
-| `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
-| `ml setup [provider]` | Install provider-specific hooks (claude, cursor, codex, gemini, windsurf, aider) |
-| `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
-| `ml prune` | Remove stale tactical/observational entries |
-| `ml ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
-| `ml sync` | Validate, stage, and commit `.mulch/` changes |
-| `ml outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
-| `ml upgrade` | Upgrade mulch to the latest version (`--check` for dry run) |
-| `ml learn` | Show changed files and suggest domains for recording learnings |
-| `ml completions <shell>` | Output shell completion script (`bash`, `zsh`, `fish`) |
 
 ## Record Types
 
@@ -138,7 +145,7 @@ $ ml query database
 - **Provider-agnostic** — Any agent with bash access can call the CLI.
 - **Git-native** — Everything lives in `.mulch/`, tracked in version control.
 - **Append-only JSONL** — Zero merge conflicts, trivial schema validation.
-- **Storage ≠ Delivery** — JSONL on disk, optimized markdown/XML for agents.
+- **Storage != Delivery** — JSONL on disk, optimized markdown/XML for agents.
 
 ## Concurrency & Multi-Agent Safety
 
@@ -246,6 +253,17 @@ import {
 
 Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `ScoredRecord`, `Outcome`, `RecordOptions`, `RecordResult`, `SearchOptions`, `SearchResult`, `QueryOptions`, `EditOptions`, `RecordUpdates`, `OutcomeOptions`, `AppendOutcomeResult`, etc.) are also exported.
 
+## Part of os-eco
+
+Mulch is part of the [os-eco](https://github.com/jayminwest/os-eco) AI agent tooling ecosystem.
+
+```
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  overstory   orchestration
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  canopy      prompts
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  seeds       issues
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  mulch       expertise
+```
+
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setting up a development environment, coding conventions, and submitting pull requests.
@@ -255,7 +273,3 @@ For security issues, see [SECURITY.md](SECURITY.md).
 ## License
 
 MIT
-
----
-
-Part of the [os-eco](https://github.com/jayminwest/os-eco) agent tooling ecosystem.
