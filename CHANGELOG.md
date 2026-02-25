@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-02-25
+
+### Added
+
+- `mulch completions <shell>` command — generates shell completion scripts for bash, zsh, and fish (supports both `mulch` and `ml` aliases)
+- `--timing` global flag — prints execution time to stderr (`Done in Xms`) for performance profiling
+- Prioritize slash command (`.claude/commands/prioritize.md`) for Claude Code
+
+### Changed
+
+- `mulch update` deprecated and hidden — prints a warning directing users to `mulch upgrade`
+- Command parsing switched from `program.parse()` to `program.parseAsync()` for proper async support
+- Documentation updated to use `ml` short alias consistently throughout README and CLAUDE.md
+
+### Testing
+
+- 717 tests across 35 files, 1638 expect() calls
+- New `test/commands/completions.test.ts` (completions command coverage for bash, zsh, fish, ml alias, hidden commands, error handling)
+- New `test/commands/timing.test.ts` (--timing flag output on stderr, stdout isolation, opt-in behavior)
+- Updated `test/commands/update.test.ts` for deprecated update command behavior
+
 ## [0.6.1] - 2026-02-25
 
 ### Added
@@ -290,7 +311,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/jayminwest/mulch/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/jayminwest/mulch/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/jayminwest/mulch/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jayminwest/mulch/compare/v0.4.3...v0.5.0

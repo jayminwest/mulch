@@ -98,6 +98,7 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 | `ml outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
 | `ml upgrade` | Upgrade mulch to the latest version (`--check` for dry run) |
 | `ml learn` | Show changed files and suggest domains for recording learnings |
+| `ml completions <shell>` | Output shell completion script (`bash`, `zsh`, `fish`) |
 
 ## Record Types
 
