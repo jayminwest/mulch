@@ -4,6 +4,7 @@ import { join } from "node:path";
 import yaml from "js-yaml";
 import type { MulchConfig } from "../schemas/config.ts";
 import { DEFAULT_CONFIG } from "../schemas/config.ts";
+import { createExpertiseFile } from "./expertise.ts";
 
 const MULCH_DIR = ".mulch";
 const CONFIG_FILE = "mulch.config.yaml";
@@ -78,6 +79,22 @@ export async function readConfig(
     throw err;
   }
   return yaml.load(content) as MulchConfig;
+}
+
+export async function addDomain(
+  domain: string,
+  cwd: string = process.cwd(),
+): Promise<void> {
+  validateDomainName(domain);
+  const config = await readConfig(cwd);
+  if (!config.domains.includes(domain)) {
+    config.domains.push(domain);
+    await writeConfig(config, cwd);
+  }
+  const filePath = getExpertisePath(domain, cwd);
+  if (!existsSync(filePath)) {
+    await createExpertiseFile(filePath);
+  }
 }
 
 export async function writeConfig(
