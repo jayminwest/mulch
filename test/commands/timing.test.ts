@@ -29,13 +29,10 @@ describe("--timing flag", () => {
   });
 
   it("does not print timing without --timing flag", () => {
-    const result = Bun.spawnSync(
-      ["bun", "src/cli.ts", "completions", "bash"],
-      {
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
+    const result = Bun.spawnSync(["bun", "src/cli.ts", "completions", "bash"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const stderr = result.stderr.toString();
     expect(stderr).not.toContain("Done in");
   });
