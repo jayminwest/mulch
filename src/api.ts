@@ -52,6 +52,16 @@ export interface EditOptions {
   cwd?: string;
 }
 
+export interface OutcomeOptions {
+  cwd?: string;
+}
+
+export interface AppendOutcomeResult {
+  record: ExpertiseRecord;
+  outcome: Outcome;
+  total_outcomes: number;
+}
+
 export interface RecordUpdates {
   classification?: Classification;
   tags?: string[];
@@ -306,5 +316,51 @@ export async function editRecord(
     await writeExpertiseFile(filePath, records);
 
     return record;
+  });
+}
+
+/**
+ * Append an outcome to an existing record by ID in the given domain.
+ * Outcomes accumulate (are not replaced) to build a confirmation-frequency
+ * history that drives confidence scoring.
+ */
+export async function appendOutcome(
+  domain: string,
+  id: string,
+  outcome: Outcome,
+  options: OutcomeOptions = {},
+): Promise<AppendOutcomeResult> {
+  const { cwd } = options;
+  const config = await readConfig(cwd);
+
+  if (!config.domains.includes(domain)) {
+    throw new Error(
+      `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+    );
+  }
+
+  const filePath = getExpertisePath(domain, cwd);
+
+  return withFileLock(filePath, async () => {
+    const records = await readExpertiseFile(filePath);
+    const resolved = resolveRecordId(records, id);
+
+    if (!resolved.ok) {
+      throw new Error(resolved.error);
+    }
+
+    const targetIndex = resolved.index;
+    const record = { ...records[targetIndex] };
+
+    const o: Outcome = {
+      ...outcome,
+      recorded_at: outcome.recorded_at ?? new Date().toISOString(),
+    };
+
+    record.outcomes = [...(record.outcomes ?? []), o];
+    records[targetIndex] = record;
+    await writeExpertiseFile(filePath, records);
+
+    return { record, outcome: o, total_outcomes: record.outcomes.length };
   });
 }
