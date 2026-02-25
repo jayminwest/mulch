@@ -38,6 +38,7 @@ export {
   searchExpertise,
   queryDomain,
   editRecord,
+  appendOutcome,
 } from "./api.ts";
 export type {
   RecordOptions,
@@ -47,6 +48,8 @@ export type {
   QueryOptions,
   EditOptions,
   RecordUpdates,
+  OutcomeOptions,
+  AppendOutcomeResult,
 } from "./api.ts";
 
 // Scoring utilities
