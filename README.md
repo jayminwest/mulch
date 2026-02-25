@@ -95,6 +95,8 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 | `mulch prune` | Remove stale tactical/observational entries |
 | `mulch ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
 | `mulch sync` | Validate, stage, and commit `.mulch/` changes |
+| `mulch outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
+| `mulch upgrade` | Upgrade mulch to the latest version (`--check` for dry run) |
 | `mulch learn` | Show changed files and suggest domains for recording learnings |
 
 ## Record Types
@@ -217,6 +219,14 @@ import {
   searchExpertise,   // Search records across domains
   queryDomain,       // Query all records for a domain
   editRecord,        // Edit an existing record by ID
+  appendOutcome,     // Append an outcome to a record (with locking)
+} from "@os-eco/mulch-cli";
+
+// Scoring utilities
+import {
+  computeConfirmationScore,
+  sortByConfirmationScore,
+  getSuccessRate,
 } from "@os-eco/mulch-cli";
 
 // Low-level utilities
@@ -233,7 +243,7 @@ import {
 } from "@os-eco/mulch-cli";
 ```
 
-Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `ScoredRecord`, `Outcome`, `RecordOptions`, `RecordResult`, `SearchOptions`, `SearchResult`, `QueryOptions`, `EditOptions`, `RecordUpdates`, etc.) are also exported.
+Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `ScoredRecord`, `Outcome`, `RecordOptions`, `RecordResult`, `SearchOptions`, `SearchResult`, `QueryOptions`, `EditOptions`, `RecordUpdates`, `OutcomeOptions`, `AppendOutcomeResult`, etc.) are also exported.
 
 ## Contributing
 

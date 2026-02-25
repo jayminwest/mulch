@@ -26,7 +26,7 @@ import { registerUpgradeCommand } from "./commands/upgrade.ts";
 import { registerValidateCommand } from "./commands/validate.ts";
 import { accent, brand, muted, setQuiet } from "./utils/palette.ts";
 
-export const VERSION = "0.6.0";
+export const VERSION = "0.6.1";
 
 const rawArgs = process.argv.slice(2);
 
@@ -66,7 +66,7 @@ program
     formatHelp(cmd, helper): string {
       const lines: string[] = [];
 
-      // Header: "mulch v0.6.0 — Structured expertise management"
+      // Header: "mulch v0.6.1 — Structured expertise management"
       lines.push(
         `${brand.bold(cmd.name())} ${muted(`v${VERSION}`)} — Structured expertise management`,
       );

@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-02-25
+
+### Added
+
+#### New CLI Commands
+- `mulch outcome <domain> <id>` command — append outcomes to existing records (`--status success|failure|partial`, `--duration`, `--agent`, `--notes`, `--test-results`), or view existing outcomes when called without `--status`
+- `mulch upgrade` command — checks npm registry for newer versions and installs via `bun install -g` (`--check` for dry run); replaces the older `update` command approach
+
+#### Developer Experience
+- Auto-create domains: `mulch record` now auto-creates missing domains instead of erroring, with a branded confirmation message
+- Record validation hints: schema validation errors now include type-specific hints (e.g., "Hint: pattern records require: name, description")
+- Domain-not-found hints in `query`, `search`, and `prime` commands — suggests `mulch add <domain>` when a domain isn't found
+
+#### Health Checks
+- `mulch doctor` legacy-outcome check — detects records with deprecated singular `outcome` field on disk
+- `mulch doctor --fix` migrates legacy `outcome` fields to `outcomes[]` array format
+- `mulch validate` warns (non-error) on records with legacy singular `outcome` field, suggests `mulch doctor --fix`
+
+#### Programmatic API
+- `appendOutcome()` function exported from `@os-eco/mulch-cli` — programmatic outcome recording with locking
+- `OutcomeOptions` and `AppendOutcomeResult` types exported
+- Full scoring module exported: `getSuccessCount`, `getFailureCount`, `getTotalApplications`, `getSuccessRate`, `computeConfirmationScore`, `applyConfirmationBoost`, `sortByConfirmationScore`
+
+### Fixed
+- ENOENT crash when `mulch learn` runs in non-mulch projects (now exits gracefully)
+- Package name in version check — was using old `mulch-cli` instead of `@os-eco/mulch-cli`
+
+### Testing
+- 708 tests across 33 files, 1617 expect() calls
+- New `test/commands/outcome.test.ts` (outcome command coverage)
+- Expanded test suites: record (auto-create, validation hints), doctor (legacy-outcome), validate (legacy warnings), prime/query/search (domain-not-found hints), api (appendOutcome, scoring exports)
+
 ## [0.6.0] - 2026-02-24
 
 ### Added
@@ -258,7 +290,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/jayminwest/mulch/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/jayminwest/mulch/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jayminwest/mulch/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/jayminwest/mulch/compare/v0.4.2...v0.4.3
