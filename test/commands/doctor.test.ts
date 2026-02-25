@@ -148,6 +148,52 @@ describe("doctor health checks", () => {
     expect(isStale(record, new Date(), shelfLife)).toBe(false);
   });
 
+  it("detects legacy outcome field on disk", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    // Write a record with legacy singular outcome field directly to disk
+    const legacyRecord = JSON.stringify({
+      type: "convention",
+      content: "Use vitest",
+      classification: "foundational",
+      recorded_at: new Date().toISOString(),
+      outcome: { status: "success", agent: "test-agent" },
+    });
+    await writeFile(filePath, `${legacyRecord}\n`, "utf-8");
+    const apiPath = getExpertisePath("api", tmpDir);
+    await createExpertiseFile(apiPath);
+
+    // Verify raw file has "outcome" (singular)
+    const content = await import("node:fs/promises").then((fs) =>
+      fs.readFile(filePath, "utf-8"),
+    );
+    const parsed = JSON.parse(content.trim());
+    expect("outcome" in parsed).toBe(true);
+    expect("outcomes" in parsed).toBe(false);
+  });
+
+  it("fix migrates legacy outcome to outcomes array", async () => {
+    const filePath = getExpertisePath("testing", tmpDir);
+    const legacyRecord = JSON.stringify({
+      type: "convention",
+      content: "Use vitest",
+      classification: "foundational",
+      recorded_at: new Date().toISOString(),
+      outcome: { status: "success", agent: "test-agent", duration: 42 },
+    });
+    await writeFile(filePath, `${legacyRecord}\n`, "utf-8");
+    const apiPath = getExpertisePath("api", tmpDir);
+    await createExpertiseFile(apiPath);
+
+    // Read back — expertise.ts normalizes outcome→outcomes in memory
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+    expect(records[0].outcomes).toBeDefined();
+    expect(Array.isArray(records[0].outcomes)).toBe(true);
+    expect(records[0].outcomes![0].status).toBe("success");
+    expect(records[0].outcomes![0].agent).toBe("test-agent");
+    expect(records[0].outcomes![0].duration).toBe(42);
+  });
+
   it("detects governance threshold violations", async () => {
     const config = {
       ...DEFAULT_CONFIG,

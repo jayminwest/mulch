@@ -290,6 +290,61 @@ async function checkDuplicates(
   };
 }
 
+async function checkLegacyOutcome(
+  config: MulchConfig,
+  cwd?: string,
+): Promise<DoctorCheck> {
+  const details: string[] = [];
+
+  for (const domain of config.domains) {
+    const filePath = getExpertisePath(domain, cwd);
+    let content: string;
+    try {
+      content = await readFile(filePath, "utf-8");
+    } catch {
+      continue;
+    }
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (
+        parsed !== null &&
+        typeof parsed === "object" &&
+        "outcome" in parsed &&
+        !("outcomes" in parsed)
+      ) {
+        details.push(
+          `${domain}:${i + 1} - legacy "outcome" field (singular); should be "outcomes[]"`,
+        );
+      }
+    }
+  }
+
+  if (details.length > 0) {
+    return {
+      name: "legacy-outcome",
+      status: "warn",
+      message: `${details.length} record(s) with legacy "outcome" field on disk`,
+      fixable: true,
+      details,
+    };
+  }
+  return {
+    name: "legacy-outcome",
+    status: "pass",
+    message: 'No legacy "outcome" fields on disk',
+    fixable: true,
+    details: [],
+  };
+}
+
 async function checkGovernance(
   config: MulchConfig,
   cwd?: string,
@@ -458,6 +513,73 @@ async function applyFixes(
         break;
       }
 
+      case "legacy-outcome": {
+        for (const domain of config.domains) {
+          const filePath = getExpertisePath(domain, cwd);
+          await withFileLock(filePath, async () => {
+            let content: string;
+            try {
+              content = await readFile(filePath, "utf-8");
+            } catch {
+              return;
+            }
+            const lines = content.split("\n");
+            const migrated: string[] = [];
+            let count = 0;
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.length === 0) continue;
+              let raw: Record<string, unknown>;
+              try {
+                raw = JSON.parse(trimmed) as Record<string, unknown>;
+              } catch {
+                migrated.push(trimmed);
+                continue;
+              }
+              if (
+                "outcome" in raw &&
+                raw.outcome !== null &&
+                raw.outcome !== undefined &&
+                !("outcomes" in raw)
+              ) {
+                const legacy = raw.outcome as Record<string, unknown>;
+                const rewritten: Record<string, unknown> = { ...raw };
+                rewritten.outcome = undefined;
+                rewritten.outcomes = [
+                  {
+                    status: legacy.status,
+                    ...(legacy.duration !== undefined
+                      ? { duration: legacy.duration }
+                      : {}),
+                    ...(legacy.test_results !== undefined
+                      ? { test_results: legacy.test_results }
+                      : {}),
+                    ...(legacy.agent !== undefined
+                      ? { agent: legacy.agent }
+                      : {}),
+                  },
+                ];
+                migrated.push(JSON.stringify(rewritten));
+                count++;
+              } else {
+                migrated.push(trimmed);
+              }
+            }
+            if (count > 0) {
+              await fsWriteFile(
+                filePath,
+                migrated.join("\n") + (migrated.length > 0 ? "\n" : ""),
+                "utf-8",
+              );
+              fixed.push(
+                `Migrated ${count} legacy "outcome" field(s) to "outcomes[]" in ${domain}`,
+              );
+            }
+          });
+        }
+        break;
+      }
+
       case "orphaned-domains": {
         const expertiseDir = getExpertiseDir(cwd);
         // Add missing domains to config
@@ -522,6 +644,7 @@ export function registerDoctorCommand(program: Command): void {
 
       const checks: DoctorCheck[] = [configCheck];
       checks.push(await checkJsonlIntegrity(config));
+      checks.push(await checkLegacyOutcome(config));
       checks.push(await checkSchemaValidation(config));
       checks.push(await checkStaleRecords(config));
       checks.push(await checkOrphanedDomains(config));
