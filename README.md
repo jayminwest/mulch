@@ -7,7 +7,7 @@
 
 Structured expertise files that accumulate over time, live in git, work with any agent, and run locally with zero dependencies.
 
-Agents start every session from zero. The pattern your agent discovered yesterday is forgotten today. Mulch fixes this: agents call `mulch record` to write learnings, and `mulch query` to read them. Expertise compounds across sessions, domains, and teammates.
+Agents start every session from zero. The pattern your agent discovered yesterday is forgotten today. Mulch fixes this: agents call `ml record` to write learnings, and `ml query` to read them. Expertise compounds across sessions, domains, and teammates.
 
 **Mulch is a passive layer.** It does not contain an LLM. Agents use Mulch — Mulch does not use agents.
 
@@ -37,28 +37,28 @@ bun run typecheck      # Type-check with tsc
 ## Quick Start
 
 ```bash
-mulch init                                            # Create .mulch/ in your project
-mulch add database                                    # Add a domain
-mulch record database --type convention "Use WAL mode for SQLite"
-mulch record database --type failure \
+ml init                                            # Create .mulch/ in your project
+ml add database                                    # Add a domain
+ml record database --type convention "Use WAL mode for SQLite"
+ml record database --type failure \
   --description "VACUUM inside a transaction causes silent corruption" \
   --resolution "Always run VACUUM outside transaction boundaries"
-mulch query database                                  # See accumulated expertise
-mulch prime                                           # Get full context for agent injection
-mulch prime database                                  # Get context for one domain only
+ml query database                                  # See accumulated expertise
+ml prime                                           # Get full context for agent injection
+ml prime database                                  # Get context for one domain only
 ```
 
 ## How It Works
 
 ```
-1. mulch init               → Creates .mulch/ with domain JSONL files
+1. ml init               → Creates .mulch/ with domain JSONL files
 2. Agent reads expertise     → Grounded in everything the project has learned
 3. Agent does work           → Normal task execution
 4. Agent records insights    → Before finishing, writes learnings back to .mulch/
 5. git push                  → Teammates' agents get smarter too
 ```
 
-The critical insight: step 4 is **agent-driven**. Before completing a task, the agent reviews its work for insights worth preserving and calls `mulch record`. Mulch provides the schema and file structure so those learnings land in a consistent, queryable format.
+The critical insight: step 4 is **agent-driven**. Before completing a task, the agent reviews its work for insights worth preserving and calls `ml record`. Mulch provides the schema and file structure so those learnings land in a consistent, queryable format.
 
 ## What's in `.mulch/`
 
@@ -77,27 +77,27 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 
 | Command | Description |
 |---------|-------------|
-| `mulch init` | Initialize `.mulch/` in the current project |
-| `mulch add <domain>` | Add a new expertise domain |
-| `mulch record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
-| `mulch edit <domain> <id>` | Edit an existing record by ID or 1-based index |
-| `mulch delete <domain> <id>` | Delete a record by ID or 1-based index |
-| `mulch query [domain]` | Query expertise (use `--all` for all domains, `--classification`, `--file`, `--outcome-status`, `--sort-by-score` filters) |
-| `mulch prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
-| `mulch search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score` filters) |
-| `mulch compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
-| `mulch diff [ref]` | Show expertise changes between git refs (`mulch diff HEAD~3`, `mulch diff main..feature`) |
-| `mulch status` | Show expertise freshness and counts (`--json` for health metrics) |
-| `mulch validate` | Schema validation across all files |
-| `mulch doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
-| `mulch setup [provider]` | Install provider-specific hooks (claude, cursor, codex, gemini, windsurf, aider) |
-| `mulch onboard` | Generate AGENTS.md/CLAUDE.md snippet |
-| `mulch prune` | Remove stale tactical/observational entries |
-| `mulch ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
-| `mulch sync` | Validate, stage, and commit `.mulch/` changes |
-| `mulch outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
-| `mulch upgrade` | Upgrade mulch to the latest version (`--check` for dry run) |
-| `mulch learn` | Show changed files and suggest domains for recording learnings |
+| `ml init` | Initialize `.mulch/` in the current project |
+| `ml add <domain>` | Add a new expertise domain |
+| `ml record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
+| `ml edit <domain> <id>` | Edit an existing record by ID or 1-based index |
+| `ml delete <domain> <id>` | Delete a record by ID or 1-based index |
+| `ml query [domain]` | Query expertise (use `--all` for all domains, `--classification`, `--file`, `--outcome-status`, `--sort-by-score` filters) |
+| `ml prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
+| `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score` filters) |
+| `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
+| `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
+| `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
+| `ml validate` | Schema validation across all files |
+| `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
+| `ml setup [provider]` | Install provider-specific hooks (claude, cursor, codex, gemini, windsurf, aider) |
+| `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
+| `ml prune` | Remove stale tactical/observational entries |
+| `ml ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
+| `ml sync` | Validate, stage, and commit `.mulch/` changes |
+| `ml outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
+| `ml upgrade` | Upgrade mulch to the latest version (`--check` for dry run) |
+| `ml learn` | Show changed files and suggest domains for recording learnings |
 
 ## Record Types
 
@@ -115,7 +115,7 @@ All records support optional `--classification` (foundational / tactical / obser
 ## Example Output
 
 ```
-$ mulch query database
+$ ml query database
 
 ## database (6 entries, updated 2h ago)
 
@@ -147,7 +147,7 @@ Mulch is designed for multi-agent workflows where several agents record expertis
 
 - **Advisory file locking** — Write commands acquire a `.lock` file (O_CREAT|O_EXCL) before modifying any JSONL file. Retries every 50ms for up to 5 seconds; stale locks (>30s) are auto-removed.
 - **Atomic writes** — All JSONL mutations write to a temp file first, then atomically rename into place. A crash mid-write never corrupts the expertise file.
-- **Git merge strategy** — `mulch init` sets `merge=union` in `.gitattributes` so parallel branches append-merge JSONL lines without conflicts.
+- **Git merge strategy** — `ml init` sets `merge=union` in `.gitattributes` so parallel branches append-merge JSONL lines without conflicts.
 
 ### Command safety
 
@@ -163,16 +163,16 @@ Mulch is designed for multi-agent workflows where several agents record expertis
 
 ```bash
 # Every agent can safely do this in parallel:
-mulch prime                                    # Read context
-mulch record api --type pattern --name "..." --description "..."  # Locked write
-mulch search "error handling"                  # Read-only
+ml prime                                    # Read context
+ml record api --type pattern --name "..." --description "..."  # Locked write
+ml search "error handling"                  # Read-only
 ```
 
 Locks ensure correctness automatically. If two agents record to the same domain at the same instant, one waits (up to 5s) for the other to finish.
 
 **Multi-worktree / branch-per-agent**:
 
-Each agent works in its own git worktree. On merge, `merge=union` combines all JSONL lines. Run `mulch doctor --fix` after merge to deduplicate if needed.
+Each agent works in its own git worktree. On merge, `merge=union` combines all JSONL lines. Run `ml doctor --fix` after merge to deduplicate if needed.
 
 ### Batch recording
 
@@ -180,13 +180,13 @@ For recording multiple records atomically (e.g., at session end), use `--batch` 
 
 ```bash
 # From a JSON file (single object or array of objects)
-mulch record api --batch records.json
+ml record api --batch records.json
 
 # From stdin
-echo '[{"type":"convention","content":"Use UTC timestamps"}]' | mulch record api --stdin
+echo '[{"type":"convention","content":"Use UTC timestamps"}]' | ml record api --stdin
 
 # Preview first
-mulch record api --batch records.json --dry-run
+ml record api --batch records.json --dry-run
 ```
 
 Batch recording uses file locking — safe for concurrent use. Invalid records are skipped with errors; valid records in the same batch still succeed.
@@ -194,9 +194,9 @@ Batch recording uses file locking — safe for concurrent use. Invalid records a
 **Maintenance during swarm work**:
 
 ```bash
-mulch compact --analyze          # Safe: read-only scan
-mulch prune --dry-run            # Safe: read-only scan
-mulch doctor                     # Safe: read-only health check
+ml compact --analyze          # Safe: read-only scan
+ml prune --dry-run            # Safe: read-only scan
+ml doctor                     # Safe: read-only health check
 ```
 
 The `--apply`, default (non-dry-run), and `--fix` variants acquire locks and are also safe to run alongside recording agents.
@@ -205,7 +205,7 @@ The `--apply`, default (non-dry-run), and `--fix` variants acquire locks and are
 
 - **Lock timeout**: If a lock cannot be acquired within 5 seconds, the command fails with an error. Retry or check for stuck processes.
 - **Stale locks**: Locks older than 30 seconds are automatically cleaned up (e.g., after a crash).
-- **`mulch sync`**: Uses git's own locking for commits. Multiple agents syncing on the same branch will contend on git's ref lock — coordinate sync timing or use per-agent branches.
+- **`ml sync`**: Uses git's own locking for commits. Multiple agents syncing on the same branch will contend on git's ref lock — coordinate sync timing or use per-agent branches.
 - **`prime --export`**: Multiple agents exporting to the same file path will race. Use unique filenames per agent.
 
 ## Programmatic API
