@@ -4,6 +4,7 @@ import chalk from "chalk";
 import { Command } from "commander";
 import { registerAddCommand } from "./commands/add.ts";
 import { registerCompactCommand } from "./commands/compact.ts";
+import { registerCompletionsCommand } from "./commands/completions.ts";
 import { registerDeleteCommand } from "./commands/delete.ts";
 import { registerDiffCommand } from "./commands/diff.ts";
 import { registerDoctorCommand } from "./commands/doctor.ts";
@@ -52,6 +53,10 @@ if (rawArgs.includes("--quiet") || rawArgs.includes("-q")) {
   setQuiet(true);
 }
 
+// Detect --timing early (before Commander) so we can measure from startup
+const hasTiming = rawArgs.includes("--timing");
+const startTime = Date.now();
+
 const program = new Command();
 
 const COL_WIDTH = 20;
@@ -62,6 +67,7 @@ program
   .version(VERSION, "-v, --version", "Print version")
   .option("--json", "Output as structured JSON")
   .option("-q, --quiet", "Suppress non-error output")
+  .option("--timing", "Print execution time to stderr")
   .configureHelp({
     formatHelp(cmd, helper): string {
       const lines: string[] = [];
@@ -143,5 +149,11 @@ registerCompactCommand(program);
 registerDiffCommand(program);
 registerUpdateCommand(program);
 registerUpgradeCommand(program);
+registerCompletionsCommand(program);
 
-program.parse();
+await program.parseAsync();
+
+if (hasTiming) {
+  const elapsed = Date.now() - startTime;
+  console.error(muted(`Done in ${elapsed}ms`));
+}

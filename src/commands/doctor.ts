@@ -399,7 +399,7 @@ async function checkUpdateAvailable(): Promise<DoctorCheck> {
 
   if (latest === null) {
     return {
-      name: "update",
+      name: "upgrade",
       status: "pass",
       message: `Version ${current} (unable to check registry)`,
       fixable: false,
@@ -410,7 +410,7 @@ async function checkUpdateAvailable(): Promise<DoctorCheck> {
   const cmp = compareSemver(current, latest);
   if (cmp >= 0) {
     return {
-      name: "update",
+      name: "upgrade",
       status: "pass",
       message: `Version ${current} is up to date`,
       fixable: false,
@@ -419,11 +419,11 @@ async function checkUpdateAvailable(): Promise<DoctorCheck> {
   }
 
   return {
-    name: "update",
+    name: "upgrade",
     status: "warn",
     message: `Update available: ${current} → ${latest}`,
     fixable: false,
-    details: ["Run `mulch update` to update"],
+    details: ["Run `mulch upgrade` to upgrade"],
   };
 }
 
