@@ -199,6 +199,19 @@ describe("validate command", () => {
       expect(validate(record)).toBe(false);
     });
 
+    it("rejects record with legacy singular outcome field via schema", () => {
+      // Legacy records with "outcome" (singular) fail schema (additionalProperties: false)
+      // validate command treats these as warnings rather than errors
+      const record = {
+        type: "convention",
+        content: "Some content",
+        classification: "tactical",
+        recorded_at: "2025-01-01T00:00:00.000Z",
+        outcome: { status: "success" },
+      };
+      expect(validate(record)).toBe(false);
+    });
+
     it("rejects record with invalid evidence properties", () => {
       const record = {
         type: "convention",

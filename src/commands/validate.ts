@@ -20,7 +20,10 @@ export function registerValidateCommand(program: Command): void {
 
       let totalRecords = 0;
       let totalErrors = 0;
+      let totalWarnings = 0;
       const errors: Array<{ domain: string; line: number; message: string }> =
+        [];
+      const warnings: Array<{ domain: string; line: number; message: string }> =
         [];
 
       for (const domain of domains) {
@@ -54,7 +57,21 @@ export function registerValidateCommand(program: Command): void {
             continue;
           }
 
-          if (!validate(parsed)) {
+          // Detect legacy singular "outcome" field — warn, don't error
+          if (
+            parsed !== null &&
+            typeof parsed === "object" &&
+            "outcome" in parsed &&
+            !("outcomes" in parsed)
+          ) {
+            totalWarnings++;
+            const msg =
+              'Legacy "outcome" field (singular); run `mulch doctor --fix` to migrate to "outcomes[]"';
+            warnings.push({ domain, line: lineNumber, message: msg });
+            if (!jsonMode) {
+              console.error(chalk.yellow(`${domain}:${lineNumber} - ${msg}`));
+            }
+          } else if (!validate(parsed)) {
             totalErrors++;
             const schemaErrors = (validate.errors ?? [])
               .map((err) => `${err.instancePath} ${err.message}`)
@@ -84,12 +101,20 @@ export function registerValidateCommand(program: Command): void {
           valid: totalErrors === 0,
           totalRecords,
           totalErrors,
+          totalWarnings,
           errors,
+          warnings,
         });
       } else if (totalErrors > 0) {
         console.log(
           chalk.red(
             `${totalRecords} records validated, ${totalErrors} errors found`,
+          ),
+        );
+      } else if (totalWarnings > 0) {
+        console.log(
+          chalk.yellow(
+            `${totalRecords} records validated, ${totalErrors} errors found, ${totalWarnings} warning(s)`,
           ),
         );
       } else {
