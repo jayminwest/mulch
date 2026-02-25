@@ -48,3 +48,15 @@ export type {
   EditOptions,
   RecordUpdates,
 } from "./api.ts";
+
+// Scoring utilities
+export type { ScoredRecord } from "./utils/scoring.ts";
+export {
+  getSuccessCount,
+  getFailureCount,
+  getTotalApplications,
+  getSuccessRate,
+  computeConfirmationScore,
+  applyConfirmationBoost,
+  sortByConfirmationScore,
+} from "./utils/scoring.ts";

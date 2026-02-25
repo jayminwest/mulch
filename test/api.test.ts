@@ -3,11 +3,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  applyConfirmationBoost,
+  computeConfirmationScore,
   editRecord,
+  getFailureCount,
+  getSuccessCount,
+  getSuccessRate,
+  getTotalApplications,
   queryDomain,
   recordExpertise,
   searchExpertise,
-} from "../src/api.ts";
+  sortByConfirmationScore,
+} from "../src/index.ts";
+import type { ScoredRecord } from "../src/index.ts";
 import { DEFAULT_CONFIG } from "../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../src/schemas/record.ts";
 import {
@@ -298,6 +306,92 @@ describe("programmatic API", () => {
     it("returns empty array for empty domain", async () => {
       const records = await queryDomain("architecture", { cwd: tmpDir });
       expect(records).toHaveLength(0);
+    });
+  });
+
+  describe("scoring exports", () => {
+    const makeRecord = (outcomes?: ScoredRecord["outcomes"]): ScoredRecord => ({
+      type: "convention",
+      content: "test record",
+      classification: "foundational",
+      recorded_at: new Date().toISOString(),
+      outcomes,
+    });
+
+    it("getSuccessCount returns 0 for record with no outcomes", () => {
+      expect(getSuccessCount(makeRecord())).toBe(0);
+    });
+
+    it("getSuccessCount counts only success outcomes", () => {
+      const record = makeRecord([
+        { status: "success" },
+        { status: "failure" },
+        { status: "success" },
+      ]);
+      expect(getSuccessCount(record)).toBe(2);
+    });
+
+    it("getFailureCount counts only failure outcomes", () => {
+      const record = makeRecord([
+        { status: "success" },
+        { status: "failure" },
+        { status: "partial" },
+      ]);
+      expect(getFailureCount(record)).toBe(1);
+    });
+
+    it("getTotalApplications returns outcome count", () => {
+      const record = makeRecord([{ status: "success" }, { status: "failure" }]);
+      expect(getTotalApplications(record)).toBe(2);
+    });
+
+    it("getTotalApplications returns 0 with no outcomes", () => {
+      expect(getTotalApplications(makeRecord())).toBe(0);
+    });
+
+    it("getSuccessRate returns 0 for no outcomes", () => {
+      expect(getSuccessRate(makeRecord())).toBe(0);
+    });
+
+    it("getSuccessRate counts partial outcomes as 0.5", () => {
+      const record = makeRecord([{ status: "success" }, { status: "partial" }]);
+      expect(getSuccessRate(record)).toBe(0.75);
+    });
+
+    it("computeConfirmationScore returns 0 for no outcomes", () => {
+      expect(computeConfirmationScore(makeRecord())).toBe(0);
+    });
+
+    it("computeConfirmationScore adds 0.5 per partial outcome", () => {
+      const record = makeRecord([
+        { status: "success" },
+        { status: "partial" },
+        { status: "failure" },
+      ]);
+      expect(computeConfirmationScore(record)).toBe(1.5);
+    });
+
+    it("applyConfirmationBoost returns baseScore unchanged when no outcomes", () => {
+      expect(applyConfirmationBoost(10, makeRecord())).toBe(10);
+    });
+
+    it("applyConfirmationBoost boosts score based on confirmation score", () => {
+      const record = makeRecord([{ status: "success" }, { status: "success" }]);
+      // confirmationScore = 2, boost = 10 * (1 + 0.1 * 2) = 12
+      expect(applyConfirmationBoost(10, record)).toBe(12);
+    });
+
+    it("sortByConfirmationScore orders highest score first", () => {
+      const low = makeRecord([{ status: "failure" }]);
+      const high = makeRecord([{ status: "success" }, { status: "success" }]);
+      const mid = makeRecord([{ status: "success" }]);
+      const sorted = sortByConfirmationScore([low, high, mid]);
+      expect(computeConfirmationScore(sorted[0])).toBeGreaterThanOrEqual(
+        computeConfirmationScore(sorted[1]),
+      );
+      expect(computeConfirmationScore(sorted[1])).toBeGreaterThanOrEqual(
+        computeConfirmationScore(sorted[2]),
+      );
     });
   });
 
