@@ -1149,23 +1149,33 @@ describe("processStdinRecords", () => {
     expect(records[0].classification).toBe("tactical");
   });
 
-  it("throws error for invalid domain", async () => {
+  it("auto-creates domain when domain not found", async () => {
     const record = {
       type: "convention",
       content: "Test",
       classification: "tactical",
     };
 
-    await expect(
-      processStdinRecords(
-        "nonexistent",
-        false,
-        false,
-        false,
-        JSON.stringify(record),
-        tmpDir,
-      ),
-    ).rejects.toThrow('Domain "nonexistent" not found');
+    const result = await processStdinRecords(
+      "newdomain",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
+
+    expect(result.created).toBe(1);
+    expect(result.errors).toHaveLength(0);
+
+    const filePath = getExpertisePath("newdomain", tmpDir);
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+
+    const config = await import("../../src/utils/config.ts").then((m) =>
+      m.readConfig(tmpDir),
+    );
+    expect(config.domains).toContain("newdomain");
   });
 
   it("throws error for invalid JSON", async () => {
@@ -1664,5 +1674,167 @@ describe("batch mode (--batch)", () => {
 
     const records = await readExpertiseFile(filePath);
     expect(records).toHaveLength(2);
+  });
+});
+
+describe("validation hints", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "mulch-record-hints-"));
+    await initMulchDir(tmpDir);
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+    const filePath = getExpertisePath("testing", tmpDir);
+    await createExpertiseFile(filePath);
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("pattern record missing name includes type hint in error", async () => {
+    const record = {
+      type: "pattern",
+      description: "some description",
+      classification: "tactical",
+    };
+
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain(
+      "pattern records require: name, description",
+    );
+  });
+
+  it("failure record missing resolution includes type hint in error", async () => {
+    const record = {
+      type: "failure",
+      description: "something went wrong",
+      classification: "tactical",
+    };
+
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain(
+      "failure records require: description, resolution",
+    );
+  });
+
+  it("record with no type field does not include Hint in error", async () => {
+    const record = {
+      classification: "tactical",
+    };
+
+    const result = await processStdinRecords(
+      "testing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).not.toContain("Hint:");
+  });
+});
+
+describe("auto-create domain in CLI mode", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "mulch-record-autocreate-"));
+    await initMulchDir(tmpDir);
+    await writeConfig({ ...DEFAULT_CONFIG, domains: [] }, tmpDir);
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("auto-creates domain and writes record via processStdinRecords", async () => {
+    const record = {
+      type: "convention",
+      content: "Use tabs for indentation",
+      classification: "foundational",
+    };
+
+    const result = await processStdinRecords(
+      "newdomain",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
+
+    expect(result.created).toBe(1);
+    expect(result.errors).toHaveLength(0);
+
+    const filePath = getExpertisePath("newdomain", tmpDir);
+    const records = await readExpertiseFile(filePath);
+    expect(records).toHaveLength(1);
+    expect(records[0].type).toBe("convention");
+  });
+
+  it("auto-created domain appears in config", async () => {
+    const record = {
+      type: "convention",
+      content: "Some convention",
+      classification: "tactical",
+    };
+
+    await processStdinRecords(
+      "autodomain",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
+
+    const { readConfig } = await import("../../src/utils/config.ts");
+    const config = await readConfig(tmpDir);
+    expect(config.domains).toContain("autodomain");
+  });
+
+  it("recording to existing domain still works", async () => {
+    await writeConfig({ ...DEFAULT_CONFIG, domains: ["existing"] }, tmpDir);
+    const filePath = getExpertisePath("existing", tmpDir);
+    await createExpertiseFile(filePath);
+
+    const record = {
+      type: "convention",
+      content: "Existing domain record",
+      classification: "tactical",
+    };
+
+    const result = await processStdinRecords(
+      "existing",
+      false,
+      false,
+      false,
+      JSON.stringify(record),
+      tmpDir,
+    );
+
+    expect(result.created).toBe(1);
+    expect(result.errors).toHaveLength(0);
   });
 });

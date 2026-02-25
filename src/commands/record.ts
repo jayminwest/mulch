@@ -10,7 +10,7 @@ import type {
   Outcome,
   RecordType,
 } from "../schemas/record.ts";
-import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
 import {
   appendRecord,
   findDuplicate,
@@ -20,6 +20,15 @@ import {
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
+
+const RECORD_TYPE_REQUIREMENTS: Record<string, string> = {
+  convention: "convention records require: content",
+  pattern: "pattern records require: name, description",
+  failure: "failure records require: description, resolution",
+  decision: "decision records require: title, rationale",
+  reference: "reference records require: name, description",
+  guide: "guide records require: name, description",
+};
 
 /**
  * Process records from stdin (JSON single object or array)
@@ -41,9 +50,7 @@ export async function processStdinRecords(
   const config = await readConfig(cwd);
 
   if (!config.domains.includes(domain)) {
-    throw new Error(
-      `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
-    );
+    await addDomain(domain, cwd);
   }
 
   // Read stdin (or use provided data for testing)
@@ -84,7 +91,15 @@ export async function processStdinRecords(
       const validationErrors = (validate.errors ?? [])
         .map((err) => `${err.instancePath} ${err.message}`)
         .join("; ");
-      errors.push(`Record ${i}: ${validationErrors}`);
+      const recordType =
+        typeof record === "object" && record !== null
+          ? (record as Record<string, unknown>).type
+          : undefined;
+      const typeHint =
+        typeof recordType === "string" && RECORD_TYPE_REQUIREMENTS[recordType]
+          ? `. Hint: ${RECORD_TYPE_REQUIREMENTS[recordType]}`
+          : "";
+      errors.push(`Record ${i}: ${validationErrors}${typeHint}`);
       continue;
     }
 
@@ -492,23 +507,12 @@ Batch recording examples:
         const config = await readConfig();
 
         if (!config.domains.includes(domain)) {
-          if (jsonMode) {
-            outputJsonError(
-              "record",
-              `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
-            );
-          } else {
-            console.error(
-              chalk.red(`Error: domain "${domain}" not found in config.`),
-            );
-            console.error(
-              chalk.red(
-                `Available domains: ${config.domains.join(", ") || "(none)"}`,
-              ),
+          await addDomain(domain);
+          if (!isQuiet()) {
+            console.log(
+              `${brand("✓")} ${brand(`Auto-created domain "${domain}"`)}`,
             );
           }
-          process.exitCode = 1;
-          return;
         }
 
         // Validate --type is provided for non-stdin mode
@@ -823,15 +827,23 @@ Batch recording examples:
           const errors = (validate.errors ?? []).map(
             (err) => `${err.instancePath} ${err.message}`,
           );
+          const typeHint = RECORD_TYPE_REQUIREMENTS[recordType]
+            ? `. Hint: ${RECORD_TYPE_REQUIREMENTS[recordType]}`
+            : "";
           if (jsonMode) {
             outputJsonError(
               "record",
-              `Schema validation failed: ${errors.join("; ")}`,
+              `Schema validation failed: ${errors.join("; ")}${typeHint}`,
             );
           } else {
             console.error(chalk.red("Error: record failed schema validation:"));
             for (const err of validate.errors ?? []) {
               console.error(chalk.red(`  ${err.instancePath} ${err.message}`));
+            }
+            if (typeHint) {
+              console.error(
+                chalk.yellow(`Hint: ${RECORD_TYPE_REQUIREMENTS[recordType]}`),
+              );
             }
           }
           process.exitCode = 1;
