@@ -1,6 +1,7 @@
+import { existsSync } from "node:fs";
 import chalk from "chalk";
 import type { Command } from "commander";
-import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { getExpertisePath, getMulchDir, readConfig } from "../utils/config.ts";
 import { readExpertiseFile } from "../utils/expertise.ts";
 import { getChangedFiles, isGitRepo } from "../utils/git.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
@@ -84,6 +85,21 @@ export function registerLearnCommand(program: Command): void {
           console.error(chalk.red("Error: not in a git repository."));
         }
         process.exitCode = 1;
+        return;
+      }
+
+      // No .mulch/ directory — exit cleanly (supports hook usage in non-mulch projects)
+      if (!existsSync(getMulchDir(cwd))) {
+        if (jsonMode) {
+          outputJson({
+            success: true,
+            command: "learn",
+            changedFiles: [],
+            suggestedDomains: [],
+            unmatchedFiles: [],
+            message: "No .mulch/ directory found — skipping",
+          });
+        }
         return;
       }
 

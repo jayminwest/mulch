@@ -66,7 +66,17 @@ export async function readConfig(
   cwd: string = process.cwd(),
 ): Promise<MulchConfig> {
   const configPath = getConfigPath(cwd);
-  const content = await readFile(configPath, "utf-8");
+  let content: string;
+  try {
+    content = await readFile(configPath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(
+        "No .mulch/ directory found. Run `mulch init` to set up this project.",
+      );
+    }
+    throw err;
+  }
   return yaml.load(content) as MulchConfig;
 }
 
