@@ -28,7 +28,7 @@ import { registerValidateCommand } from "./commands/validate.ts";
 import { outputJsonError } from "./utils/json-output.ts";
 import { accent, brand, muted, setQuiet } from "./utils/palette.ts";
 
-export const VERSION = "0.6.2";
+export const VERSION = "0.6.3";
 
 const rawArgs = process.argv.slice(2);
 

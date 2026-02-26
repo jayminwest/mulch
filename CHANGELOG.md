@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-02-26
+
+### Added
+
+#### Bulk Delete
+- `ml delete <domain> --records <ids>` — delete multiple records by comma-separated IDs in a single operation
+- `ml delete <domain> --all-except <ids>` — delete all records except specified IDs (inverse selection)
+- `--dry-run` flag for delete command — preview what would be deleted without making changes
+
+#### Output Formatting
+- `--format <markdown|compact|ids>` flag for `ml query` and `ml search` — choose output format (`ids` emits one record ID per line, useful for piping)
+- `--verbose` promoted to global flag — available on all commands (previously `prime`-only `-v`/`--verbose`)
+
+#### CLI Improvements
+- Levenshtein-based typo suggestions for unknown commands (e.g., `ml recrod` → "Did you mean 'record'?")
+- Per-type required fields table added to `ml prime` "Recording New Learnings" section
+- Package metadata: `keywords`, `engines`, `homepage`, `bugs`, `repository`, and ecosystem footer added to package.json and README
+
+### Changed
+
+- `ml upgrade` uses `getCurrentVersion()` from `version.ts` instead of importing `VERSION` constant — improves testability
+- Ecosystem footer added to README (os-eco branding)
+- `showSuggestionAfterError(false)` disables Commander's built-in suggestions in favor of custom Levenshtein suggestions
+
+### Fixed
+
+- Biome formatting in timing test (`test/commands/timing.test.ts`)
+
+### Testing
+
+- 763 tests across 38 files, 1763 expect() calls
+- New `test/suggestions.test.ts` (Levenshtein typo suggestions: matching, no-match, distance threshold, JSON mode)
+- New `test/commands/sync.test.ts` (comprehensive sync command coverage: git init, validate, stage, commit)
+- New `test/commands/upgrade.test.ts` (upgrade command: up-to-date, update available, --check, install flow)
+- Expanded `test/commands/delete.test.ts` (bulk delete: --records, --all-except, --dry-run, flag combination errors, JSON mode)
+- Expanded `test/commands/query.test.ts` (--format compact, --format ids, piping workflows)
+- Expanded `test/commands/search.test.ts` (--format compact, --format ids, no-match ids output)
+- Expanded `test/commands/prime.test.ts` (required fields table in prime output)
+
 ## [0.6.2] - 2026-02-25
 
 ### Added
@@ -311,7 +350,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/jayminwest/mulch/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/jayminwest/mulch/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/jayminwest/mulch/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/jayminwest/mulch/compare/v0.5.0...v0.6.0

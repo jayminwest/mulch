@@ -59,10 +59,10 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml add <domain>` | Add a new expertise domain |
 | `ml record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
 | `ml edit <domain> <id>` | Edit an existing record by ID or 1-based index |
-| `ml delete <domain> <id>` | Delete a record by ID or 1-based index |
-| `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score` filters) |
+| `ml delete <domain> [id]` | Delete records by ID, `--records <ids>`, or `--all-except <ids>` (`--dry-run`) |
+| `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
 | `ml prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
-| `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`) |
+| `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--format`) |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
 | `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
@@ -257,12 +257,9 @@ Types (`ExpertiseRecord`, `MulchConfig`, `RecordType`, `Classification`, `Scored
 
 Mulch is part of the [os-eco](https://github.com/jayminwest/os-eco) AI agent tooling ecosystem.
 
-```
-▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  overstory   orchestration
-▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  canopy      prompts
-▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  seeds       issues
-▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  mulch       expertise
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/jayminwest/os-eco/main/branding/logo.png" alt="os-eco" width="444" />
+</p>
 
 ## Contributing
 
