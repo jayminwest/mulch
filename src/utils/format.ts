@@ -358,6 +358,17 @@ export function formatPrimeOutput(domainSections: string[]): string {
   );
   lines.push("```");
   lines.push("");
+  lines.push("**Required fields by type:**");
+  lines.push("");
+  lines.push("| Type | Required flags |");
+  lines.push("|------|----------------|");
+  lines.push('| `convention` | `"<content>"` (positional) |');
+  lines.push('| `pattern` | `--name "..." --description "..."` |');
+  lines.push('| `failure` | `--description "..." --resolution "..."` |');
+  lines.push('| `decision` | `--title "..." --rationale "..."` |');
+  lines.push('| `reference` | `--name "..." --description "..."` |');
+  lines.push('| `guide` | `--name "..." --description "..."` |');
+  lines.push("");
   lines.push("**Link evidence** to records when available:");
   lines.push("");
   lines.push("```bash");

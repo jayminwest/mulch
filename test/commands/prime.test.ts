@@ -128,6 +128,18 @@ describe("prime command", () => {
     expect(output).toContain("mulch record <domain>");
   });
 
+  it("prime output includes per-type required fields table", () => {
+    const output = formatPrimeOutput([]);
+    expect(output).toContain("**Required fields by type:**");
+    expect(output).toContain("| Type | Required flags |");
+    expect(output).toContain("| `convention`");
+    expect(output).toContain("| `pattern`");
+    expect(output).toContain("| `failure`");
+    expect(output).toContain("| `decision`");
+    expect(output).toContain("| `reference`");
+    expect(output).toContain("| `guide`");
+  });
+
   it("--full includes classification and evidence in output", async () => {
     await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
     const filePath = getExpertisePath("testing", tmpDir);
