@@ -1,8 +1,11 @@
 import type { Command } from "commander";
-import { VERSION } from "../cli.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { printError, printSuccess, printWarning } from "../utils/palette.ts";
-import { compareSemver, getLatestVersion } from "../utils/version.ts";
+import {
+  compareSemver,
+  getCurrentVersion,
+  getLatestVersion,
+} from "../utils/version.ts";
 
 const PACKAGE_NAME = "@os-eco/mulch-cli";
 
@@ -30,20 +33,21 @@ export function registerUpgradeCommand(program: Command): void {
         return;
       }
 
-      const upToDate = compareSemver(VERSION, latest) >= 0;
+      const current = getCurrentVersion();
+      const upToDate = compareSemver(current, latest) >= 0;
 
       if (upToDate) {
         if (jsonMode) {
           outputJson({
             success: true,
             command: "upgrade",
-            current: VERSION,
+            current,
             latest,
             upToDate: true,
             updated: false,
           });
         } else {
-          printSuccess(`mulch is up to date (v${VERSION})`);
+          printSuccess(`mulch is up to date (v${current})`);
         }
         return;
       }
@@ -53,13 +57,13 @@ export function registerUpgradeCommand(program: Command): void {
           outputJson({
             success: true,
             command: "upgrade",
-            current: VERSION,
+            current,
             latest,
             upToDate: false,
             updated: false,
           });
         } else {
-          printWarning(`Update available: v${VERSION} → v${latest}`);
+          printWarning(`Update available: v${current} → v${latest}`);
         }
         return;
       }
@@ -91,13 +95,13 @@ export function registerUpgradeCommand(program: Command): void {
         outputJson({
           success: true,
           command: "upgrade",
-          current: VERSION,
+          current,
           latest,
           upToDate: false,
           updated: true,
         });
       } else {
-        printSuccess(`Updated mulch v${VERSION} → v${latest}`);
+        printSuccess(`Updated mulch v${current} → v${latest}`);
       }
     });
 }
