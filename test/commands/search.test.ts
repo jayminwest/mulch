@@ -889,4 +889,152 @@ describe("search command", () => {
       }
     });
   });
+
+  describe("--format option", () => {
+    let originalCwd: string;
+
+    beforeEach(() => {
+      originalCwd = process.cwd();
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      process.exitCode = 0;
+    });
+
+    function makeProgram(): Command {
+      const program = new Command();
+      program
+        .name("mulch")
+        .option("--json", "output as structured JSON")
+        .exitOverride();
+      registerSearchCommand(program);
+      return program;
+    }
+
+    it("--format compact outputs compact format (contains [convention] marker)", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        id: "mx-abc",
+        type: "convention",
+        content: "Compact search test",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "search",
+          "Compact search test",
+          "--format",
+          "compact",
+        ]);
+
+        expect(logSpy).toHaveBeenCalledTimes(2); // output + match count
+        const output = logSpy.mock.calls[0][0] as string;
+        expect(output).toContain("[convention]");
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("--format ids outputs one ID per line", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        id: "mx-id1",
+        type: "convention",
+        content: "ids format search test one",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(dbPath, {
+        id: "mx-id2",
+        type: "convention",
+        content: "ids format search test two",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "search",
+          "ids format search test",
+          "--format",
+          "ids",
+        ]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = logSpy.mock.calls[0][0] as string;
+        const lines = output.split("\n");
+        expect(lines).toContain("mx-id1");
+        expect(lines).toContain("mx-id2");
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("--format ids skips records without IDs", async () => {
+      const dbPath = getExpertisePath("database", tmpDir);
+      await appendRecord(dbPath, {
+        id: "mx-withid",
+        type: "convention",
+        content: "skiptest has id",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      // Write directly to bypass appendRecord's auto-ID assignment
+      await appendFile(
+        dbPath,
+        `${JSON.stringify({ type: "convention", content: "skiptest no id", classification: "foundational", recorded_at: new Date().toISOString() })}\n`,
+        "utf-8",
+      );
+
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "search",
+          "skiptest",
+          "--format",
+          "ids",
+        ]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = logSpy.mock.calls[0][0] as string;
+        const lines = output.split("\n");
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toBe("mx-withid");
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("default (no --format) uses markdown format with ## heading", async () => {
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync(["node", "mulch", "search", "WAL"]);
+
+        expect(logSpy).toHaveBeenCalledTimes(2); // output + match count
+        const output = logSpy.mock.calls[0][0] as string;
+        expect(output).toContain("## database");
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+  });
 });

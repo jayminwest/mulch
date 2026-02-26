@@ -7,7 +7,10 @@ import {
   getFileModTime,
   readExpertiseFile,
 } from "../utils/expertise.ts";
-import { formatDomainExpertise } from "../utils/format.ts";
+import {
+  formatDomainExpertise,
+  formatDomainExpertiseCompact,
+} from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import {
   type ScoredRecord,
@@ -38,6 +41,11 @@ export function registerQueryCommand(program: Command): void {
       "sort results by confirmation-frequency score (highest first)",
     )
     .option("--all", "show all domains")
+    .addOption(
+      new Option("--format <format>", "output format for records")
+        .choices(["markdown", "compact", "ids"])
+        .default("markdown"),
+    )
     .action(
       async (domain: string | undefined, options: Record<string, unknown>) => {
         const jsonMode = program.opts().json === true;
@@ -123,36 +131,79 @@ export function registerQueryCommand(program: Command): void {
             }
             outputJson({ success: true, command: "query", domains: result });
           } else {
-            const sections: string[] = [];
-            for (const d of domainsToQuery) {
-              const filePath = getExpertisePath(d);
-              let records = await readExpertiseFile(filePath);
-              const lastUpdated = await getFileModTime(filePath);
-              if (options.type) {
-                records = filterByType(records, options.type as string);
+            const fmt = (options.format as string) ?? "markdown";
+            if (fmt === "ids") {
+              const ids: string[] = [];
+              for (const d of domainsToQuery) {
+                const filePath = getExpertisePath(d);
+                let records = await readExpertiseFile(filePath);
+                if (options.type) {
+                  records = filterByType(records, options.type as string);
+                }
+                if (options.classification) {
+                  records = filterByClassification(
+                    records,
+                    options.classification as string,
+                  );
+                }
+                if (options.file) {
+                  records = filterByFile(records, options.file as string);
+                }
+                if (options.outcomeStatus) {
+                  records = records.filter((r) =>
+                    r.outcomes?.some(
+                      (o) => o.status === (options.outcomeStatus as string),
+                    ),
+                  );
+                }
+                if (options.sortByScore) {
+                  records = sortByConfirmationScore(records as ScoredRecord[]);
+                }
+                for (const r of records) {
+                  if (r.id) ids.push(r.id);
+                }
               }
-              if (options.classification) {
-                records = filterByClassification(
-                  records,
-                  options.classification as string,
-                );
+              if (ids.length > 0) {
+                console.log(ids.join("\n"));
               }
-              if (options.file) {
-                records = filterByFile(records, options.file as string);
+            } else {
+              const sections: string[] = [];
+              for (const d of domainsToQuery) {
+                const filePath = getExpertisePath(d);
+                let records = await readExpertiseFile(filePath);
+                const lastUpdated = await getFileModTime(filePath);
+                if (options.type) {
+                  records = filterByType(records, options.type as string);
+                }
+                if (options.classification) {
+                  records = filterByClassification(
+                    records,
+                    options.classification as string,
+                  );
+                }
+                if (options.file) {
+                  records = filterByFile(records, options.file as string);
+                }
+                if (options.outcomeStatus) {
+                  records = records.filter((r) =>
+                    r.outcomes?.some(
+                      (o) => o.status === (options.outcomeStatus as string),
+                    ),
+                  );
+                }
+                if (options.sortByScore) {
+                  records = sortByConfirmationScore(records as ScoredRecord[]);
+                }
+                if (fmt === "compact") {
+                  sections.push(
+                    formatDomainExpertiseCompact(d, records, lastUpdated),
+                  );
+                } else {
+                  sections.push(formatDomainExpertise(d, records, lastUpdated));
+                }
               }
-              if (options.outcomeStatus) {
-                records = records.filter((r) =>
-                  r.outcomes?.some(
-                    (o) => o.status === (options.outcomeStatus as string),
-                  ),
-                );
-              }
-              if (options.sortByScore) {
-                records = sortByConfirmationScore(records as ScoredRecord[]);
-              }
-              sections.push(formatDomainExpertise(d, records, lastUpdated));
+              console.log(sections.join("\n\n"));
             }
-            console.log(sections.join("\n\n"));
           }
         } catch (err) {
           if ((err as NodeJS.ErrnoException).code === "ENOENT") {

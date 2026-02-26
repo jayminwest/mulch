@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { appendFile, mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
@@ -1134,6 +1134,171 @@ describe("query command", () => {
       sortByConfirmationScore(patterns as ScoredRecord[]); // not reassigned
 
       expect((patterns[0] as { name: string }).name).toBe(originalFirst);
+    });
+  });
+
+  describe("--format option", () => {
+    let originalCwd: string;
+
+    beforeEach(() => {
+      originalCwd = process.cwd();
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      process.exitCode = 0;
+    });
+
+    function makeProgram(): Command {
+      const program = new Command();
+      program
+        .name("mulch")
+        .option("--json", "output as structured JSON")
+        .exitOverride();
+      registerQueryCommand(program);
+      return program;
+    }
+
+    it("--format compact outputs compact format (contains [convention] marker)", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+      await appendRecord(filePath, {
+        id: "mx-aaa",
+        type: "convention",
+        content: "Compact format test",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "query",
+          "testing",
+          "--format",
+          "compact",
+        ]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = logSpy.mock.calls[0][0] as string;
+        expect(output).toContain("[convention]");
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("--format ids outputs one ID per line", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+      await appendRecord(filePath, {
+        id: "mx-aaa",
+        type: "convention",
+        content: "First record",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      await appendRecord(filePath, {
+        id: "mx-bbb",
+        type: "convention",
+        content: "Second record",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "query",
+          "testing",
+          "--format",
+          "ids",
+        ]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = logSpy.mock.calls[0][0] as string;
+        const lines = output.split("\n");
+        expect(lines).toContain("mx-aaa");
+        expect(lines).toContain("mx-bbb");
+        expect(lines).toHaveLength(2);
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("--format ids skips records without IDs", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+      await appendRecord(filePath, {
+        id: "mx-ccc",
+        type: "convention",
+        content: "Has ID",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+      // Write directly to bypass appendRecord's auto-ID assignment
+      await appendFile(
+        filePath,
+        `${JSON.stringify({ type: "convention", content: "No ID", classification: "foundational", recorded_at: new Date().toISOString() })}\n`,
+        "utf-8",
+      );
+
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync([
+          "node",
+          "mulch",
+          "query",
+          "testing",
+          "--format",
+          "ids",
+        ]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = logSpy.mock.calls[0][0] as string;
+        const lines = output.split("\n");
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toBe("mx-ccc");
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("default (no --format) uses markdown format with ## heading", async () => {
+      await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+      const filePath = getExpertisePath("testing", tmpDir);
+      await createExpertiseFile(filePath);
+      await appendRecord(filePath, {
+        type: "convention",
+        content: "Default format test",
+        classification: "foundational",
+        recorded_at: new Date().toISOString(),
+      });
+
+      process.chdir(tmpDir);
+      const logSpy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const program = makeProgram();
+        await program.parseAsync(["node", "mulch", "query", "testing"]);
+
+        expect(logSpy).toHaveBeenCalledTimes(1);
+        const output = logSpy.mock.calls[0][0] as string;
+        expect(output).toContain("## testing");
+      } finally {
+        logSpy.mockRestore();
+      }
     });
   });
 });

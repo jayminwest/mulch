@@ -8,7 +8,10 @@ import {
   readExpertiseFile,
 } from "../utils/expertise.ts";
 import { searchRecords } from "../utils/expertise.ts";
-import { formatDomainExpertise } from "../utils/format.ts";
+import {
+  formatDomainExpertise,
+  formatDomainExpertiseCompact,
+} from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import {
   type ScoredRecord,
@@ -49,6 +52,11 @@ export function registerSearchCommand(program: Command): void {
       "--sort-by-score",
       "sort results by confirmation-frequency score (highest first)",
     )
+    .addOption(
+      new Option("--format <format>", "output format for records")
+        .choices(["markdown", "compact", "ids"])
+        .default("markdown"),
+    )
     .action(
       async (
         query: string | undefined,
@@ -60,6 +68,7 @@ export function registerSearchCommand(program: Command): void {
           file?: string;
           outcomeStatus?: string;
           sortByScore?: boolean;
+          format?: string;
         },
       ) => {
         const jsonMode = program.opts().json === true;
@@ -161,54 +170,109 @@ export function registerSearchCommand(program: Command): void {
               domains: result,
             });
           } else {
-            const sections: string[] = [];
-            for (const domain of domainsToSearch) {
-              const filePath = getExpertisePath(domain);
-              let records = await readExpertiseFile(filePath);
-              const lastUpdated = await getFileModTime(filePath);
-              if (options.type) {
-                records = filterByType(records, options.type);
-              }
-              if (options.tag) {
-                const tagLower = options.tag.toLowerCase();
-                records = records.filter((r) =>
-                  r.tags?.some((t) => t.toLowerCase() === tagLower),
-                );
-              }
-              if (options.classification) {
-                records = filterByClassification(
-                  records,
-                  options.classification,
-                );
-              }
-              if (options.file) {
-                records = filterByFile(records, options.file);
-              }
-              if (options.outcomeStatus) {
-                records = records.filter((r) =>
-                  r.outcomes?.some((o) => o.status === options.outcomeStatus),
-                );
-              }
-              let matches = query ? searchRecords(records, query) : records;
-              if (options.sortByScore) {
-                matches = sortByConfirmationScore(matches as ScoredRecord[]);
-              }
-              if (matches.length > 0) {
-                totalMatches += matches.length;
-                sections.push(
-                  formatDomainExpertise(domain, matches, lastUpdated),
-                );
-              }
-            }
-
+            const fmt = options.format ?? "markdown";
             const label = query ? `matching "${query}"` : "matching filters";
-            if (sections.length === 0) {
-              console.log(`No records ${label} found.`);
+
+            if (fmt === "ids") {
+              const ids: string[] = [];
+              for (const domain of domainsToSearch) {
+                const filePath = getExpertisePath(domain);
+                let records = await readExpertiseFile(filePath);
+                if (options.type) {
+                  records = filterByType(records, options.type);
+                }
+                if (options.tag) {
+                  const tagLower = options.tag.toLowerCase();
+                  records = records.filter((r) =>
+                    r.tags?.some((t) => t.toLowerCase() === tagLower),
+                  );
+                }
+                if (options.classification) {
+                  records = filterByClassification(
+                    records,
+                    options.classification,
+                  );
+                }
+                if (options.file) {
+                  records = filterByFile(records, options.file);
+                }
+                if (options.outcomeStatus) {
+                  records = records.filter((r) =>
+                    r.outcomes?.some((o) => o.status === options.outcomeStatus),
+                  );
+                }
+                let matches = query ? searchRecords(records, query) : records;
+                if (options.sortByScore) {
+                  matches = sortByConfirmationScore(matches as ScoredRecord[]);
+                }
+                for (const r of matches) {
+                  if (r.id) ids.push(r.id);
+                }
+              }
+              if (ids.length === 0) {
+                console.log(`No records ${label} found.`);
+              } else {
+                console.log(ids.join("\n"));
+              }
             } else {
-              console.log(sections.join("\n\n"));
-              console.log(
-                `\n${totalMatches} match${totalMatches === 1 ? "" : "es"} found.`,
-              );
+              const sections: string[] = [];
+              for (const domain of domainsToSearch) {
+                const filePath = getExpertisePath(domain);
+                let records = await readExpertiseFile(filePath);
+                const lastUpdated = await getFileModTime(filePath);
+                if (options.type) {
+                  records = filterByType(records, options.type);
+                }
+                if (options.tag) {
+                  const tagLower = options.tag.toLowerCase();
+                  records = records.filter((r) =>
+                    r.tags?.some((t) => t.toLowerCase() === tagLower),
+                  );
+                }
+                if (options.classification) {
+                  records = filterByClassification(
+                    records,
+                    options.classification,
+                  );
+                }
+                if (options.file) {
+                  records = filterByFile(records, options.file);
+                }
+                if (options.outcomeStatus) {
+                  records = records.filter((r) =>
+                    r.outcomes?.some((o) => o.status === options.outcomeStatus),
+                  );
+                }
+                let matches = query ? searchRecords(records, query) : records;
+                if (options.sortByScore) {
+                  matches = sortByConfirmationScore(matches as ScoredRecord[]);
+                }
+                if (matches.length > 0) {
+                  totalMatches += matches.length;
+                  if (fmt === "compact") {
+                    sections.push(
+                      formatDomainExpertiseCompact(
+                        domain,
+                        matches,
+                        lastUpdated,
+                      ),
+                    );
+                  } else {
+                    sections.push(
+                      formatDomainExpertise(domain, matches, lastUpdated),
+                    );
+                  }
+                }
+              }
+
+              if (sections.length === 0) {
+                console.log(`No records ${label} found.`);
+              } else {
+                console.log(sections.join("\n\n"));
+                console.log(
+                  `\n${totalMatches} match${totalMatches === 1 ? "" : "es"} found.`,
+                );
+              }
             }
           }
         } catch (err) {
