@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import yaml from "js-yaml";
 import type { MulchConfig } from "../schemas/config.ts";
@@ -94,6 +94,27 @@ export async function addDomain(
   const filePath = getExpertisePath(domain, cwd);
   if (!existsSync(filePath)) {
     await createExpertiseFile(filePath);
+  }
+}
+
+export async function removeDomain(
+  domain: string,
+  cwd: string = process.cwd(),
+  deleteFile = false,
+): Promise<void> {
+  validateDomainName(domain);
+  const config = await readConfig(cwd);
+  const index = config.domains.indexOf(domain);
+  if (index === -1) {
+    throw new Error(`Domain "${domain}" not found in config.`);
+  }
+  config.domains.splice(index, 1);
+  await writeConfig(config, cwd);
+  if (deleteFile) {
+    const filePath = getExpertisePath(domain, cwd);
+    if (existsSync(filePath)) {
+      await rm(filePath);
+    }
   }
 }
 
