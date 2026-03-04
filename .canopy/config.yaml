@@ -1,0 +1,3 @@
+project: mulch
+version: 1
+emitDir: .claude/commands
