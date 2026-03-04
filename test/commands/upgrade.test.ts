@@ -44,7 +44,7 @@ describe("upgrade command", () => {
         // Network unreachable is acceptable
         expect(stdout + runUpgrade("--check").stderr).toBeTruthy();
       }
-    });
+    }, 15000);
 
     it("does not attempt installation with --check", () => {
       // --check should never trigger bun install; just verify it exits quickly
