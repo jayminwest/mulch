@@ -248,6 +248,7 @@ export function registerPrimeCommand(program: Command): void {
               budget,
               (record) => estimateRecordText(record),
               (text) => tokenizer.count(text),
+              { contextFiles: filesToFilter },
             );
             domainRecordsToFormat = result.kept;
             droppedCount = result.droppedCount;

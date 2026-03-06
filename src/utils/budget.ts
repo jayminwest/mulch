@@ -1,28 +1,8 @@
-import type {
-  Classification,
-  ExpertiseRecord,
-  RecordType,
-} from "../schemas/record.ts";
-import { type ScoredRecord, computeConfirmationScore } from "./scoring.ts";
+import type { ExpertiseRecord } from "../schemas/record.ts";
+import { type RelevanceConfig, computeRelevanceScore } from "./relevance.ts";
+import type { ScoredRecord } from "./scoring.ts";
 
 export const DEFAULT_BUDGET = 4000;
-
-/** Priority order for record types (lower index = higher priority) */
-const TYPE_PRIORITY: RecordType[] = [
-  "convention",
-  "decision",
-  "pattern",
-  "guide",
-  "failure",
-  "reference",
-];
-
-/** Priority order for classifications (lower index = higher priority) */
-const CLASSIFICATION_PRIORITY: Classification[] = [
-  "foundational",
-  "tactical",
-  "observational",
-];
 
 export interface DomainRecords {
   domain: string;
@@ -38,25 +18,9 @@ export interface BudgetResult {
   droppedDomainCount: number;
 }
 
-/**
- * Sort records by priority: type order, then classification, then confirmation score
- * (higher score = higher priority), then recency (newest first).
- */
-function recordSortKey(r: ScoredRecord): [number, number, number, number] {
-  const typeIdx = TYPE_PRIORITY.indexOf(r.type);
-  const classIdx = CLASSIFICATION_PRIORITY.indexOf(r.classification);
-  const confirmationScore = computeConfirmationScore(r);
-  const time = r.recorded_at ? new Date(r.recorded_at).getTime() : 0;
-  return [typeIdx, classIdx, -confirmationScore, -time];
-}
-
-function compareRecords(a: ScoredRecord, b: ScoredRecord): number {
-  const ka = recordSortKey(a);
-  const kb = recordSortKey(b);
-  for (let i = 0; i < 4; i++) {
-    if (ka[i] !== kb[i]) return ka[i] - kb[i];
-  }
-  return 0;
+export interface BudgetOptions {
+  contextFiles?: string[];
+  relevanceConfig?: RelevanceConfig;
 }
 
 /**
@@ -81,15 +45,30 @@ export function applyBudget(
   budget: number,
   formatRecord: (record: ExpertiseRecord, domain: string) => string,
   countTokens: (text: string) => number = estimateTokens,
+  options?: BudgetOptions,
 ): BudgetResult {
-  // Flatten all records with their domain, then sort by priority
-  const tagged: Array<{ domain: string; record: ScoredRecord }> = [];
+  const now = new Date();
+  const contextFiles = options?.contextFiles;
+  const relevanceConfig = options?.relevanceConfig;
+
+  // Flatten all records with their domain, then sort by relevance score
+  const tagged: Array<{
+    domain: string;
+    record: ScoredRecord;
+    score: number;
+  }> = [];
   for (const d of domains) {
     for (const r of d.records) {
-      tagged.push({ domain: d.domain, record: r });
+      const relevance = computeRelevanceScore(
+        r,
+        contextFiles,
+        now,
+        relevanceConfig,
+      );
+      tagged.push({ domain: d.domain, record: r, score: relevance.score });
     }
   }
-  tagged.sort((a, b) => compareRecords(a.record, b.record));
+  tagged.sort((a, b) => b.score - a.score);
 
   const totalRecords = tagged.length;
   let usedTokens = 0;
