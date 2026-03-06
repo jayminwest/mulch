@@ -13,23 +13,23 @@ export type ScoredRecord = ExpertiseRecord;
  * Successful outcomes indicate confirmed, working applications of the record.
  */
 export function getSuccessCount(record: ScoredRecord): number {
-  if (!record.outcomes || record.outcomes.length === 0) return 0;
-  return record.outcomes.filter((o) => o.status === "success").length;
+	if (!record.outcomes || record.outcomes.length === 0) return 0;
+	return record.outcomes.filter((o) => o.status === "success").length;
 }
 
 /**
  * Returns the number of failed outcomes for a record.
  */
 export function getFailureCount(record: ScoredRecord): number {
-  if (!record.outcomes || record.outcomes.length === 0) return 0;
-  return record.outcomes.filter((o) => o.status === "failure").length;
+	if (!record.outcomes || record.outcomes.length === 0) return 0;
+	return record.outcomes.filter((o) => o.status === "failure").length;
 }
 
 /**
  * Returns the total number of recorded outcomes (applications) for a record.
  */
 export function getTotalApplications(record: ScoredRecord): number {
-  return record.outcomes?.length ?? 0;
+	return record.outcomes?.length ?? 0;
 }
 
 /**
@@ -38,12 +38,11 @@ export function getTotalApplications(record: ScoredRecord): number {
  * Returns 0 for records with no outcomes.
  */
 export function getSuccessRate(record: ScoredRecord): number {
-  const total = getTotalApplications(record);
-  if (total === 0) return 0;
-  const partialCount =
-    record.outcomes?.filter((o) => o.status === "partial").length ?? 0;
-  const successCount = getSuccessCount(record);
-  return (successCount + partialCount * 0.5) / total;
+	const total = getTotalApplications(record);
+	if (total === 0) return 0;
+	const partialCount = record.outcomes?.filter((o) => o.status === "partial").length ?? 0;
+	const successCount = getSuccessCount(record);
+	return (successCount + partialCount * 0.5) / total;
 }
 
 /**
@@ -57,12 +56,10 @@ export function getSuccessRate(record: ScoredRecord): number {
  * Records with only failures return 0.
  */
 export function computeConfirmationScore(record: ScoredRecord): number {
-  if (!record.outcomes || record.outcomes.length === 0) return 0;
-  const successCount = getSuccessCount(record);
-  const partialCount = record.outcomes.filter(
-    (o) => o.status === "partial",
-  ).length;
-  return successCount + partialCount * 0.5;
+	if (!record.outcomes || record.outcomes.length === 0) return 0;
+	const successCount = getSuccessCount(record);
+	const partialCount = record.outcomes.filter((o) => o.status === "partial").length;
+	return successCount + partialCount * 0.5;
 }
 
 /**
@@ -78,13 +75,13 @@ export function computeConfirmationScore(record: ScoredRecord): number {
  * @returns The boosted score
  */
 export function applyConfirmationBoost(
-  baseScore: number,
-  record: ScoredRecord,
-  boostFactor = 0.1,
+	baseScore: number,
+	record: ScoredRecord,
+	boostFactor = 0.1,
 ): number {
-  const confirmationScore = computeConfirmationScore(record);
-  if (confirmationScore === 0) return baseScore;
-  return baseScore * (1 + boostFactor * confirmationScore);
+	const confirmationScore = computeConfirmationScore(record);
+	if (confirmationScore === 0) return baseScore;
+	return baseScore * (1 + boostFactor * confirmationScore);
 }
 
 /**
@@ -92,10 +89,6 @@ export function applyConfirmationBoost(
  * Records with equal scores maintain their original relative order (stable sort).
  * Records with no outcomes (score = 0) sort to the end.
  */
-export function sortByConfirmationScore<T extends ScoredRecord>(
-  records: T[],
-): T[] {
-  return [...records].sort(
-    (a, b) => computeConfirmationScore(b) - computeConfirmationScore(a),
-  );
+export function sortByConfirmationScore<T extends ScoredRecord>(records: T[]): T[] {
+	return [...records].sort((a, b) => computeConfirmationScore(b) - computeConfirmationScore(a));
 }

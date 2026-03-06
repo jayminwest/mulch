@@ -123,3 +123,26 @@ This injects session context: rules, command reference, and workflows.
 2. File issues for remaining work: `sd create --title "..."`
 3. Sync and push: `sd sync && git push`
 <!-- seeds:end -->
+
+<!-- canopy:start -->
+## Prompt Management (Canopy)
+<!-- canopy-onboard-v:1 -->
+
+This project uses [Canopy](https://github.com/jayminwest/canopy) for git-native prompt management.
+
+**At the start of every session**, run:
+```
+cn prime
+```
+
+This injects prompt workflow context: commands, conventions, and common workflows.
+
+**Quick reference:**
+- `cn list` — List all prompts
+- `cn render <name>` — View rendered prompt (resolves inheritance)
+- `cn emit --all` — Render prompts to files
+- `cn update <name>` — Update a prompt (creates new version)
+- `cn sync` — Stage and commit .canopy/ changes
+
+**Do not manually edit emitted files.** Use `cn update` to modify prompts, then `cn emit` to regenerate.
+<!-- canopy:end -->

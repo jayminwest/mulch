@@ -1,81 +1,77 @@
-import type {
-  Classification,
-  ExpertiseRecord,
-  Outcome,
-} from "./schemas/record.ts";
+import type { Classification, ExpertiseRecord, Outcome } from "./schemas/record.ts";
 import { getExpertisePath, readConfig } from "./utils/config.ts";
 import {
-  appendRecord,
-  filterByClassification,
-  filterByFile,
-  filterByType,
-  findDuplicate,
-  readExpertiseFile,
-  resolveRecordId,
-  searchRecords,
-  writeExpertiseFile,
+	appendRecord,
+	filterByClassification,
+	filterByFile,
+	filterByType,
+	findDuplicate,
+	readExpertiseFile,
+	resolveRecordId,
+	searchRecords,
+	writeExpertiseFile,
 } from "./utils/expertise.ts";
 import { withFileLock } from "./utils/lock.ts";
 
 export interface RecordOptions {
-  force?: boolean;
-  cwd?: string;
+	force?: boolean;
+	cwd?: string;
 }
 
 export interface RecordResult {
-  action: "created" | "updated" | "skipped";
-  record: ExpertiseRecord;
+	action: "created" | "updated" | "skipped";
+	record: ExpertiseRecord;
 }
 
 export interface SearchOptions {
-  domain?: string;
-  type?: string;
-  tag?: string;
-  classification?: string;
-  file?: string;
-  cwd?: string;
+	domain?: string;
+	type?: string;
+	tag?: string;
+	classification?: string;
+	file?: string;
+	cwd?: string;
 }
 
 export interface SearchResult {
-  domain: string;
-  records: ExpertiseRecord[];
+	domain: string;
+	records: ExpertiseRecord[];
 }
 
 export interface QueryOptions {
-  type?: string;
-  classification?: string;
-  file?: string;
-  cwd?: string;
+	type?: string;
+	classification?: string;
+	file?: string;
+	cwd?: string;
 }
 
 export interface EditOptions {
-  cwd?: string;
+	cwd?: string;
 }
 
 export interface OutcomeOptions {
-  cwd?: string;
+	cwd?: string;
 }
 
 export interface AppendOutcomeResult {
-  record: ExpertiseRecord;
-  outcome: Outcome;
-  total_outcomes: number;
+	record: ExpertiseRecord;
+	outcome: Outcome;
+	total_outcomes: number;
 }
 
 export interface RecordUpdates {
-  classification?: Classification;
-  tags?: string[];
-  relates_to?: string[];
-  supersedes?: string[];
-  outcomes?: Outcome[];
-  // type-specific fields
-  content?: string;
-  name?: string;
-  description?: string;
-  resolution?: string;
-  title?: string;
-  rationale?: string;
-  files?: string[];
+	classification?: Classification;
+	tags?: string[];
+	relates_to?: string[];
+	supersedes?: string[];
+	outcomes?: Outcome[];
+	// type-specific fields
+	content?: string;
+	name?: string;
+	description?: string;
+	resolution?: string;
+	title?: string;
+	rationale?: string;
+	files?: string[];
 }
 
 /**
@@ -84,42 +80,42 @@ export interface RecordUpdates {
  * duplicate key; convention and failure duplicates are skipped unless force=true.
  */
 export async function recordExpertise(
-  domain: string,
-  record: ExpertiseRecord,
-  options: RecordOptions = {},
+	domain: string,
+	record: ExpertiseRecord,
+	options: RecordOptions = {},
 ): Promise<RecordResult> {
-  const { force = false, cwd } = options;
+	const { force = false, cwd } = options;
 
-  const config = await readConfig(cwd);
-  if (!config.domains.includes(domain)) {
-    throw new Error(
-      `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
-    );
-  }
+	const config = await readConfig(cwd);
+	if (!config.domains.includes(domain)) {
+		throw new Error(
+			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+		);
+	}
 
-  const filePath = getExpertisePath(domain, cwd);
+	const filePath = getExpertisePath(domain, cwd);
 
-  return withFileLock(filePath, async () => {
-    const existing = await readExpertiseFile(filePath);
-    const dup = findDuplicate(existing, record);
+	return withFileLock(filePath, async () => {
+		const existing = await readExpertiseFile(filePath);
+		const dup = findDuplicate(existing, record);
 
-    if (dup && !force) {
-      const isNamed =
-        record.type === "pattern" ||
-        record.type === "decision" ||
-        record.type === "reference" ||
-        record.type === "guide";
+		if (dup && !force) {
+			const isNamed =
+				record.type === "pattern" ||
+				record.type === "decision" ||
+				record.type === "reference" ||
+				record.type === "guide";
 
-      if (isNamed) {
-        existing[dup.index] = record;
-        await writeExpertiseFile(filePath, existing);
-        return { action: "updated" as const, record };
-      }
-      return { action: "skipped" as const, record: dup.record };
-    }
-    await appendRecord(filePath, record);
-    return { action: "created" as const, record };
-  });
+			if (isNamed) {
+				existing[dup.index] = record;
+				await writeExpertiseFile(filePath, existing);
+				return { action: "updated" as const, record };
+			}
+			return { action: "skipped" as const, record: dup.record };
+		}
+		await appendRecord(filePath, record);
+		return { action: "created" as const, record };
+	});
 }
 
 /**
@@ -127,85 +123,83 @@ export async function recordExpertise(
  * Returns domains with at least one matching record.
  */
 export async function searchExpertise(
-  query: string,
-  options: SearchOptions = {},
+	query: string,
+	options: SearchOptions = {},
 ): Promise<SearchResult[]> {
-  const { cwd } = options;
-  const config = await readConfig(cwd);
+	const { cwd } = options;
+	const config = await readConfig(cwd);
 
-  let domainsToSearch: string[];
-  if (options.domain) {
-    if (!config.domains.includes(options.domain)) {
-      throw new Error(
-        `Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
-      );
-    }
-    domainsToSearch = [options.domain];
-  } else {
-    domainsToSearch = config.domains;
-  }
+	let domainsToSearch: string[];
+	if (options.domain) {
+		if (!config.domains.includes(options.domain)) {
+			throw new Error(
+				`Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
+			);
+		}
+		domainsToSearch = [options.domain];
+	} else {
+		domainsToSearch = config.domains;
+	}
 
-  const results: SearchResult[] = [];
+	const results: SearchResult[] = [];
 
-  for (const d of domainsToSearch) {
-    const filePath = getExpertisePath(d, cwd);
-    let records = await readExpertiseFile(filePath);
+	for (const d of domainsToSearch) {
+		const filePath = getExpertisePath(d, cwd);
+		let records = await readExpertiseFile(filePath);
 
-    if (options.type) {
-      records = filterByType(records, options.type);
-    }
-    if (options.tag) {
-      const tagLower = options.tag.toLowerCase();
-      records = records.filter((r) =>
-        r.tags?.some((t) => t.toLowerCase() === tagLower),
-      );
-    }
-    if (options.classification) {
-      records = filterByClassification(records, options.classification);
-    }
-    if (options.file) {
-      records = filterByFile(records, options.file);
-    }
+		if (options.type) {
+			records = filterByType(records, options.type);
+		}
+		if (options.tag) {
+			const tagLower = options.tag.toLowerCase();
+			records = records.filter((r) => r.tags?.some((t) => t.toLowerCase() === tagLower));
+		}
+		if (options.classification) {
+			records = filterByClassification(records, options.classification);
+		}
+		if (options.file) {
+			records = filterByFile(records, options.file);
+		}
 
-    const matches = searchRecords(records, query);
-    if (matches.length > 0) {
-      results.push({ domain: d, records: matches });
-    }
-  }
+		const matches = searchRecords(records, query);
+		if (matches.length > 0) {
+			results.push({ domain: d, records: matches });
+		}
+	}
 
-  return results;
+	return results;
 }
 
 /**
  * Query all records in a domain with optional filtering.
  */
 export async function queryDomain(
-  domain: string,
-  options: QueryOptions = {},
+	domain: string,
+	options: QueryOptions = {},
 ): Promise<ExpertiseRecord[]> {
-  const { cwd } = options;
-  const config = await readConfig(cwd);
+	const { cwd } = options;
+	const config = await readConfig(cwd);
 
-  if (!config.domains.includes(domain)) {
-    throw new Error(
-      `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
-    );
-  }
+	if (!config.domains.includes(domain)) {
+		throw new Error(
+			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+		);
+	}
 
-  const filePath = getExpertisePath(domain, cwd);
-  let records = await readExpertiseFile(filePath);
+	const filePath = getExpertisePath(domain, cwd);
+	let records = await readExpertiseFile(filePath);
 
-  if (options.type) {
-    records = filterByType(records, options.type);
-  }
-  if (options.classification) {
-    records = filterByClassification(records, options.classification);
-  }
-  if (options.file) {
-    records = filterByFile(records, options.file);
-  }
+	if (options.type) {
+		records = filterByType(records, options.type);
+	}
+	if (options.classification) {
+		records = filterByClassification(records, options.classification);
+	}
+	if (options.file) {
+		records = filterByFile(records, options.file);
+	}
 
-  return records;
+	return records;
 }
 
 /**
@@ -213,110 +207,114 @@ export async function queryDomain(
  * Only provided fields in updates are modified; all other fields are preserved.
  */
 export async function editRecord(
-  domain: string,
-  id: string,
-  updates: RecordUpdates,
-  options: EditOptions = {},
+	domain: string,
+	id: string,
+	updates: RecordUpdates,
+	options: EditOptions = {},
 ): Promise<ExpertiseRecord> {
-  const { cwd } = options;
-  const config = await readConfig(cwd);
+	const { cwd } = options;
+	const config = await readConfig(cwd);
 
-  if (!config.domains.includes(domain)) {
-    throw new Error(
-      `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
-    );
-  }
+	if (!config.domains.includes(domain)) {
+		throw new Error(
+			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+		);
+	}
 
-  const filePath = getExpertisePath(domain, cwd);
+	const filePath = getExpertisePath(domain, cwd);
 
-  return withFileLock(filePath, async () => {
-    const records = await readExpertiseFile(filePath);
-    const resolved = resolveRecordId(records, id);
+	return withFileLock(filePath, async () => {
+		const records = await readExpertiseFile(filePath);
+		const resolved = resolveRecordId(records, id);
 
-    if (!resolved.ok) {
-      throw new Error(resolved.error);
-    }
+		if (!resolved.ok) {
+			throw new Error(resolved.error);
+		}
 
-    const targetIndex = resolved.index;
-    const record = { ...records[targetIndex] };
+		const targetIndex = resolved.index;
+		const original = records[targetIndex];
+		if (!original) {
+			throw new Error(`Record at index ${targetIndex} not found`);
+		}
+		const record: ExpertiseRecord = { ...original };
 
-    // Apply common updates
-    if (updates.classification !== undefined) {
-      record.classification = updates.classification;
-    }
-    if (updates.tags !== undefined) {
-      record.tags = updates.tags;
-    }
-    if (updates.relates_to !== undefined) {
-      record.relates_to = updates.relates_to;
-    }
-    if (updates.supersedes !== undefined) {
-      record.supersedes = updates.supersedes;
-    }
-    if (updates.outcomes !== undefined) {
-      record.outcomes = updates.outcomes;
-    }
+		// Apply common updates
+		if (updates.classification !== undefined) {
+			record.classification = updates.classification;
+		}
+		if (updates.tags !== undefined) {
+			record.tags = updates.tags;
+		}
+		if (updates.relates_to !== undefined) {
+			record.relates_to = updates.relates_to;
+		}
+		if (updates.supersedes !== undefined) {
+			record.supersedes = updates.supersedes;
+		}
+		if (updates.outcomes !== undefined) {
+			record.outcomes = updates.outcomes;
+		}
 
-    // Apply type-specific updates
-    switch (record.type) {
-      case "convention":
-        if (updates.content !== undefined) {
-          record.content = updates.content;
-        }
-        break;
-      case "pattern":
-        if (updates.name !== undefined) {
-          record.name = updates.name;
-        }
-        if (updates.description !== undefined) {
-          record.description = updates.description;
-        }
-        if (updates.files !== undefined) {
-          record.files = updates.files;
-        }
-        break;
-      case "failure":
-        if (updates.description !== undefined) {
-          record.description = updates.description;
-        }
-        if (updates.resolution !== undefined) {
-          record.resolution = updates.resolution;
-        }
-        break;
-      case "decision":
-        if (updates.title !== undefined) {
-          record.title = updates.title;
-        }
-        if (updates.rationale !== undefined) {
-          record.rationale = updates.rationale;
-        }
-        break;
-      case "reference":
-        if (updates.name !== undefined) {
-          record.name = updates.name;
-        }
-        if (updates.description !== undefined) {
-          record.description = updates.description;
-        }
-        if (updates.files !== undefined) {
-          record.files = updates.files;
-        }
-        break;
-      case "guide":
-        if (updates.name !== undefined) {
-          record.name = updates.name;
-        }
-        if (updates.description !== undefined) {
-          record.description = updates.description;
-        }
-        break;
-    }
+		// Apply type-specific updates
+		switch (record.type) {
+			case "convention":
+				if (updates.content !== undefined) {
+					record.content = updates.content;
+				}
+				break;
+			case "pattern":
+				if (updates.name !== undefined) {
+					record.name = updates.name;
+				}
+				if (updates.description !== undefined) {
+					record.description = updates.description;
+				}
+				if (updates.files !== undefined) {
+					record.files = updates.files;
+				}
+				break;
+			case "failure":
+				if (updates.description !== undefined) {
+					record.description = updates.description;
+				}
+				if (updates.resolution !== undefined) {
+					record.resolution = updates.resolution;
+				}
+				break;
+			case "decision":
+				if (updates.title !== undefined) {
+					record.title = updates.title;
+				}
+				if (updates.rationale !== undefined) {
+					record.rationale = updates.rationale;
+				}
+				break;
+			case "reference":
+				if (updates.name !== undefined) {
+					record.name = updates.name;
+				}
+				if (updates.description !== undefined) {
+					record.description = updates.description;
+				}
+				if (updates.files !== undefined) {
+					record.files = updates.files;
+				}
+				break;
+			case "guide":
+				if (updates.name !== undefined) {
+					record.name = updates.name;
+				}
+				if (updates.description !== undefined) {
+					record.description = updates.description;
+				}
+				break;
+		}
 
-    records[targetIndex] = record;
-    await writeExpertiseFile(filePath, records);
+		records[targetIndex] = record;
+		await writeExpertiseFile(filePath, records);
 
-    return record;
-  });
+		return record;
+	});
 }
 
 /**
@@ -325,42 +323,46 @@ export async function editRecord(
  * history that drives confidence scoring.
  */
 export async function appendOutcome(
-  domain: string,
-  id: string,
-  outcome: Outcome,
-  options: OutcomeOptions = {},
+	domain: string,
+	id: string,
+	outcome: Outcome,
+	options: OutcomeOptions = {},
 ): Promise<AppendOutcomeResult> {
-  const { cwd } = options;
-  const config = await readConfig(cwd);
+	const { cwd } = options;
+	const config = await readConfig(cwd);
 
-  if (!config.domains.includes(domain)) {
-    throw new Error(
-      `Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
-    );
-  }
+	if (!config.domains.includes(domain)) {
+		throw new Error(
+			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+		);
+	}
 
-  const filePath = getExpertisePath(domain, cwd);
+	const filePath = getExpertisePath(domain, cwd);
 
-  return withFileLock(filePath, async () => {
-    const records = await readExpertiseFile(filePath);
-    const resolved = resolveRecordId(records, id);
+	return withFileLock(filePath, async () => {
+		const records = await readExpertiseFile(filePath);
+		const resolved = resolveRecordId(records, id);
 
-    if (!resolved.ok) {
-      throw new Error(resolved.error);
-    }
+		if (!resolved.ok) {
+			throw new Error(resolved.error);
+		}
 
-    const targetIndex = resolved.index;
-    const record = { ...records[targetIndex] };
+		const targetIndex = resolved.index;
+		const original = records[targetIndex];
+		if (!original) {
+			throw new Error(`Record at index ${targetIndex} not found`);
+		}
+		const record: ExpertiseRecord = { ...original };
 
-    const o: Outcome = {
-      ...outcome,
-      recorded_at: outcome.recorded_at ?? new Date().toISOString(),
-    };
+		const o: Outcome = {
+			...outcome,
+			recorded_at: outcome.recorded_at ?? new Date().toISOString(),
+		};
 
-    record.outcomes = [...(record.outcomes ?? []), o];
-    records[targetIndex] = record;
-    await writeExpertiseFile(filePath, records);
+		record.outcomes = [...(record.outcomes ?? []), o];
+		records[targetIndex] = record;
+		await writeExpertiseFile(filePath, records);
 
-    return { record, outcome: o, total_outcomes: record.outcomes.length };
-  });
+		return { record, outcome: o, total_outcomes: record.outcomes.length };
+	});
 }

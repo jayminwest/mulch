@@ -1,54 +1,52 @@
 export {
-  getMulchDir,
-  getConfigPath,
-  getExpertiseDir,
-  getExpertisePath,
-  readConfig,
-  writeConfig,
-  initMulchDir,
+	getConfigPath,
+	getExpertiseDir,
+	getExpertisePath,
+	getMulchDir,
+	initMulchDir,
+	readConfig,
+	writeConfig,
 } from "./config.ts";
 
 export {
-  readExpertiseFile,
-  appendRecord,
-  createExpertiseFile,
-  getFileModTime,
-  countRecords,
-  filterByType,
-  generateRecordId,
+	appendRecord,
+	countRecords,
+	createExpertiseFile,
+	filterByType,
+	generateRecordId,
+	getFileModTime,
+	readExpertiseFile,
 } from "./expertise.ts";
 
 export {
-  formatDomainExpertise,
-  formatPrimeOutput,
-  formatStatusOutput,
-  formatTimeAgo,
-  getRecordSummary,
+	formatDomainExpertise,
+	formatPrimeOutput,
+	formatStatusOutput,
+	formatTimeAgo,
+	getRecordSummary,
 } from "./format.ts";
-
 export {
-  outputJson,
-  outputJsonError,
+	fileMatchesAny,
+	filterByContext,
+	getChangedFiles,
+	isGitRepo,
+} from "./git.ts";
+export {
+	outputJson,
+	outputJsonError,
 } from "./json-output.ts";
 
 export {
-  isGitRepo,
-  getChangedFiles,
-  fileMatchesAny,
-  filterByContext,
-} from "./git.ts";
-
-export {
-  MARKER_START,
-  MARKER_END,
-  hasMarkerSection,
-  replaceMarkerSection,
-  removeMarkerSection,
-  wrapInMarkers,
+	hasMarkerSection,
+	MARKER_END,
+	MARKER_START,
+	removeMarkerSection,
+	replaceMarkerSection,
+	wrapInMarkers,
 } from "./markers.ts";
 
 export {
-  getCurrentVersion,
-  getLatestVersion,
-  compareSemver,
+	compareSemver,
+	getCurrentVersion,
+	getLatestVersion,
 } from "./version.ts";

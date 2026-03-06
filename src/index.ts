@@ -1,65 +1,61 @@
 // Type exports
+
 export type {
-  RecordType,
-  Classification,
-  Evidence,
-  Outcome,
-  ConventionRecord,
-  PatternRecord,
-  FailureRecord,
-  DecisionRecord,
-  ReferenceRecord,
-  GuideRecord,
-  ExpertiseRecord,
-} from "./schemas/index.ts";
-
-export type { MulchConfig } from "./schemas/index.ts";
-export { DEFAULT_CONFIG } from "./schemas/index.ts";
-
-// Schema exports
-export { recordSchema } from "./schemas/record-schema.ts";
-
-// Config utilities
-export { readConfig, getExpertisePath } from "./utils/config.ts";
-
-// Expertise utilities
-export {
-  readExpertiseFile,
-  searchRecords,
-  appendRecord,
-  writeExpertiseFile,
-  findDuplicate,
-  generateRecordId,
-} from "./utils/expertise.ts";
-
+	AppendOutcomeResult,
+	EditOptions,
+	OutcomeOptions,
+	QueryOptions,
+	RecordOptions,
+	RecordResult,
+	RecordUpdates,
+	SearchOptions,
+	SearchResult,
+} from "./api.ts";
 // Programmatic API
 export {
-  recordExpertise,
-  searchExpertise,
-  queryDomain,
-  editRecord,
-  appendOutcome,
+	appendOutcome,
+	editRecord,
+	queryDomain,
+	recordExpertise,
+	searchExpertise,
 } from "./api.ts";
 export type {
-  RecordOptions,
-  RecordResult,
-  SearchOptions,
-  SearchResult,
-  QueryOptions,
-  EditOptions,
-  RecordUpdates,
-  OutcomeOptions,
-  AppendOutcomeResult,
-} from "./api.ts";
+	Classification,
+	ConventionRecord,
+	DecisionRecord,
+	Evidence,
+	ExpertiseRecord,
+	FailureRecord,
+	GuideRecord,
+	MulchConfig,
+	Outcome,
+	PatternRecord,
+	RecordType,
+	ReferenceRecord,
+} from "./schemas/index.ts";
+export { DEFAULT_CONFIG } from "./schemas/index.ts";
+// Schema exports
+export { recordSchema } from "./schemas/record-schema.ts";
+// Config utilities
+export { getExpertisePath, readConfig } from "./utils/config.ts";
+// Expertise utilities
+export {
+	appendRecord,
+	findDuplicate,
+	generateRecordId,
+	readExpertiseFile,
+	searchRecords,
+	writeExpertiseFile,
+} from "./utils/expertise.ts";
 
 // Scoring utilities
 export type { ScoredRecord } from "./utils/scoring.ts";
 export {
-  getSuccessCount,
-  getFailureCount,
-  getTotalApplications,
-  getSuccessRate,
-  computeConfirmationScore,
-  applyConfirmationBoost,
-  sortByConfirmationScore,
+	applyConfirmationBoost,
+	computeConfirmationScore,
+	getFailureCount,
+	getSuccessCount,
+	getSuccessRate,
+	getTotalApplications,
+	sortByConfirmationScore,
 } from "./utils/scoring.ts";
