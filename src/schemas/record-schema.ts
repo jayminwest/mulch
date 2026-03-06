@@ -1,6 +1,6 @@
 const linkArray = {
   type: "array",
-  items: { type: "string", pattern: "^([a-z0-9-]+:)?mx-[0-9a-f]{4,8}$" },
+  items: { type: "string", pattern: "^([a-z0-9-]+:)?mx-[0-9a-f]{4,32}$" },
 } as const;
 
 export const recordSchema = {
@@ -42,7 +42,7 @@ export const recordSchema = {
     {
       type: "object",
       properties: {
-        id: { type: "string", pattern: "^mx-[0-9a-f]{4,8}$" },
+        id: { type: "string", pattern: "^mx-[0-9a-f]{4,32}$" },
         type: { type: "string", const: "convention" },
         content: { type: "string" },
         classification: { $ref: "#/definitions/classification" },
@@ -59,7 +59,7 @@ export const recordSchema = {
     {
       type: "object",
       properties: {
-        id: { type: "string", pattern: "^mx-[0-9a-f]{4,8}$" },
+        id: { type: "string", pattern: "^mx-[0-9a-f]{4,32}$" },
         type: { type: "string", const: "pattern" },
         name: { type: "string" },
         description: { type: "string" },
@@ -84,7 +84,7 @@ export const recordSchema = {
     {
       type: "object",
       properties: {
-        id: { type: "string", pattern: "^mx-[0-9a-f]{4,8}$" },
+        id: { type: "string", pattern: "^mx-[0-9a-f]{4,32}$" },
         type: { type: "string", const: "failure" },
         description: { type: "string" },
         resolution: { type: "string" },
@@ -108,7 +108,7 @@ export const recordSchema = {
     {
       type: "object",
       properties: {
-        id: { type: "string", pattern: "^mx-[0-9a-f]{4,8}$" },
+        id: { type: "string", pattern: "^mx-[0-9a-f]{4,32}$" },
         type: { type: "string", const: "decision" },
         title: { type: "string" },
         rationale: { type: "string" },
@@ -127,7 +127,7 @@ export const recordSchema = {
     {
       type: "object",
       properties: {
-        id: { type: "string", pattern: "^mx-[0-9a-f]{4,8}$" },
+        id: { type: "string", pattern: "^mx-[0-9a-f]{4,32}$" },
         type: { type: "string", const: "reference" },
         name: { type: "string" },
         description: { type: "string" },
@@ -152,7 +152,7 @@ export const recordSchema = {
     {
       type: "object",
       properties: {
-        id: { type: "string", pattern: "^mx-[0-9a-f]{4,8}$" },
+        id: { type: "string", pattern: "^mx-[0-9a-f]{4,32}$" },
         type: { type: "string", const: "guide" },
         name: { type: "string" },
         description: { type: "string" },
