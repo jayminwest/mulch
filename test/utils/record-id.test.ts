@@ -31,87 +31,25 @@ afterEach(async () => {
 });
 
 describe("generateRecordId", () => {
-  it("generates deterministic IDs for same content", () => {
-    const record: ExpertiseRecord = {
-      type: "convention",
-      content: "Always use vitest",
-      classification: "foundational",
-      recorded_at: new Date().toISOString(),
-    };
-    const id1 = generateRecordId(record);
-    const id2 = generateRecordId(record);
-    expect(id1).toBe(id2);
+  it("generates unique IDs per call", () => {
+    const id1 = generateRecordId();
+    const id2 = generateRecordId();
+    expect(id1).not.toBe(id2);
   });
 
-  it("generates different IDs for different content", () => {
-    const r1: ExpertiseRecord = {
-      type: "convention",
-      content: "Use vitest",
-      classification: "foundational",
-      recorded_at: new Date().toISOString(),
-    };
-    const r2: ExpertiseRecord = {
-      type: "convention",
-      content: "Use jest",
-      classification: "foundational",
-      recorded_at: new Date().toISOString(),
-    };
-    expect(generateRecordId(r1)).not.toBe(generateRecordId(r2));
+  it("generates IDs matching the mx-<32-char-hex> pattern", () => {
+    const id = generateRecordId();
+    expect(id).toMatch(/^mx-[0-9a-f]{32}$/);
   });
 
-  it("generates IDs matching the mx-XXXXXX pattern", () => {
-    const record: ExpertiseRecord = {
-      type: "pattern",
-      name: "test-pattern",
-      description: "A test pattern",
-      classification: "tactical",
-      recorded_at: new Date().toISOString(),
-    };
-    const id = generateRecordId(record);
-    expect(id).toMatch(/^mx-[0-9a-f]{6}$/);
-  });
-
-  it("uses name for pattern records", () => {
-    const r1: ExpertiseRecord = {
-      type: "pattern",
-      name: "same-name",
-      description: "Different desc 1",
-      classification: "tactical",
-      recorded_at: new Date().toISOString(),
-    };
-    const r2: ExpertiseRecord = {
-      type: "pattern",
-      name: "same-name",
-      description: "Different desc 2",
-      classification: "foundational",
-      recorded_at: new Date().toISOString(),
-    };
-    // Same name = same ID (regardless of description or classification)
-    expect(generateRecordId(r1)).toBe(generateRecordId(r2));
-  });
-
-  it("uses title for decision records", () => {
-    const record: ExpertiseRecord = {
-      type: "decision",
-      title: "Use TypeScript",
-      rationale: "Type safety",
-      classification: "foundational",
-      recorded_at: new Date().toISOString(),
-    };
-    const id = generateRecordId(record);
-    expect(id).toMatch(/^mx-[0-9a-f]{6}$/);
-  });
-
-  it("uses description for failure records", () => {
-    const record: ExpertiseRecord = {
-      type: "failure",
-      description: "OOM on large files",
-      resolution: "Stream processing",
-      classification: "tactical",
-      recorded_at: new Date().toISOString(),
-    };
-    const id = generateRecordId(record);
-    expect(id).toMatch(/^mx-[0-9a-f]{6}$/);
+  it("generates IDs in timestamp order", () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      ids.push(generateRecordId());
+    }
+    for (let i = 1; i < ids.length; i++) {
+      expect(ids[i] >= ids[i - 1]).toBe(true);
+    }
   });
 });
 
@@ -129,7 +67,7 @@ describe("appendRecord with ID generation", () => {
 
     await appendRecord(filePath, record);
     const records = await readExpertiseFile(filePath);
-    expect(records[0].id).toMatch(/^mx-[0-9a-f]{6}$/);
+    expect(records[0].id).toMatch(/^mx-[0-9a-f]{32}$/);
   });
 
   it("preserves existing ID when appending", async () => {
@@ -254,7 +192,7 @@ describe("writeExpertiseFile with lazy migration", () => {
 
     await writeExpertiseFile(filePath, records);
     const read = await readExpertiseFile(filePath);
-    expect(read[0].id).toMatch(/^mx-[0-9a-f]{6}$/);
+    expect(read[0].id).toMatch(/^mx-[0-9a-f]{32}$/);
   });
 
   it("preserves existing IDs during write", async () => {

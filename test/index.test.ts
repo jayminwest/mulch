@@ -282,10 +282,10 @@ governance:
         recorded_at: new Date().toISOString(),
       };
 
-      const id = generateRecordId(record);
+      const id = generateRecordId();
       expect(id).toBeDefined();
       expect(typeof id).toBe("string");
-      expect(id).toMatch(/^mx-[a-f0-9]{6}$/);
+      expect(id).toMatch(/^mx-[0-9a-f]{32}$/);
     });
   });
 
@@ -335,8 +335,8 @@ governance:
       expect(duplicate?.index).toBe(0);
 
       // Generate IDs
-      const id1 = generateRecordId(record1);
-      const id2 = generateRecordId(record2);
+      const id1 = generateRecordId();
+      const id2 = generateRecordId();
       expect(id1).toBeDefined();
       expect(id2).toBeDefined();
       expect(id1).not.toBe(id2);
