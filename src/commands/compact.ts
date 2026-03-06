@@ -657,7 +657,7 @@ export function mergeRecords(records: ExpertiseRecord[]): ExpertiseRecord {
   }
 
   // Generate ID for the merged record
-  result.id = generateRecordId(result);
+  result.id = generateRecordId();
   return result;
 }
 
@@ -890,7 +890,7 @@ async function handleApply(
     // Validate replacement
     const ajv = new Ajv();
     const validate = ajv.compile(recordSchema);
-    replacement.id = generateRecordId(replacement);
+    replacement.id = generateRecordId();
     if (!validate(replacement)) {
       const errors = (validate.errors ?? []).map(
         (err) => `${err.instancePath} ${err.message}`,

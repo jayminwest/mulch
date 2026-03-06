@@ -329,6 +329,26 @@ describe("budget utility", () => {
       expect(result.kept).toHaveLength(0);
     });
 
+    it("uses custom countTokens when provided", () => {
+      // Custom counter that always returns 10 tokens per record
+      const fixedCounter = (_text: string) => 10;
+      const domains: DomainRecords[] = [
+        {
+          domain: "d1",
+          records: [
+            makeRecord("convention", "foundational", { content: "short" }),
+            makeRecord("convention", "foundational", { content: "also short" }),
+            makeRecord("convention", "foundational", { content: "third" }),
+          ],
+        },
+      ];
+
+      // Budget of 25 tokens should fit exactly 2 records at 10 tokens each
+      const result = applyBudget(domains, 25, simpleEstimate, fixedCounter);
+      expect(result.kept[0].records).toHaveLength(2);
+      expect(result.droppedCount).toBe(1);
+    });
+
     it("prioritizes records with higher confirmation scores over unscored records of the same type/classification", () => {
       const unscored = makeRecord("pattern", "foundational", {
         name: "unscored",

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import {
   appendFile,
   readFile,
@@ -13,6 +13,7 @@ import type {
   RecordType,
 } from "../schemas/record.ts";
 import { DEFAULT_BM25_PARAMS, searchBM25 } from "./bm25.ts";
+import { uuidv7Hex } from "./uuid.ts";
 
 export async function readExpertiseFile(
   filePath: string,
@@ -55,29 +56,8 @@ export async function readExpertiseFile(
   return records;
 }
 
-export function generateRecordId(record: ExpertiseRecord): string {
-  let key: string;
-  switch (record.type) {
-    case "convention":
-      key = `convention:${record.content}`;
-      break;
-    case "pattern":
-      key = `pattern:${record.name}`;
-      break;
-    case "failure":
-      key = `failure:${record.description}`;
-      break;
-    case "decision":
-      key = `decision:${record.title}`;
-      break;
-    case "reference":
-      key = `reference:${record.name}`;
-      break;
-    case "guide":
-      key = `guide:${record.name}`;
-      break;
-  }
-  return `mx-${createHash("sha256").update(key).digest("hex").slice(0, 6)}`;
+export function generateRecordId(): string {
+  return `mx-${uuidv7Hex()}`;
 }
 
 export async function appendRecord(
@@ -85,7 +65,7 @@ export async function appendRecord(
   record: ExpertiseRecord,
 ): Promise<void> {
   if (!record.id) {
-    record.id = generateRecordId(record);
+    record.id = generateRecordId();
   }
   const line = `${JSON.stringify(record)}\n`;
   await appendFile(filePath, line, "utf-8");
@@ -110,7 +90,7 @@ export async function writeExpertiseFile(
 ): Promise<void> {
   for (const r of records) {
     if (!r.id) {
-      r.id = generateRecordId(r);
+      r.id = generateRecordId();
     }
   }
   const content =

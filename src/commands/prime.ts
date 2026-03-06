@@ -24,6 +24,7 @@ import type { McpDomain, PrimeFormat } from "../utils/format.ts";
 import { filterByContext, getChangedFiles, isGitRepo } from "../utils/git.ts";
 import { outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
+import { createTokenizer } from "../utils/tokenizer.ts";
 
 interface PrimeOptions {
   full?: boolean;
@@ -37,6 +38,7 @@ interface PrimeOptions {
   files?: string[];
   budget?: string;
   noLimit?: boolean;
+  tokenizer?: string;
 }
 
 /**
@@ -101,6 +103,11 @@ export function registerPrimeCommand(program: Command): void {
       `token budget for output (default: ${DEFAULT_BUDGET})`,
     )
     .option("--no-limit", "disable token budget limit")
+    .addOption(
+      new Option("--tokenizer <encoding>", "tokenizer encoding for budget")
+        .choices(["cl100k_base", "o200k_base", "none"])
+        .default("cl100k_base"),
+    )
     .action(async (domainsArg: string[], options: PrimeOptions) => {
       const globalOpts = program.opts();
       const jsonMode = globalOpts.json === true;
@@ -233,8 +240,14 @@ export function registerPrimeCommand(program: Command): void {
           let droppedDomainCount = 0;
 
           if (budgetEnabled) {
-            const result = applyBudget(allDomainRecords, budget, (record) =>
-              estimateRecordText(record),
+            const tokenizer = createTokenizer(
+              options.tokenizer ?? "cl100k_base",
+            );
+            const result = applyBudget(
+              allDomainRecords,
+              budget,
+              (record) => estimateRecordText(record),
+              (text) => tokenizer.count(text),
             );
             domainRecordsToFormat = result.kept;
             droppedCount = result.droppedCount;

@@ -80,6 +80,7 @@ export function applyBudget(
   domains: DomainRecords[],
   budget: number,
   formatRecord: (record: ExpertiseRecord, domain: string) => string,
+  countTokens: (text: string) => number = estimateTokens,
 ): BudgetResult {
   // Flatten all records with their domain, then sort by priority
   const tagged: Array<{ domain: string; record: ScoredRecord }> = [];
@@ -96,7 +97,7 @@ export function applyBudget(
 
   for (let i = 0; i < tagged.length; i++) {
     const formatted = formatRecord(tagged[i].record, tagged[i].domain);
-    const cost = estimateTokens(formatted);
+    const cost = countTokens(formatted);
     if (usedTokens + cost <= budget) {
       usedTokens += cost;
       kept.add(i);
