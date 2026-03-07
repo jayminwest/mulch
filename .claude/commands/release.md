@@ -23,10 +23,11 @@ User specified: $ARGUMENTS
 - Default: `patch` if nothing was specified
 - Current version is in `package.json` (`"version"` field) and `src/cli.ts` (`.version()` call)
 
-### 3. Bump version in both locations
+### 3. Bump version
 
-- `package.json` — update `"version"` field
-- `src/cli.ts` — update `.version("...")` call
+Run: `bun run version:bump <major|minor|patch>`
+
+This atomically updates both `package.json` and `src/cli.ts`.
 
 ### 4. Update CHANGELOG.md
 
