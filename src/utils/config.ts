@@ -1,6 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import yaml from "js-yaml";
 import type { MulchConfig } from "../schemas/config.ts";
 import { DEFAULT_CONFIG } from "../schemas/config.ts";
@@ -35,8 +36,49 @@ This directory is managed by [mulch](https://github.com/jayminwest/mulch) — a 
 - \`expertise/\`        — JSONL files, one per domain
 `;
 
+function gitCommonDir(cwd: string): string | null {
+	try {
+		const raw = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+			cwd,
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "pipe"],
+		}).trim();
+		if (!raw) return null;
+		return resolve(cwd, raw);
+	} catch {
+		return null;
+	}
+}
+
+function resolveWorktreeRoot(cwd: string): string {
+	const common = gitCommonDir(cwd);
+	if (!common) return cwd;
+
+	// .git/worktrees/<name> → strip to repo root; .git → already main
+	const mainRoot = common.endsWith(".git") ? dirname(common) : dirname(dirname(common));
+	const mainResolved = resolve(mainRoot);
+
+	if (mainResolved === resolve(cwd)) return cwd;
+
+	// Only redirect if main repo has a .mulch/ with config
+	const mainMulchConfig = join(mainResolved, MULCH_DIR, CONFIG_FILE);
+	if (existsSync(mainMulchConfig)) {
+		return mainResolved;
+	}
+
+	return cwd;
+}
+
+export function isInsideWorktree(cwd: string = process.cwd()): boolean {
+	const common = gitCommonDir(cwd);
+	if (!common) return false;
+
+	const mainRoot = common.endsWith(".git") ? dirname(common) : dirname(dirname(common));
+	return resolve(mainRoot) !== resolve(cwd);
+}
+
 export function getMulchDir(cwd: string = process.cwd()): string {
-	return join(cwd, MULCH_DIR);
+	return join(resolveWorktreeRoot(cwd), MULCH_DIR);
 }
 
 export function getConfigPath(cwd: string = process.cwd()): string {

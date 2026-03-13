@@ -4,7 +4,7 @@ import Ajv from "ajv";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { recordSchema } from "../schemas/record-schema.ts";
-import { getExpertisePath, readConfig } from "../utils/config.ts";
+import { getExpertisePath, isInsideWorktree, readConfig } from "../utils/config.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 
@@ -163,6 +163,26 @@ export function registerSyncCommand(program: Command): void {
 					process.exitCode = 1;
 					return;
 				}
+			}
+
+			// Skip commit if inside a worktree — .mulch/ changes belong to the main repo
+			if (isInsideWorktree(cwd)) {
+				if (jsonMode) {
+					outputJson({
+						success: true,
+						command: "sync",
+						validated: options.validate !== false,
+						committed: false,
+						message:
+							"Skipped commit: running inside a git worktree. Changes are written to the main repo's .mulch/.",
+					});
+				} else {
+					if (!isQuiet())
+						console.log(
+							`${brand("ℹ")} Skipped commit: running inside a git worktree. Changes are written to the main repo's .mulch/.`,
+						);
+				}
+				return;
 			}
 
 			// Check for changes
