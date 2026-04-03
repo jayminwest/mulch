@@ -64,6 +64,31 @@ describe("worktree resolution", () => {
 		it("returns false for non-git directory", () => {
 			expect(isInsideWorktree(tmpDir)).toBe(false);
 		});
+
+		it("returns false for git submodule (no false positive)", async () => {
+			// Create a standalone repo to use as submodule source
+			const submoduleSrc = join(tmpDir, "submodule-src");
+			await mkdir(submoduleSrc, { recursive: true });
+			git(["init"], submoduleSrc);
+			git(["config", "user.email", "test@test.com"], submoduleSrc);
+			git(["config", "user.name", "Test"], submoduleSrc);
+			await writeFile(join(submoduleSrc, "sub.txt"), "sub content");
+			git(["add", "."], submoduleSrc);
+			git(["commit", "-m", "submodule init"], submoduleSrc);
+
+			// Add it as a submodule inside the main repo
+			// -c protocol.file.allow=always is needed for local file:// submodule in git ≥2.38.1
+			git(
+				["-c", "protocol.file.allow=always", "submodule", "add", submoduleSrc, "mysub"],
+				mainRepo,
+			);
+			git(["commit", "-m", "add submodule"], mainRepo);
+
+			const subPath = join(mainRepo, "mysub");
+			// Submodule: --git-common-dir returns /parent/.git/modules/mysub
+			// (not ending in .git) — must NOT be treated as a worktree
+			expect(isInsideWorktree(subPath)).toBe(false);
+		});
 	});
 
 	describe("getMulchDir", () => {

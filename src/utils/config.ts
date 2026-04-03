@@ -73,7 +73,12 @@ export function isInsideWorktree(cwd: string = process.cwd()): boolean {
 	const common = gitCommonDir(cwd);
 	if (!common) return false;
 
-	const mainRoot = common.endsWith(".git") ? dirname(common) : dirname(dirname(common));
+	// For actual worktrees, --git-common-dir always returns the main .git dir
+	// (ends with ".git"). Submodules return /parent/.git/modules/<name> which
+	// does NOT end with ".git" — those are not worktrees, avoid false positive.
+	if (!common.endsWith(".git")) return false;
+
+	const mainRoot = dirname(common);
 	return resolve(mainRoot) !== resolve(cwd);
 }
 
