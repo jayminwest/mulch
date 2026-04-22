@@ -39,7 +39,7 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("convention");
+		expect(records[0]?.type).toBe("convention");
 		expect((records[0] as { content: string }).content).toBe("Always use vitest for testing");
 	});
 
@@ -60,7 +60,9 @@ describe("record command", () => {
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
 
-		const recordedAt = new Date(records[0]!.recorded_at);
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const recordedAt = new Date(r0.recorded_at);
 		expect(recordedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
 		expect(recordedAt.getTime()).toBeLessThanOrEqual(after.getTime());
 	});
@@ -82,7 +84,7 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("pattern");
+		expect(records[0]?.type).toBe("pattern");
 	});
 
 	it("records a failure with description and resolution", async () => {
@@ -101,7 +103,7 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("failure");
+		expect(records[0]?.type).toBe("failure");
 	});
 
 	it("records a decision with title and rationale", async () => {
@@ -120,7 +122,7 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("decision");
+		expect(records[0]?.type).toBe("decision");
 	});
 
 	it("convention record missing content fails schema validation", () => {
@@ -187,11 +189,11 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("reference");
-		if (records[0]!.type === "reference") {
-			expect(records[0]!.name).toBe("cli-entry");
-			expect(records[0]!.description).toBe("Main CLI entry point");
-			expect(records[0]!.files).toEqual(["src/cli.ts"]);
+		expect(records[0]?.type).toBe("reference");
+		if (records[0]?.type === "reference") {
+			expect(records[0]?.name).toBe("cli-entry");
+			expect(records[0]?.description).toBe("Main CLI entry point");
+			expect(records[0]?.files).toEqual(["src/cli.ts"]);
 		}
 	});
 
@@ -211,10 +213,10 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("guide");
-		if (records[0]!.type === "guide") {
-			expect(records[0]!.name).toBe("add-command");
-			expect(records[0]!.description).toBe("How to add a new CLI command");
+		expect(records[0]?.type).toBe("guide");
+		if (records[0]?.type === "guide") {
+			expect(records[0]?.name).toBe("add-command");
+			expect(records[0]?.description).toBe("How to add a new CLI command");
 		}
 	});
 
@@ -325,7 +327,7 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.tags).toEqual(["async", "performance"]);
+		expect(records[0]?.tags).toEqual(["async", "performance"]);
 	});
 
 	it("tags with all record types validate", () => {
@@ -444,8 +446,8 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.relates_to).toEqual(["mx-abc123"]);
-		expect(records[0]!.supersedes).toEqual(["mx-def456"]);
+		expect(records[0]?.relates_to).toEqual(["mx-abc123"]);
+		expect(records[0]?.supersedes).toEqual(["mx-def456"]);
 	});
 
 	it("record without links still validates (backward compat)", () => {
@@ -527,8 +529,8 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.relates_to).toEqual(["cli:mx-abc123", "mx-1a2b3c4d"]);
-		expect(records[0]!.supersedes).toEqual(["architecture:mx-def789"]);
+		expect(records[0]?.relates_to).toEqual(["cli:mx-abc123", "mx-1a2b3c4d"]);
+		expect(records[0]?.supersedes).toEqual(["architecture:mx-def789"]);
 	});
 
 	it("cross-domain reference with invalid format fails validation", () => {
@@ -612,7 +614,7 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.evidence?.bead).toBe("seeds-xyz789");
+		expect(records[0]?.evidence?.bead).toBe("seeds-xyz789");
 	});
 
 	it("record with evidence.bead and other evidence fields validates", () => {
@@ -841,10 +843,10 @@ describe("record command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.outcomes?.[0]?.status).toBe("success");
-		expect(records[0]!.outcomes?.[0]?.duration).toBe(2500);
-		expect(records[0]!.outcomes?.[0]?.test_results).toBe("10 passed");
-		expect(records[0]!.outcomes?.[0]?.agent).toBe("my-agent");
+		expect(records[0]?.outcomes?.[0]?.status).toBe("success");
+		expect(records[0]?.outcomes?.[0]?.duration).toBe(2500);
+		expect(records[0]?.outcomes?.[0]?.test_results).toBe("10 passed");
+		expect(records[0]?.outcomes?.[0]?.agent).toBe("my-agent");
 	});
 });
 
@@ -887,7 +889,7 @@ describe("processStdinRecords", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("convention");
+		expect(records[0]?.type).toBe("convention");
 		expect((records[0] as { content: string }).content).toBe("Use vitest");
 	});
 
@@ -960,7 +962,7 @@ describe("processStdinRecords", () => {
 
 		const savedRecords = await readExpertiseFile(filePath);
 		expect(savedRecords).toHaveLength(1);
-		expect(savedRecords[0]!.type).toBe("pattern");
+		expect(savedRecords[0]?.type).toBe("pattern");
 	});
 
 	it("deduplicates records (skips exact matches)", async () => {
@@ -1034,7 +1036,7 @@ describe("processStdinRecords", () => {
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
 		expect((records[0] as { description: string }).description).toBe("Updated description");
-		expect(records[0]!.classification).toBe("foundational");
+		expect(records[0]?.classification).toBe("foundational");
 	});
 
 	it("adds recorded_at if missing", async () => {
@@ -1063,7 +1065,9 @@ describe("processStdinRecords", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		const recordedAt = new Date(records[0]!.recorded_at);
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const recordedAt = new Date(r0.recorded_at);
 		expect(recordedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
 		expect(recordedAt.getTime()).toBeLessThanOrEqual(after.getTime());
 	});
@@ -1092,7 +1096,7 @@ describe("processStdinRecords", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.classification).toBe("tactical");
+		expect(records[0]?.classification).toBe("tactical");
 	});
 
 	it("auto-creates domain when domain not found", async () => {
@@ -1378,7 +1382,7 @@ describe("batch mode (--batch)", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("convention");
+		expect(records[0]?.type).toBe("convention");
 		expect((records[0] as { content: string }).content).toBe("Use vitest for testing");
 	});
 
@@ -1530,7 +1534,7 @@ describe("batch mode (--batch)", () => {
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
 		expect((records[0] as { description: string }).description).toBe("Updated description");
-		expect(records[0]!.classification).toBe("foundational");
+		expect(records[0]?.classification).toBe("foundational");
 	});
 
 	it("batch mode validates records and reports errors", async () => {
@@ -1569,7 +1573,7 @@ describe("batch mode (--batch)", () => {
 
 		const savedRecords = await readExpertiseFile(filePath);
 		expect(savedRecords).toHaveLength(1);
-		expect(savedRecords[0]!.type).toBe("pattern");
+		expect(savedRecords[0]?.type).toBe("pattern");
 	});
 
 	it("batch mode forces duplicate creation with force flag", async () => {
@@ -1714,7 +1718,7 @@ describe("auto-create domain in CLI mode", () => {
 		const filePath = getExpertisePath("newdomain", tmpDir);
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("convention");
+		expect(records[0]?.type).toBe("convention");
 	});
 
 	it("auto-created domain appears in config", async () => {
@@ -1791,9 +1795,9 @@ describe("auto-create domain in CLI mode", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.outcomes).toHaveLength(2);
-		expect(records[0]!.outcomes?.[0]?.agent).toBe("session-1");
-		expect(records[0]!.outcomes?.[1]?.agent).toBe("session-2");
+		expect(records[0]?.outcomes).toHaveLength(2);
+		expect(records[0]?.outcomes?.[0]?.agent).toBe("session-1");
+		expect(records[0]?.outcomes?.[1]?.agent).toBe("session-2");
 	});
 });
 
@@ -1887,8 +1891,8 @@ describe("evidence schema: multi-tracker fields", () => {
 
 			const records = await readExpertiseFile(filePath);
 			expect(records).toHaveLength(1);
-			expect(records[0]!.evidence?.seeds).toBe("mulch-xyz");
-			expect(records[0]!.evidence?.gh).toBe("org/repo#10");
+			expect(records[0]?.evidence?.seeds).toBe("mulch-xyz");
+			expect(records[0]?.evidence?.gh).toBe("org/repo#10");
 		} finally {
 			await rm(tmpDir2, { recursive: true, force: true });
 		}

@@ -1165,7 +1165,7 @@ describe("prime command", () => {
 				["src/unrelated.ts"],
 			);
 			expect(records).toHaveLength(1);
-			expect(records[0]!.type).toBe("convention");
+			expect(records[0]?.type).toBe("convention");
 		});
 
 		it("filterByContext keeps failures (no files field)", () => {
@@ -1732,7 +1732,7 @@ describe("prime command", () => {
 			expect(result.droppedCount).toBe(0);
 			expect(result.droppedDomainCount).toBe(0);
 			expect(result.kept).toHaveLength(1);
-			expect(result.kept[0]!.records).toHaveLength(2);
+			expect(result.kept[0]?.records).toHaveLength(2);
 		});
 
 		it("applyBudget drops records when budget is tight", () => {
@@ -1751,7 +1751,7 @@ describe("prime command", () => {
 			const result = applyBudget(domains, 50, simpleEstimate);
 
 			expect(result.droppedCount).toBeGreaterThan(0);
-			expect(result.kept[0]!.records.length).toBeLessThan(20);
+			expect(result.kept[0]?.records.length).toBeLessThan(20);
 		});
 
 		it("applyBudget prioritizes conventions over other types", () => {
@@ -1775,8 +1775,8 @@ describe("prime command", () => {
 			const result = applyBudget(domains, singleRecordBudget, simpleEstimate);
 
 			expect(result.kept).toHaveLength(1);
-			expect(result.kept[0]!.records).toHaveLength(1);
-			expect(result.kept[0]!.records[0]!.type).toBe("convention");
+			expect(result.kept[0]?.records).toHaveLength(1);
+			expect(result.kept[0]?.records[0]?.type).toBe("convention");
 			expect(result.droppedCount).toBe(1);
 		});
 
@@ -1798,12 +1798,12 @@ describe("prime command", () => {
 			expect(result.droppedCount).toBe(0);
 
 			// Budget that fits exactly one convention-sized record
-			const convCost = estimateTokens(
-				simpleEstimate(records.find((r) => r.type === "convention")!),
-			);
+			const convRecord = records.find((r) => r.type === "convention");
+			if (!convRecord) throw new Error("Expected convention record");
+			const convCost = estimateTokens(simpleEstimate(convRecord));
 			const tinyResult = applyBudget(domains, convCost + 1, simpleEstimate);
 			expect(tinyResult.kept.length).toBeGreaterThan(0);
-			expect(tinyResult.kept[0]!.records[0]!.type).toBe("convention");
+			expect(tinyResult.kept[0]?.records[0]?.type).toBe("convention");
 		});
 
 		it("applyBudget prioritizes foundational over tactical over observational", () => {
@@ -1828,9 +1828,9 @@ describe("prime command", () => {
 			const oneRecordCost = estimateTokens(simpleEstimate(foundational));
 			const result = applyBudget(domains, oneRecordCost * 2 + 1, simpleEstimate);
 
-			expect(result.kept[0]!.records).toHaveLength(2);
+			expect(result.kept[0]?.records).toHaveLength(2);
 			// The kept records should be foundational and tactical (in original file order)
-			const keptClassifications = result.kept[0]!.records.map((r) => r.classification);
+			const keptClassifications = result.kept[0]?.records.map((r) => r.classification);
 			expect(keptClassifications).toContain("foundational");
 			expect(keptClassifications).toContain("tactical");
 			expect(keptClassifications).not.toContain("observational");
@@ -1855,8 +1855,8 @@ describe("prime command", () => {
 			const oneRecordCost = estimateTokens(simpleEstimate(newRecord));
 			const result = applyBudget(domains, oneRecordCost + 1, simpleEstimate);
 
-			expect(result.kept[0]!.records).toHaveLength(1);
-			expect((result.kept[0]!.records[0] as { content: string }).content).toBe("New convention");
+			expect(result.kept[0]?.records).toHaveLength(1);
+			expect((result.kept[0]?.records[0] as { content: string }).content).toBe("New convention");
 		});
 
 		it("applyBudget preserves original domain order", () => {
@@ -1872,8 +1872,8 @@ describe("prime command", () => {
 			];
 
 			const result = applyBudget(domains, 100000, simpleEstimate);
-			expect(result.kept[0]!.domain).toBe("alpha");
-			expect(result.kept[1]!.domain).toBe("beta");
+			expect(result.kept[0]?.domain).toBe("alpha");
+			expect(result.kept[1]?.domain).toBe("beta");
 		});
 
 		it("applyBudget tracks dropped domain count", () => {
@@ -1898,11 +1898,13 @@ describe("prime command", () => {
 			];
 
 			// Budget that fits only alpha's convention
-			const alphaCost = estimateTokens(simpleEstimate(domains[0]!.records[0]!));
+			const alphaRecord = domains[0]?.records[0];
+			if (!alphaRecord) throw new Error("Expected alpha record");
+			const alphaCost = estimateTokens(simpleEstimate(alphaRecord));
 			const result = applyBudget(domains, alphaCost + 1, simpleEstimate);
 
 			expect(result.kept).toHaveLength(1);
-			expect(result.kept[0]!.domain).toBe("alpha");
+			expect(result.kept[0]?.domain).toBe("alpha");
 			expect(result.droppedCount).toBe(1);
 			expect(result.droppedDomainCount).toBe(1);
 		});
@@ -1944,11 +1946,15 @@ describe("prime command", () => {
 			});
 
 			expect(result.droppedCount).toBeGreaterThan(0);
-			expect(result.kept[0]!.records.length).toBeLessThan(10);
+			expect(result.kept[0]?.records.length).toBeLessThan(10);
 
 			// Format the kept records
 			const lastUpdated = await getFileModTime(filePath);
-			const section = formatDomainExpertiseCompact("testing", result.kept[0]!.records, lastUpdated);
+			const section = formatDomainExpertiseCompact(
+				"testing",
+				result.kept[0]?.records ?? [],
+				lastUpdated,
+			);
 			const output = formatPrimeOutputCompact([section]);
 
 			expect(output).toContain("# Project Expertise (via Mulch)");
@@ -2056,13 +2062,15 @@ describe("prime command", () => {
 			];
 
 			// Budget that fits alpha's convention but not beta's reference
-			const alphaCost = estimateTokens(simpleEstimate(domains[0]!.records[0]!));
+			const alphaRecord = domains[0]?.records[0];
+			if (!alphaRecord) throw new Error("Expected alpha record");
+			const alphaCost = estimateTokens(simpleEstimate(alphaRecord));
 			const result = applyBudget(domains, alphaCost + 1, simpleEstimate);
 
 			// Convention from alpha should be kept
 			expect(result.kept.length).toBeGreaterThanOrEqual(1);
-			expect(result.kept[0]!.domain).toBe("alpha");
-			expect(result.kept[0]!.records[0]!.type).toBe("convention");
+			expect(result.kept[0]?.domain).toBe("alpha");
+			expect(result.kept[0]?.records[0]?.type).toBe("convention");
 			// Reference from beta should be dropped
 			expect(result.droppedCount).toBe(1);
 		});
@@ -2096,9 +2104,9 @@ describe("prime command", () => {
 				await program.parseAsync(["node", "mulch", "prime", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]![0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain("ml add nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("ml add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}
@@ -2113,9 +2121,9 @@ describe("prime command", () => {
 				await program.parseAsync(["node", "mulch", "prime", "--exclude-domain", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]![0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain("ml add nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("ml add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}

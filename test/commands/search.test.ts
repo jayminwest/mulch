@@ -78,35 +78,35 @@ describe("search command", () => {
 			const records = await readExpertiseFile(getExpertisePath("database", tmpDir));
 			const matches = searchRecords(records, "FTS5");
 			expect(matches).toHaveLength(1);
-			expect(matches[0]!.type).toBe("failure");
+			expect(matches[0]?.type).toBe("failure");
 		});
 
 		it("matches failure resolution field", async () => {
 			const records = await readExpertiseFile(getExpertisePath("database", tmpDir));
 			const matches = searchRecords(records, "escapeFts5Term");
 			expect(matches).toHaveLength(1);
-			expect(matches[0]!.type).toBe("failure");
+			expect(matches[0]?.type).toBe("failure");
 		});
 
 		it("matches pattern name", async () => {
 			const records = await readExpertiseFile(getExpertisePath("database", tmpDir));
 			const matches = searchRecords(records, "migration");
 			expect(matches).toHaveLength(1);
-			expect(matches[0]!.type).toBe("pattern");
+			expect(matches[0]?.type).toBe("pattern");
 		});
 
 		it("matches decision title", async () => {
 			const records = await readExpertiseFile(getExpertisePath("api", tmpDir));
 			const matches = searchRecords(records, "REST");
 			expect(matches).toHaveLength(1);
-			expect(matches[0]!.type).toBe("decision");
+			expect(matches[0]?.type).toBe("decision");
 		});
 
 		it("matches decision rationale", async () => {
 			const records = await readExpertiseFile(getExpertisePath("api", tmpDir));
 			const matches = searchRecords(records, "familiarity");
 			expect(matches).toHaveLength(1);
-			expect(matches[0]!.type).toBe("decision");
+			expect(matches[0]?.type).toBe("decision");
 		});
 
 		it("returns empty for no match", async () => {
@@ -150,7 +150,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(getExpertisePath("database", tmpDir));
 			const failures = filterByType(records, "failure");
 			expect(failures).toHaveLength(1);
-			expect(failures[0]!.type).toBe("failure");
+			expect(failures[0]?.type).toBe("failure");
 		});
 
 		it("returns all conventions across domains without query", async () => {
@@ -161,7 +161,7 @@ describe("search command", () => {
 				...filterByType(apiRecords, "convention"),
 			];
 			expect(allConventions).toHaveLength(1);
-			expect(allConventions[0]!.type).toBe("convention");
+			expect(allConventions[0]?.type).toBe("convention");
 		});
 
 		it("type filter combined with query narrows results", async () => {
@@ -264,8 +264,8 @@ describe("search command", () => {
 			const records = await readExpertiseFile(getExpertisePath("database", tmpDir));
 			const tactical = filterByClassification(records, "tactical");
 			expect(tactical).toHaveLength(1);
-			expect(tactical[0]!.classification).toBe("tactical");
-			expect(tactical[0]!.type).toBe("failure");
+			expect(tactical[0]?.classification).toBe("tactical");
+			expect(tactical[0]?.type).toBe("failure");
 		});
 
 		it("returns empty for observational when none exist", async () => {
@@ -285,7 +285,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const observational = filterByClassification(records, "observational");
 			expect(observational).toHaveLength(1);
-			expect(observational[0]!.classification).toBe("observational");
+			expect(observational[0]?.classification).toBe("observational");
 		});
 
 		it("classification filter combined with type filter narrows results", async () => {
@@ -300,8 +300,8 @@ describe("search command", () => {
 			const tactical = filterByClassification(records, "tactical");
 			const tacticalConventions = filterByType(tactical, "convention");
 			expect(tacticalConventions).toHaveLength(1);
-			expect(tacticalConventions[0]!.classification).toBe("tactical");
-			expect(tacticalConventions[0]!.type).toBe("convention");
+			expect(tacticalConventions[0]?.classification).toBe("tactical");
+			expect(tacticalConventions[0]?.type).toBe("convention");
 		});
 
 		it("classification filter combined with search query narrows results", async () => {
@@ -310,7 +310,7 @@ describe("search command", () => {
 			const foundational = filterByClassification(records, "foundational");
 			const matches = searchRecords(foundational, "WAL");
 			expect(matches).toHaveLength(1);
-			expect(matches[0]!.classification).toBe("foundational");
+			expect(matches[0]?.classification).toBe("foundational");
 		});
 	});
 
@@ -474,8 +474,8 @@ describe("search command", () => {
 			const failures = records.filter((r) => r.outcomes?.some((o) => o.status === "failure"));
 			// only the one we added (not the FTS5 failure which has no outcomes)
 			expect(failures).toHaveLength(1);
-			expect(failures[0]!.type).toBe("failure");
-			expect(failures[0]!.outcomes?.[0]?.agent).toBe("build-agent");
+			expect(failures[0]?.type).toBe("failure");
+			expect(failures[0]?.outcomes?.[0]?.agent).toBe("build-agent");
 		});
 
 		it("excludes records without outcomes when filtering by outcome status", async () => {
@@ -531,10 +531,10 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const guides = records.filter((r) => r.type === "guide");
 			expect(guides).toHaveLength(1);
-			expect(guides[0]!.outcomes?.[0]?.status).toBe("success");
-			expect(guides[0]!.outcomes?.[0]?.duration).toBe(3000);
-			expect(guides[0]!.outcomes?.[0]?.test_results).toBe("All checks passed");
-			expect(guides[0]!.outcomes?.[0]?.agent).toBe("deploy-bot");
+			expect(guides[0]?.outcomes?.[0]?.status).toBe("success");
+			expect(guides[0]?.outcomes?.[0]?.duration).toBe(3000);
+			expect(guides[0]?.outcomes?.[0]?.test_results).toBe("All checks passed");
+			expect(guides[0]?.outcomes?.[0]?.agent).toBe("deploy-bot");
 		});
 	});
 
@@ -769,9 +769,9 @@ describe("search command", () => {
 				await program.parseAsync(["node", "mulch", "search", "--domain", "nonexistent", "query"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]![0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain("mulch add nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("mulch add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}
@@ -821,7 +821,7 @@ describe("search command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(2); // output + match count
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				expect(output).toContain("[convention]");
 			} finally {
 				logSpy.mockRestore();
@@ -859,7 +859,7 @@ describe("search command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				const lines = output.split("\n");
 				expect(lines).toContain("mx-id1");
 				expect(lines).toContain("mx-id2");
@@ -891,7 +891,7 @@ describe("search command", () => {
 				await program.parseAsync(["node", "mulch", "search", "skiptest", "--format", "ids"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				const lines = output.split("\n");
 				expect(lines).toHaveLength(1);
 				expect(lines[0]).toBe("mx-withid");
@@ -908,7 +908,7 @@ describe("search command", () => {
 				await program.parseAsync(["node", "mulch", "search", "WAL"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(2); // output + match count
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				expect(output).toContain("## database");
 			} finally {
 				logSpy.mockRestore();
