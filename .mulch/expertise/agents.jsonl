@@ -1,0 +1,1 @@
+{"classification":"tactical","recorded_at":"2026-04-22T20:32:43.634Z","tags":["watchdog","auto-recorded"],"type":"failure","description":"Agent: coordinator\nCapability: coordinator\nFailure reason: Process terminated\nDetected by: Tier 0 (process death)","resolution":"","id":"mx-9ca813"}
