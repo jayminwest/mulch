@@ -305,13 +305,13 @@ describe("scoring", () => {
 
 			const sorted = sortByConfirmationScore([noOutcomes, oneSuccess, manySuccesses]);
 
-			expect(sorted[0]!.type === "pattern" && (sorted[0] as { name: string }).name).toBe(
+			expect(sorted[0]?.type === "pattern" && (sorted[0] as { name: string }).name).toBe(
 				"many-successes",
 			);
-			expect(sorted[1]!.type === "pattern" && (sorted[1] as { name: string }).name).toBe(
+			expect(sorted[1]?.type === "pattern" && (sorted[1] as { name: string }).name).toBe(
 				"one-success",
 			);
-			expect(sorted[2]!.type === "pattern" && (sorted[2] as { name: string }).name).toBe(
+			expect(sorted[2]?.type === "pattern" && (sorted[2] as { name: string }).name).toBe(
 				"no-outcomes",
 			);
 		});
@@ -326,7 +326,7 @@ describe("scoring", () => {
 
 			const sorted = sortByConfirmationScore([noOutcomes1, withSuccess, noOutcomes2]);
 
-			expect(sorted[0]!.type === "pattern" && (sorted[0] as { name: string }).name).toBe(
+			expect(sorted[0]?.type === "pattern" && (sorted[0] as { name: string }).name).toBe(
 				"with-success",
 			);
 		});
@@ -358,8 +358,8 @@ describe("scoring", () => {
 			});
 
 			const sorted = sortByConfirmationScore([convention, pattern]);
-			expect(sorted[0]!.type).toBe("pattern");
-			expect(sorted[1]!.type).toBe("convention");
+			expect(sorted[0]?.type).toBe("pattern");
+			expect(sorted[1]?.type).toBe("convention");
 		});
 
 		it("handles records with mixed outcome types", () => {
@@ -385,7 +385,7 @@ describe("scoring", () => {
 			const sorted = sortByConfirmationScore([unreliable, reliable]);
 
 			// reliable has 3 successes vs unreliable's 1, so reliable comes first
-			expect(sorted[0]!.type === "pattern" && (sorted[0] as { name: string }).name).toBe(
+			expect(sorted[0]?.type === "pattern" && (sorted[0] as { name: string }).name).toBe(
 				"reliable",
 			);
 		});

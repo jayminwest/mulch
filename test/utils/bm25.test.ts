@@ -221,9 +221,9 @@ describe("BM25", () => {
 		it("should find exact matches", () => {
 			const results = searchBM25(records, "atomic-writes");
 			expect(results.length).toBeGreaterThan(0);
-			expect(results[0]!.record.type).toBe("pattern");
-			if (results[0]!.record.type === "pattern") {
-				expect(results[0]!.record.name).toBe("atomic-writes");
+			expect(results[0]?.record.type).toBe("pattern");
+			if (results[0]?.record.type === "pattern") {
+				expect(results[0]?.record.name).toBe("atomic-writes");
 			}
 		});
 
@@ -233,18 +233,18 @@ describe("BM25", () => {
 
 			// The pattern "file-locking" should score higher because
 			// it has "locking" in both name and description
-			expect(results[0]!.record.type).toBe("pattern");
-			if (results[0]!.record.type === "pattern") {
-				expect(results[0]!.record.name).toBe("file-locking");
+			expect(results[0]?.record.type).toBe("pattern");
+			if (results[0]?.record.type === "pattern") {
+				expect(results[0]?.record.name).toBe("file-locking");
 			}
 		});
 
 		it("should handle multi-word queries", () => {
 			const results = searchBM25(records, "file locking concurrent");
 			expect(results.length).toBeGreaterThan(0);
-			expect(results[0]!.record.type).toBe("pattern");
-			if (results[0]!.record.type === "pattern") {
-				expect(results[0]!.record.name).toBe("file-locking");
+			expect(results[0]?.record.type).toBe("pattern");
+			if (results[0]?.record.type === "pattern") {
+				expect(results[0]?.record.name).toBe("file-locking");
 			}
 		});
 
@@ -252,27 +252,27 @@ describe("BM25", () => {
 			const results1 = searchBM25(records, "ATOMIC");
 			const results2 = searchBM25(records, "atomic");
 			expect(results1.length).toBe(results2.length);
-			expect(results1[0]!.record.id).toBe(results2[0]!.record.id);
+			expect(results1[0]?.record.id).toBe(results2[0]?.record.id);
 		});
 
 		it("should include match scores", () => {
 			const results = searchBM25(records, "atomic");
 			expect(results.length).toBeGreaterThan(0);
-			expect(results[0]!.score).toBeGreaterThan(0);
+			expect(results[0]?.score).toBeGreaterThan(0);
 		});
 
 		it("should sort results by score descending", () => {
 			const results = searchBM25(records, "file");
 			expect(results.length).toBeGreaterThan(1);
 			for (let i = 1; i < results.length; i++) {
-				expect(results[i - 1]!.score).toBeGreaterThanOrEqual(results[i]!.score);
+				expect(results[i - 1]?.score ?? 0).toBeGreaterThanOrEqual(results[i]?.score ?? 0);
 			}
 		});
 
 		it("should identify matched fields", () => {
 			const results = searchBM25(records, "atomic-writes");
 			expect(results.length).toBeGreaterThan(0);
-			expect(results[0]!.matchedFields).toContain("name");
+			expect(results[0]?.matchedFields).toContain("name");
 		});
 
 		it("should handle queries with no matches", () => {
@@ -283,21 +283,21 @@ describe("BM25", () => {
 		it("should search across all text fields", () => {
 			const results = searchBM25(records, "corruption");
 			expect(results.length).toBeGreaterThan(0);
-			expect(results[0]!.record.type).toBe("failure");
+			expect(results[0]?.record.type).toBe("failure");
 		});
 
 		it("should handle custom BM25 parameters", () => {
 			const customParams: BM25Params = { k1: 2.0, b: 0.5 };
 			const results = searchBM25(records, "atomic", customParams);
 			expect(results.length).toBeGreaterThan(0);
-			expect(results[0]!.score).toBeGreaterThan(0);
+			expect(results[0]?.score).toBeGreaterThan(0);
 		});
 
 		it("should use default parameters when not specified", () => {
 			const results1 = searchBM25(records, "atomic");
 			const results2 = searchBM25(records, "atomic", DEFAULT_BM25_PARAMS);
 			expect(results1.length).toBe(results2.length);
-			expect(results1[0]!.score).toBe(results2[0]!.score);
+			expect(results1[0]?.score).toBe(results2[0]?.score);
 		});
 
 		it("should handle records with tags", () => {
@@ -314,13 +314,13 @@ describe("BM25", () => {
 
 			const results = searchBM25(taggedRecords, "concurrency");
 			expect(results.length).toBe(1);
-			expect(results[0]!.matchedFields).toContain("tags");
+			expect(results[0]?.matchedFields).toContain("tags");
 		});
 
 		it("should handle punctuation in queries", () => {
 			const results = searchBM25(records, "process.exitCode");
 			expect(results.length).toBeGreaterThan(0);
-			expect(results[0]!.record.type).toBe("convention");
+			expect(results[0]?.record.type).toBe("convention");
 		});
 
 		it("should boost records with multiple term matches", () => {
@@ -343,9 +343,9 @@ describe("BM25", () => {
 
 			const results = searchBM25(testRecords, "locking");
 			expect(results.length).toBe(2);
-			expect(results[0]!.record.type).toBe("pattern");
-			if (results[0]!.record.type === "pattern") {
-				expect(results[0]!.record.name).toBe("multi-match");
+			expect(results[0]?.record.type).toBe("pattern");
+			if (results[0]?.record.type === "pattern") {
+				expect(results[0]?.record.name).toBe("multi-match");
 			}
 		});
 
@@ -362,7 +362,7 @@ describe("BM25", () => {
 
 			const results = searchBM25(singleRecord, "lonely");
 			expect(results.length).toBe(1);
-			expect(results[0]!.score).toBeGreaterThan(0);
+			expect(results[0]?.score).toBeGreaterThan(0);
 		});
 	});
 });

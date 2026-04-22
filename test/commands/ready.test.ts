@@ -54,7 +54,7 @@ describe("ready command logic", () => {
 		const sorted = [...records].sort(
 			(a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime(),
 		);
-		expect(sorted[0]!.type === "convention" && sorted[0]!.content).toBe("New record");
+		expect(sorted[0]?.type === "convention" && sorted[0]?.content).toBe("New record");
 	});
 
 	it("collects records across multiple domains", async () => {
@@ -123,8 +123,8 @@ describe("ready command logic", () => {
 		const cutoff = Date.now() - 86400000;
 		const filtered = records.filter((r) => new Date(r.recorded_at).getTime() >= cutoff);
 		expect(filtered).toHaveLength(1);
-		if (filtered[0]!.type === "convention") {
-			expect(filtered[0]!.content).toBe("Recent");
+		if (filtered[0]?.type === "convention") {
+			expect(filtered[0]?.content).toBe("Recent");
 		}
 	});
 });

@@ -301,13 +301,13 @@ describe("deduplication", () => {
 			expect(dup).not.toBeNull();
 
 			// Simulate upsert
-			records[dup!.index] = newRecord;
+			records[(dup as { index: number }).index] = newRecord;
 			await writeExpertiseFile(filePath, records);
 
 			const updated = await readExpertiseFile(filePath);
 			expect(updated).toHaveLength(2);
 			expect((updated[0] as { description: string }).description).toBe("New improved description");
-			expect(updated[1]!.type).toBe("convention"); // untouched
+			expect(updated[1]?.type).toBe("convention"); // untouched
 		});
 
 		it("decision upsert replaces in place", async () => {
@@ -332,7 +332,7 @@ describe("deduplication", () => {
 			};
 
 			const dup = findDuplicate(records, newRecord);
-			records[dup!.index] = newRecord;
+			records[(dup as { index: number }).index] = newRecord;
 			await writeExpertiseFile(filePath, records);
 
 			const updated = await readExpertiseFile(filePath);
