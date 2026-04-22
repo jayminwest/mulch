@@ -7,9 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-04-22
+
 ### Added
 
-- `ml delete-domain <domain>` — remove a domain from config and delete its expertise JSONL file; use `--yes` to skip confirmation prompt; `--dry-run` to preview without changes
+#### New CLI Commands
+- `ml delete-domain <domain>` — remove a domain from config and delete its expertise JSONL file; `--yes` skips confirmation, `--dry-run` previews without changes; destructive operation is wrapped in a file lock for concurrency safety
+
+#### Worktree-Aware Storage
+- `getMulchDir()` now resolves to the main repo's `.mulch/` directory when run from inside a git worktree, preventing expertise loss when worktrees are cleaned up
+- `ml sync` skips commits in worktree context with an informational message
+- Mirrors the pattern from seeds' `resolveWorktreeRoot()` (see `src/utils/git.ts`)
+
+#### Schema Evidence & Auto-Context
+- Evidence schema now supports multiple tracker fields alongside `bead`: `seeds`, `gh`, `linear` — record origin tickets from any tracker
+- `src/utils/git-context.ts`: `getCurrentCommit()` and `getContextFiles()` auto-populate `evidence.commit` and `files[]` without requiring explicit flags
+- Upsert of named records (pattern/decision/reference/guide) now **merges outcomes** — existing outcomes are preserved and new ones appended instead of replaced
+- Record validation failures now emit a copy-paste **retry hint** with placeholders for missing required fields
+
+#### Prime Output Enrichment
+- Compact quick reference: new type → required-fields table in `ml prime`
+- `--files` reframed as "prime before editing a file", not just session start
+- `--relates-to` included in evidence guidance (compact and verbose modes)
+- Compact lines now show classification age (`tactical 7d ago`, `observational 14d ago`; foundational is permanent) and confirmation score `★N` when > 0
+
+#### Doctor Health Checks
+- `checkFileAnchors()` in `ml doctor` warns when records reference filesystem paths (`PatternRecord.files[]`, `ReferenceRecord.files[]`, `evidence.file`) that no longer exist
+- `ml doctor --fix` strips broken anchors from records without deleting the records themselves
+
+### Changed
+
+- **Messaging unification**: all teaching surfaces now use the `ml` short alias instead of `mulch` — onboard snippet, setup recipes (cursor/codex/generic), prime output (`src/utils/format.ts`), session-end reminder, and `.mulch/README.md` template (`src/utils/config.ts`)
+- `ml onboard` fallback: when no snippet is found and neither `CLAUDE.md` nor `AGENTS.md` exists, now creates `CLAUDE.md` by default (previously `AGENTS.md`); if `AGENTS.md` already exists without a snippet, still appends there
+- `onboard` outdated/legacy check messages now reference `ml onboard`
+- `formatStatusOutput` empty-domain message now references `ml add`
+- `query` hint and error messages now reference `ml add` / `ml init`
+- README Quick Start includes `ml prime --files src/foo.ts`; example output uses `records` instead of `entries`
+
+### Fixed
+
+- `isInsideWorktree` false positive in git submodules — `--git-common-dir` returns `/parent/.git/modules/<name>` for submodules, which does not end with `.git`; guard against this by returning `false` early
+- `upgrade --check` test timeout increased from 5s to 15s (npm registry network call can exceed default Bun test timeout in CI)
+
+### Tooling
+
+- Upgraded Biome from 1.9 to **2.4.6** — applies tab indentation, import sorting, unused import/variable removal, and updated lint rules across all source and test files
+- `ci: extract changelog notes for GitHub releases` — `publish.yml` now uses `awk` to pull the version section from `CHANGELOG.md`, falling back to `--generate-notes` if no entry is found
+
+### Testing
+
+- 811 tests across 41 files, 1848 expect() calls
+- New `test/commands/delete-domain.test.ts` (CLI-level via Commander + unit tests: --yes, --dry-run, confirmation prompt, file lock, removeDomain config update)
+- New `test/utils/worktree.test.ts` (worktree-aware storage resolution, submodule false-positive guard)
+- New `test/utils/git-context.test.ts` (auto-populate commit and files[] from git context)
+- Expanded `test/commands/prime.test.ts` (per-type required fields table, per-file framing, classification age, confirmation score markers)
+- Expanded `test/commands/doctor.test.ts` (file-anchors check, --fix stripping broken anchors)
+- Updated `test/commands/onboard.test.ts` (CLAUDE.md default fallback, ml alias)
 
 ## [0.6.3] - 2026-02-26
 
@@ -354,7 +407,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/jayminwest/mulch/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/jayminwest/mulch/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/jayminwest/mulch/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/jayminwest/mulch/compare/v0.6.0...v0.6.1

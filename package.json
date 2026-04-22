@@ -1,6 +1,6 @@
 {
   "name": "@os-eco/mulch-cli",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "Let your agents grow 🌱 — structured expertise files that accumulate over time, live in git, work with any agent",
   "type": "module",
   "bin": {
@@ -16,7 +16,8 @@
     "test": "bun test",
     "lint": "biome check src/ test/",
     "lint:fix": "biome check --write src/ test/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "version:bump": "bun run scripts/version-bump.ts"
   },
   "engines": {
     "bun": ">=1.0.0"

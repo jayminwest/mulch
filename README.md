@@ -61,6 +61,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml record <domain> --type <type>` | Record an expertise record (`--tags`, `--force`, `--relates-to`, `--supersedes`, `--batch`, `--stdin`, `--dry-run`, `--evidence-bead`) |
 | `ml edit <domain> <id>` | Edit an existing record by ID or 1-based index |
 | `ml delete <domain> [id]` | Delete records by ID, `--records <ids>`, or `--all-except <ids>` (`--dry-run`) |
+| `ml delete-domain <domain>` | Remove a domain from config and delete its expertise JSONL file (`--yes`, `--dry-run`) |
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
 | `ml prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--format`) |
@@ -119,7 +120,7 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 | `reference` | name, description | Key files, endpoints, or resources worth remembering |
 | `guide` | name, description | Step-by-step procedures for recurring tasks |
 
-All records support optional `--classification` (foundational / tactical / observational), evidence flags (`--evidence-commit`, `--evidence-issue`, `--evidence-file`), `--tags`, `--relates-to`, `--supersedes` for linking, and `--outcome-status` (success/failure) for tracking application results. Cross-domain references use `domain:mx-hash` format (e.g., `--relates-to api:mx-abc123`).
+All records support optional `--classification` (foundational / tactical / observational), evidence flags (`--evidence-commit`, `--evidence-issue`, `--evidence-file`, plus tracker-specific `--evidence-bead`, `--evidence-seeds`, `--evidence-gh`, `--evidence-linear`), `--tags`, `--relates-to`, `--supersedes` for linking, and `--outcome-status` (success/failure) for tracking application results. Cross-domain references use `domain:mx-hash` format (e.g., `--relates-to api:mx-abc123`). When `evidence.commit` or `files[]` are omitted, `ml record` auto-populates them from the current git context.
 
 ## Example Output
 
@@ -163,7 +164,7 @@ Mulch is designed for multi-agent workflows where several agents record expertis
 | Safety level | Commands | Notes |
 |---|---|---|
 | **Fully safe** (read-only) | `prime`, `query`, `search`, `status`, `validate`, `learn`, `ready` | No file writes. Any number of agents, any time. |
-| **Safe** (locked writes) | `record`, `edit`, `delete`, `compact`, `prune`, `doctor` | Acquire per-file lock before writing. Multiple agents can target the same domain — the lock serializes access automatically. |
+| **Safe** (locked writes) | `record`, `edit`, `delete`, `delete-domain`, `compact`, `prune`, `doctor` | Acquire per-file lock before writing. Multiple agents can target the same domain — the lock serializes access automatically. |
 | **Serialize** (setup ops) | `init`, `add`, `onboard`, `setup` | Modify config or external files (CLAUDE.md, git hooks). Run once during project setup, not during parallel agent work. |
 
 ### Swarm patterns

@@ -30,14 +30,18 @@ Three classifications with shelf lives for pruning: `foundational` (permanent), 
 
 ### Command Pattern
 
-Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
+Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 24 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
 
 ### Concurrency Safety
 
 - **Advisory file locking**: `withFileLock(filePath, fn)` in `src/utils/lock.ts` — uses `O_CREAT|O_EXCL` lock files with 50ms retry, 5s timeout, and 30s stale lock detection
 - **Atomic writes**: `writeExpertiseFile()` in `src/utils/expertise.ts` writes to a temp file then renames, preventing partial/corrupt JSONL
-- **Write commands** (record, edit, delete, compact, prune, doctor --fix) use both mechanisms
+- **Write commands** (record, edit, delete, delete-domain, compact, prune, doctor --fix) use both mechanisms
 - **Read-only commands** (prime, query, search, status, validate) need no locking
+
+### Worktree-Aware Storage
+
+`getMulchDir()` in `src/utils/git.ts` resolves to the main repo's `.mulch/` when invoked from a git worktree, so expertise survives worktree cleanup. `isInsideWorktree()` guards against false positives in git submodules (`--git-common-dir` returns `/parent/.git/modules/<name>` for submodules, not a `.git`-suffixed path).
 
 ### Provider Integration (setup command)
 
