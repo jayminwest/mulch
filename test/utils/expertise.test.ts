@@ -87,7 +87,7 @@ describe("expertise utils", () => {
 			const content = await readFile(filePath, "utf-8");
 			const lines = content.split("\n").filter((l) => l.trim().length > 0);
 			expect(lines).toHaveLength(1);
-			expect(JSON.parse(lines[0]!)).toEqual(record);
+			expect(JSON.parse(lines[0] as string)).toEqual(record);
 		});
 
 		it("appends multiple records", async () => {
@@ -120,7 +120,7 @@ describe("expertise utils", () => {
 
 			const patterns = filterByType(records, "pattern");
 			expect(patterns).toHaveLength(1);
-			expect(patterns[0]!.type).toBe("pattern");
+			expect(patterns[0]?.type).toBe("pattern");
 		});
 
 		it("returns empty array when no records match", () => {

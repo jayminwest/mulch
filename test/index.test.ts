@@ -184,7 +184,7 @@ governance:
 
 			const records = await readExpertiseFile(filePath);
 			expect(records).toHaveLength(1);
-			expect(records[0]!.type).toBe("convention");
+			expect(records[0]?.type).toBe("convention");
 		});
 
 		it("exports and uses searchRecords", () => {

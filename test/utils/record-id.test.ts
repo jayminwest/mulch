@@ -125,7 +125,7 @@ describe("appendRecord with ID generation", () => {
 
 		await appendRecord(filePath, record);
 		const records = await readExpertiseFile(filePath);
-		expect(records[0]!.id).toMatch(/^mx-[0-9a-f]{6}$/);
+		expect(records[0]?.id).toMatch(/^mx-[0-9a-f]{6}$/);
 	});
 
 	it("preserves existing ID when appending", async () => {
@@ -142,7 +142,7 @@ describe("appendRecord with ID generation", () => {
 
 		await appendRecord(filePath, record);
 		const records = await readExpertiseFile(filePath);
-		expect(records[0]!.id).toBe("mx-aabbcc");
+		expect(records[0]?.id).toBe("mx-aabbcc");
 	});
 });
 
@@ -250,7 +250,7 @@ describe("writeExpertiseFile with lazy migration", () => {
 
 		await writeExpertiseFile(filePath, records);
 		const read = await readExpertiseFile(filePath);
-		expect(read[0]!.id).toMatch(/^mx-[0-9a-f]{6}$/);
+		expect(read[0]?.id).toMatch(/^mx-[0-9a-f]{6}$/);
 	});
 
 	it("preserves existing IDs during write", async () => {
@@ -269,6 +269,6 @@ describe("writeExpertiseFile with lazy migration", () => {
 
 		await writeExpertiseFile(filePath, records);
 		const read = await readExpertiseFile(filePath);
-		expect(read[0]!.id).toBe("mx-112233");
+		expect(read[0]?.id).toBe("mx-112233");
 	});
 });

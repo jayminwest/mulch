@@ -125,7 +125,7 @@ describe("budget utility", () => {
 			const result = applyBudget(domains, 100000, simpleEstimate);
 			expect(result.droppedCount).toBe(0);
 			expect(result.droppedDomainCount).toBe(0);
-			expect(result.kept[0]!.records).toHaveLength(3);
+			expect(result.kept[0]?.records).toHaveLength(3);
 		});
 
 		it("drops records when budget is exceeded", () => {
@@ -141,7 +141,7 @@ describe("budget utility", () => {
 
 			const result = applyBudget(domains, 100, simpleEstimate);
 			expect(result.droppedCount).toBeGreaterThan(0);
-			expect(result.kept[0]!.records.length).toBeLessThan(50);
+			expect(result.kept[0]?.records.length).toBeLessThan(50);
 		});
 
 		it("prioritizes by type: convention > decision > pattern > guide > failure > reference", () => {
@@ -183,7 +183,7 @@ describe("budget utility", () => {
 			const budget = costs.reduce((a, b) => a + b, 0) + 1;
 
 			const result = applyBudget(domains, budget, simpleEstimate);
-			const keptTypes = result.kept[0]!.records.map((r) => r.type);
+			const keptTypes = result.kept[0]?.records.map((r) => r.type);
 			// Convention, decision, and pattern should be kept (highest priority)
 			expect(keptTypes).toContain("convention");
 			expect(keptTypes).toContain("decision");
@@ -207,7 +207,7 @@ describe("budget utility", () => {
 			const cost = estimateTokens(simpleEstimate(found));
 			const result = applyBudget(domains, cost * 2 + 1, simpleEstimate);
 
-			const keptClassifications = result.kept[0]!.records.map((r) => r.classification);
+			const keptClassifications = result.kept[0]?.records.map((r) => r.classification);
 			expect(keptClassifications).toContain("foundational");
 			expect(keptClassifications).toContain("tactical");
 			expect(keptClassifications).not.toContain("observational");
@@ -228,8 +228,8 @@ describe("budget utility", () => {
 			const cost = estimateTokens(simpleEstimate(recent));
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
-			expect(result.kept[0]!.records).toHaveLength(1);
-			expect((result.kept[0]!.records[0] as { content: string }).content).toBe("new convention");
+			expect(result.kept[0]?.records).toHaveLength(1);
+			expect((result.kept[0]?.records[0] as { content: string }).content).toBe("new convention");
 		});
 
 		it("preserves original record order within kept records", () => {
@@ -242,7 +242,7 @@ describe("budget utility", () => {
 			const domains: DomainRecords[] = [{ domain: "d1", records: [r1, r2, r3] }];
 
 			const result = applyBudget(domains, 100000, simpleEstimate);
-			const contents = result.kept[0]!.records.map((r) => (r as { content: string }).content);
+			const contents = result.kept[0]?.records.map((r) => (r as { content: string }).content);
 			expect(contents).toEqual(["first", "second", "third"]);
 		});
 
@@ -259,8 +259,8 @@ describe("budget utility", () => {
 			];
 
 			const result = applyBudget(domains, 100000, simpleEstimate);
-			expect(result.kept[0]!.domain).toBe("zebra");
-			expect(result.kept[1]!.domain).toBe("alpha");
+			expect(result.kept[0]?.domain).toBe("zebra");
+			expect(result.kept[1]?.domain).toBe("alpha");
 		});
 
 		it("omits domains whose records are all dropped", () => {
@@ -280,11 +280,11 @@ describe("budget utility", () => {
 				},
 			];
 
-			const keepCost = estimateTokens(simpleEstimate(domains[0]!.records[0]!));
+			const keepCost = estimateTokens(simpleEstimate(domains[0]?.records[0] as ExpertiseRecord));
 			const result = applyBudget(domains, keepCost + 1, simpleEstimate);
 
 			expect(result.kept).toHaveLength(1);
-			expect(result.kept[0]!.domain).toBe("keep");
+			expect(result.kept[0]?.domain).toBe("keep");
 			expect(result.droppedDomainCount).toBe(1);
 		});
 
@@ -330,8 +330,8 @@ describe("budget utility", () => {
 			const cost = estimateTokens(simpleEstimate(confirmed));
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
-			expect(result.kept[0]!.records).toHaveLength(1);
-			expect((result.kept[0]!.records[0] as { name: string }).name).toBe("confirmed");
+			expect(result.kept[0]?.records).toHaveLength(1);
+			expect((result.kept[0]?.records[0] as { name: string }).name).toBe("confirmed");
 		});
 
 		it("prioritizes records with more confirmations over those with fewer", () => {
@@ -351,8 +351,8 @@ describe("budget utility", () => {
 			const cost = estimateTokens(simpleEstimate(threeSuccesses));
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
-			expect(result.kept[0]!.records).toHaveLength(1);
-			expect((result.kept[0]!.records[0] as { name: string }).name).toBe("three-successes");
+			expect(result.kept[0]?.records).toHaveLength(1);
+			expect((result.kept[0]?.records[0] as { name: string }).name).toBe("three-successes");
 		});
 
 		it("partial outcomes contribute 0.5 to confirmation score", () => {
@@ -373,8 +373,8 @@ describe("budget utility", () => {
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
 			// success (score=1) > partial (score=0.5)
-			expect(result.kept[0]!.records).toHaveLength(1);
-			expect((result.kept[0]!.records[0] as { name: string }).name).toBe("one-success");
+			expect(result.kept[0]?.records).toHaveLength(1);
+			expect((result.kept[0]?.records[0] as { name: string }).name).toBe("one-success");
 		});
 
 		it("type priority still takes precedence over confirmation score", () => {
@@ -398,8 +398,8 @@ describe("budget utility", () => {
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
 			// Convention (type priority 0) beats reference (type priority 5) regardless of score
-			expect(result.kept[0]!.records).toHaveLength(1);
-			expect(result.kept[0]!.records[0]!.type).toBe("convention");
+			expect(result.kept[0]?.records).toHaveLength(1);
+			expect(result.kept[0]?.records[0]?.type).toBe("convention");
 		});
 	});
 
