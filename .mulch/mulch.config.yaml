@@ -4,6 +4,8 @@ domains:
   - architecture
   - testing
   - typescript
+  - agents
+  - ecosystem
 governance:
   max_entries: 100
   warn_entries: 150
