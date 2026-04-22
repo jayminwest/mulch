@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-04-22
+
+### Fixed
+
+- `ml prime` domain-not-found hints now emit `ml add <domain>` instead of `mulch add <domain>` — finishes the `ml` alias unification across teaching surfaces (applies to both `--domain` and `--exclude-domain` missing-domain errors)
+
+### Changed
+
+#### Lint & Type Strictness
+- Biome `noNonNullAssertion` promoted from warning to **error**, and `bun run lint` now runs with `--error-on-warnings` so any regression fails CI
+- All `!` non-null assertions removed from `src/` (production code) and across 7 test files — replaced with explicit narrowing or optional chaining
+- ~74 `as` type casts in tests replaced with real runtime narrowing (e.g., `if (!x) throw …`) so tests exercise the same type flow as production code
+
+### Testing
+
+- 811 tests across 41 files, 1848 expect() calls (unchanged from 0.6.4; coverage preserved through the strictness refactor)
+
 ## [0.6.4] - 2026-04-22
 
 ### Added
@@ -407,7 +424,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/jayminwest/mulch/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/jayminwest/mulch/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/jayminwest/mulch/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/jayminwest/mulch/compare/v0.6.1...v0.6.2
