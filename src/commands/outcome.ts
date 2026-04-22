@@ -110,7 +110,9 @@ export function registerOutcomeCommand(program: Command): void {
 					}
 
 					const targetIndex = resolved.index;
-					const record = { ...records[targetIndex]! } as ExpertiseRecord;
+					const rawRecord = records[targetIndex];
+					if (!rawRecord) return;
+					const record = { ...rawRecord } as ExpertiseRecord;
 
 					const o: Outcome = {
 						status: options.status as "success" | "failure" | "partial",

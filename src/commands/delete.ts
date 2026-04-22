@@ -119,7 +119,8 @@ export function registerDeleteCommand(program: Command): void {
 								return;
 							}
 							const targetIndex = resolved.index;
-							const deleted = records[targetIndex]!;
+							const deleted = records[targetIndex];
+							if (!deleted) return;
 
 							if (options.dryRun) {
 								if (jsonMode) {

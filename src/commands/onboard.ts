@@ -141,10 +141,11 @@ async function resolveTargetFile(cwd: string): Promise<{
 	const withSnippet = await findSnippetLocations(cwd);
 
 	// If snippet found in one or more locations, use the first; others are duplicates
-	if (withSnippet.length > 0) {
+	const [firstSnippet, ...restSnippets] = withSnippet;
+	if (firstSnippet !== undefined) {
 		return {
-			target: withSnippet[0]!,
-			duplicates: withSnippet.slice(1),
+			target: firstSnippet,
+			duplicates: restSnippets,
 		};
 	}
 
@@ -249,7 +250,9 @@ export async function runOnboard(options: {
 				outdated: chalk.yellow,
 				legacy: chalk.yellow,
 			};
-			console.log(colors[action]!(messages[action]!));
+			const colorFn = colors[action] ?? chalk.white;
+			const msg = messages[action] ?? action;
+			console.log(colorFn(msg));
 		}
 
 		if (duplicates.length > 0) {

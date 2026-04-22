@@ -288,12 +288,15 @@ const claudeRecipe: ProviderRecipe = {
 
 		let removed = false;
 		for (const event of Object.keys(settings.hooks)) {
-			const before = settings.hooks[event]!.length;
-			settings.hooks[event] = removeMulchHookGroups(settings.hooks[event]!);
-			if (settings.hooks[event].length < before) {
+			const hookGroup = settings.hooks[event];
+			if (!hookGroup) continue;
+			const before = hookGroup.length;
+			const updated = removeMulchHookGroups(hookGroup);
+			settings.hooks[event] = updated;
+			if (updated.length < before) {
 				removed = true;
 			}
-			if (settings.hooks[event].length === 0) {
+			if (updated.length === 0) {
 				delete settings.hooks[event];
 			}
 		}

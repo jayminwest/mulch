@@ -198,7 +198,8 @@ export async function processStdinRecords(
 
 					if (isNamed) {
 						// Upsert: replace in place, merging outcomes from existing
-						const existingRecord = currentRecords[dup.index]!;
+						const existingRecord = currentRecords[dup.index];
+						if (!existingRecord) continue;
 						const mergedOutcomes = [...(existingRecord.outcomes ?? []), ...(record.outcomes ?? [])];
 						currentRecords[dup.index] =
 							mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
@@ -927,7 +928,8 @@ Batch recording examples:
 
 							if (isNamed) {
 								// Upsert: replace in place, merging outcomes from existing
-								const existingRecord = existing[dup.index]!;
+								const existingRecord = existing[dup.index];
+								if (!existingRecord) return;
 								const mergedOutcomes = [
 									...(existingRecord.outcomes ?? []),
 									...(record.outcomes ?? []),
