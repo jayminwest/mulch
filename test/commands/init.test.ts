@@ -116,8 +116,8 @@ describe("init command", () => {
 
 		const content = await readFile(join(getMulchDir(tmpDir), "README.md"), "utf-8");
 		expect(content).toContain("https://github.com/jayminwest/mulch");
-		expect(content).toContain("mulch record");
-		expect(content).toContain("mulch query");
-		expect(content).toContain("mulch prime");
+		expect(content).toContain("ml record");
+		expect(content).toContain("ml query");
+		expect(content).toContain("ml prime");
 	});
 });

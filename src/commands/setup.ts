@@ -170,7 +170,7 @@ interface ClaudeSettings {
 	[key: string]: unknown;
 }
 
-const CLAUDE_HOOK_COMMAND = "mulch prime";
+const CLAUDE_HOOK_COMMAND = "ml prime";
 
 function claudeSettingsPath(cwd: string): string {
 	return join(cwd, ".claude", "settings.json");
@@ -330,17 +330,17 @@ alwaysApply: true
 At the start of every session, run the following command to load project expertise:
 
 \`\`\`
-mulch prime
+ml prime
 \`\`\`
 
 This injects project-specific conventions, patterns, decisions, and other learnings into your context.
-Use \`mulch prime --files src/foo.ts\` to load only records relevant to specific files.
+Use \`ml prime --files src/foo.ts\` to load only records relevant to specific files.
 
 **Before completing your task**, review your work for insights worth preserving — conventions discovered,
 patterns applied, failures encountered, or decisions made — and record them:
 
 \`\`\`
-mulch record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
+ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
 \`\`\`
 
 Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
@@ -348,9 +348,9 @@ Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
 **Before you finish**, run:
 
 \`\`\`
-mulch learn        # see what files changed — decide what to record
-mulch record ...   # record learnings
-mulch sync         # validate, stage, and commit .mulch/ changes
+ml learn        # see what files changed — decide what to record
+ml record ...   # record learnings
+ml sync         # validate, stage, and commit .mulch/ changes
 \`\`\`
 `;
 
@@ -411,16 +411,16 @@ function codexAgentsPath(cwd: string): string {
 const CODEX_SECTION = `${MARKER_START}
 ## Mulch Expertise
 
-At the start of every session, run \`mulch prime\` to load project expertise.
+At the start of every session, run \`ml prime\` to load project expertise.
 
 This injects project-specific conventions, patterns, decisions, and other learnings into your context.
-Use \`mulch prime --files src/foo.ts\` to load only records relevant to specific files.
+Use \`ml prime --files src/foo.ts\` to load only records relevant to specific files.
 
 **Before completing your task**, review your work for insights worth preserving — conventions discovered,
 patterns applied, failures encountered, or decisions made — and record them:
 
 \`\`\`
-mulch record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
+ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
 \`\`\`
 
 Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
@@ -428,9 +428,9 @@ Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
 **Before you finish**, run:
 
 \`\`\`
-mulch learn        # see what files changed — decide what to record
-mulch record ...   # record learnings
-mulch sync         # validate, stage, and commit .mulch/ changes
+ml learn        # see what files changed — decide what to record
+ml record ...   # record learnings
+ml sync         # validate, stage, and commit .mulch/ changes
 \`\`\`
 ${MARKER_END}`;
 
@@ -505,16 +505,16 @@ function createMarkdownRecipe(config: MarkdownRecipeConfig): ProviderRecipe {
 	const section = `${MARKER_START}
 ## Mulch Expertise
 
-At the start of every session, run \`mulch prime\` to load project expertise.
+At the start of every session, run \`ml prime\` to load project expertise.
 
 This injects project-specific conventions, patterns, decisions, and other learnings into your context.
-Use \`mulch prime --files src/foo.ts\` to load only records relevant to specific files.
+Use \`ml prime --files src/foo.ts\` to load only records relevant to specific files.
 
 **Before completing your task**, review your work for insights worth preserving — conventions discovered,
 patterns applied, failures encountered, or decisions made — and record them:
 
 \`\`\`
-mulch record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
+ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
 \`\`\`
 
 Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
@@ -522,9 +522,9 @@ Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
 **Before you finish**, run:
 
 \`\`\`
-mulch learn        # see what files changed — decide what to record
-mulch record ...   # record learnings
-mulch sync         # validate, stage, and commit .mulch/ changes
+ml learn        # see what files changed — decide what to record
+ml record ...   # record learnings
+ml sync         # validate, stage, and commit .mulch/ changes
 \`\`\`
 ${MARKER_END}`;
 

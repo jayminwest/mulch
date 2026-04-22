@@ -15,37 +15,37 @@ This project uses [Mulch](https://github.com/jayminwest/mulch) for structured ex
 
 **At the start of every session**, run:
 \`\`\`bash
-mulch prime
+ml prime
 \`\`\`
 
 This injects project-specific conventions, patterns, decisions, and other learnings into your context.
-Use \`mulch prime --files src/foo.ts\` to load only records relevant to specific files.
+Use \`ml prime --files src/foo.ts\` to load only records relevant to specific files.
 
 **Before completing your task**, review your work for insights worth preserving — conventions discovered,
 patterns applied, failures encountered, or decisions made — and record them:
 \`\`\`bash
-mulch record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
+ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
 \`\`\`
 
 Link evidence when available: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
 
-Run \`mulch status\` to check domain health and entry counts.
-Run \`mulch --help\` for full usage.
+Run \`ml status\` to check domain health and entry counts.
+Run \`ml --help\` for full usage.
 Mulch write commands use file locking and atomic writes — multiple agents can safely record to the same domain concurrently.
 
 ### Before You Finish
 
 1. Discover what to record:
    \`\`\`bash
-   mulch learn
+   ml learn
    \`\`\`
 2. Store insights from this work session:
    \`\`\`bash
-   mulch record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
+   ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
    \`\`\`
 3. Validate and commit:
    \`\`\`bash
-   mulch sync
+   ml sync
    \`\`\`
 `;
 
@@ -160,12 +160,25 @@ async function resolveTargetFile(cwd: string): Promise<{
 		};
 	}
 
+	// If AGENTS.md already exists (no snippet), append there to respect Codex-style projects.
+	// Only create a new file when neither exists — prefer CLAUDE.md over AGENTS.md in that case.
 	const agentsExists = await fileExists(join(cwd, "AGENTS.md"));
+	if (agentsExists) {
+		return {
+			target: {
+				fileName: "AGENTS.md",
+				path: join(cwd, "AGENTS.md"),
+				exists: true,
+			},
+			duplicates: [],
+		};
+	}
+
 	return {
 		target: {
-			fileName: "AGENTS.md",
-			path: join(cwd, "AGENTS.md"),
-			exists: agentsExists,
+			fileName: "CLAUDE.md",
+			path: join(cwd, "CLAUDE.md"),
+			exists: false,
 		},
 		duplicates: [],
 	};
@@ -313,7 +326,7 @@ export async function runOnboard(options: {
 export function registerOnboardCommand(program: Command): void {
 	program
 		.command("onboard")
-		.description("Generate or update an AGENTS.md/CLAUDE.md snippet pointing to mulch prime")
+		.description("Generate or update a CLAUDE.md/AGENTS.md snippet pointing to ml prime")
 		.option("--stdout", "print snippet to stdout instead of writing to file")
 		.option("--provider <provider>", "customize snippet for a specific provider (e.g. claude)")
 		.option("--check", "check if onboarding snippet is installed and up to date")

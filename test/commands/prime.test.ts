@@ -50,7 +50,7 @@ describe("prime command", () => {
 		const output = formatPrimeOutput([]);
 		expect(output).toContain("# Project Expertise (via Mulch)");
 		expect(output).toContain("No expertise recorded yet");
-		expect(output).toContain("mulch add <domain>");
+		expect(output).toContain("ml add <domain>");
 	});
 
 	it("generates prime output with a single domain", async () => {
@@ -117,7 +117,7 @@ describe("prime command", () => {
 	it("prime output includes recording instructions", () => {
 		const output = formatPrimeOutput([]);
 		expect(output).toContain("## Recording New Learnings");
-		expect(output).toContain("mulch record <domain>");
+		expect(output).toContain("ml record <domain>");
 	});
 
 	it("prime output includes per-type required fields table", () => {
@@ -1052,13 +1052,13 @@ describe("prime command", () => {
 		it("compact wrapper includes quick reference section", () => {
 			const output = formatPrimeOutputCompact([]);
 			expect(output).toContain("## Quick Reference");
-			expect(output).toContain('mulch search "query"');
-			expect(output).toContain("mulch prime --files");
-			expect(output).toContain("mulch prime --context");
-			expect(output).toContain("mulch record <domain>");
+			expect(output).toContain('ml search "query"');
+			expect(output).toContain("ml prime --files");
+			expect(output).toContain("ml prime --context");
+			expect(output).toContain("ml record <domain>");
 			expect(output).toContain("--evidence-commit");
 			expect(output).toContain("--evidence-bead");
-			expect(output).toContain("mulch doctor");
+			expect(output).toContain("ml doctor");
 		});
 
 		it("compact with multiple domains", async () => {
@@ -1563,9 +1563,9 @@ describe("prime command", () => {
 			const reminder = getSessionEndReminder("markdown");
 			// The reminder is appended by prime.ts, but verify the function itself
 			expect(reminder).toContain("SESSION CLOSE PROTOCOL");
-			expect(reminder).toContain("mulch record");
-			expect(reminder).toContain("mulch sync");
-			expect(reminder).toContain("mulch learn");
+			expect(reminder).toContain("ml record");
+			expect(reminder).toContain("ml sync");
+			expect(reminder).toContain("ml learn");
 			expect(reminder).toContain("NEVER skip this");
 		});
 
@@ -1573,9 +1573,9 @@ describe("prime command", () => {
 			const reminder = getSessionEndReminder("markdown");
 			expect(reminder).toContain("# ");
 			expect(reminder).toContain("**CRITICAL**");
-			expect(reminder).toContain("mulch record <domain>");
-			expect(reminder).toContain("mulch sync");
-			expect(reminder).toContain("mulch learn");
+			expect(reminder).toContain("ml record <domain>");
+			expect(reminder).toContain("ml sync");
+			expect(reminder).toContain("ml learn");
 		});
 
 		it("xml reminder uses XML tags", () => {
@@ -1583,9 +1583,9 @@ describe("prime command", () => {
 			expect(reminder).toContain("<session_close_protocol");
 			expect(reminder).toContain("</session_close_protocol>");
 			expect(reminder).toContain("<checklist>");
-			expect(reminder).toContain("mulch record");
-			expect(reminder).toContain("mulch sync");
-			expect(reminder).toContain("mulch learn");
+			expect(reminder).toContain("ml record");
+			expect(reminder).toContain("ml sync");
+			expect(reminder).toContain("ml learn");
 			expect(reminder).toContain("NEVER skip this");
 		});
 
@@ -1596,9 +1596,9 @@ describe("prime command", () => {
 			expect(reminder).not.toContain("##");
 			// No XML tags (but <domain> and <type> placeholders are fine)
 			expect(reminder).not.toContain("</");
-			expect(reminder).toContain("mulch record");
-			expect(reminder).toContain("mulch sync");
-			expect(reminder).toContain("mulch learn");
+			expect(reminder).toContain("ml record");
+			expect(reminder).toContain("ml sync");
+			expect(reminder).toContain("ml learn");
 			expect(reminder).toContain("NEVER skip this");
 		});
 
@@ -1622,9 +1622,9 @@ describe("prime command", () => {
 		it("reminder contains key action items", () => {
 			for (const format of ["markdown", "xml", "plain"] as const) {
 				const reminder = getSessionEndReminder(format);
-				expect(reminder).toContain("mulch record");
-				expect(reminder).toContain("mulch sync");
-				expect(reminder).toContain("mulch learn");
+				expect(reminder).toContain("ml record");
+				expect(reminder).toContain("ml sync");
+				expect(reminder).toContain("ml learn");
 			}
 		});
 	});
