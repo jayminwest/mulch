@@ -240,8 +240,8 @@ export async function runOnboard(options: {
 			const messages: Record<string, string> = {
 				not_installed: `Mulch snippet is not installed in ${target.fileName}.`,
 				up_to_date: `Mulch snippet in ${target.fileName} is up to date.`,
-				outdated: `Mulch snippet in ${target.fileName} is outdated. Run \`mulch onboard\` to update.`,
-				legacy: `Mulch snippet in ${target.fileName} uses legacy format (no markers). Run \`mulch onboard\` to migrate.`,
+				outdated: `Mulch snippet in ${target.fileName} is outdated. Run \`ml onboard\` to update.`,
+				legacy: `Mulch snippet in ${target.fileName} uses legacy format (no markers). Run \`ml onboard\` to migrate.`,
 			};
 			const colors: Record<string, (s: string) => string> = {
 				not_installed: chalk.yellow,
