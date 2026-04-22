@@ -32,7 +32,9 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const record: ExpertiseRecord = { ...records[0]! };
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const record: ExpertiseRecord = { ...r0 };
 		if (record.type === "convention") {
 			record.content = "New content";
 		}
@@ -41,9 +43,9 @@ describe("edit command", () => {
 
 		const updated = await readExpertiseFile(filePath);
 		expect(updated).toHaveLength(1);
-		expect(updated[0]!.type).toBe("convention");
-		if (updated[0]!.type === "convention") {
-			expect(updated[0]!.content).toBe("New content");
+		expect(updated[0]?.type).toBe("convention");
+		if (updated[0]?.type === "convention") {
+			expect(updated[0]?.content).toBe("New content");
 		}
 	});
 
@@ -58,7 +60,9 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const record: ExpertiseRecord = { ...records[0]! };
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const record: ExpertiseRecord = { ...r0 };
 		if (record.type === "pattern") {
 			record.description = "Updated description";
 		}
@@ -66,10 +70,10 @@ describe("edit command", () => {
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		expect(updated[0]!.type).toBe("pattern");
-		if (updated[0]!.type === "pattern") {
-			expect(updated[0]!.description).toBe("Updated description");
-			expect(updated[0]!.name).toBe("Test Pattern");
+		expect(updated[0]?.type).toBe("pattern");
+		if (updated[0]?.type === "pattern") {
+			expect(updated[0]?.description).toBe("Updated description");
+			expect(updated[0]?.name).toBe("Test Pattern");
 		}
 	});
 
@@ -83,14 +87,16 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const record: ExpertiseRecord = { ...records[0]!, classification: "foundational" as const };
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const record: ExpertiseRecord = { ...r0, classification: "foundational" as const };
 		const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		expect(updated[0]!.classification).toBe("foundational");
-		if (updated[0]!.type === "convention") {
-			expect(updated[0]!.content).toBe("Keep this content");
+		expect(updated[0]?.classification).toBe("foundational");
+		if (updated[0]?.type === "convention") {
+			expect(updated[0]?.content).toBe("Keep this content");
 		}
 	});
 
@@ -105,7 +111,9 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const record: ExpertiseRecord = { ...records[0]! };
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const record: ExpertiseRecord = { ...r0 };
 		if (record.type === "failure") {
 			record.resolution = "Better fix";
 		}
@@ -113,9 +121,9 @@ describe("edit command", () => {
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		if (updated[0]!.type === "failure") {
-			expect(updated[0]!.resolution).toBe("Better fix");
-			expect(updated[0]!.description).toBe("Something broke");
+		if (updated[0]?.type === "failure") {
+			expect(updated[0]?.resolution).toBe("Better fix");
+			expect(updated[0]?.description).toBe("Something broke");
 		}
 	});
 
@@ -130,7 +138,9 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const record: ExpertiseRecord = { ...records[0]! };
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const record: ExpertiseRecord = { ...r0 };
 		if (record.type === "decision") {
 			record.rationale = "Better tree-shaking and modern standards";
 		}
@@ -138,9 +148,9 @@ describe("edit command", () => {
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		if (updated[0]!.type === "decision") {
-			expect(updated[0]!.rationale).toBe("Better tree-shaking and modern standards");
-			expect(updated[0]!.title).toBe("Use ESM");
+		if (updated[0]?.type === "decision") {
+			expect(updated[0]?.rationale).toBe("Better tree-shaking and modern standards");
+			expect(updated[0]?.title).toBe("Use ESM");
 		}
 	});
 
@@ -169,7 +179,9 @@ describe("edit command", () => {
 		expect(records).toHaveLength(3);
 
 		// Edit only the second record
-		const record: ExpertiseRecord = { ...records[1]! };
+		const r1 = records[1];
+		if (!r1) throw new Error("Expected record at index 1");
+		const record: ExpertiseRecord = { ...r1 };
 		if (record.type === "convention") {
 			record.content = "Updated second record";
 		}
@@ -180,14 +192,14 @@ describe("edit command", () => {
 
 		const updated = await readExpertiseFile(filePath);
 		expect(updated).toHaveLength(3);
-		if (updated[0]!.type === "convention") {
-			expect(updated[0]!.content).toBe("First record");
+		if (updated[0]?.type === "convention") {
+			expect(updated[0]?.content).toBe("First record");
 		}
-		if (updated[1]!.type === "convention") {
-			expect(updated[1]!.content).toBe("Updated second record");
+		if (updated[1]?.type === "convention") {
+			expect(updated[1]?.content).toBe("Updated second record");
 		}
-		if (updated[2]!.type === "convention") {
-			expect(updated[2]!.content).toBe("Third record");
+		if (updated[2]?.type === "convention") {
+			expect(updated[2]?.content).toBe("Third record");
 		}
 	});
 
@@ -203,7 +215,9 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const record: ExpertiseRecord = { ...records[0]! };
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
+		const record: ExpertiseRecord = { ...r0 };
 		if (record.type === "pattern") {
 			record.files = ["new.ts", "other.ts"];
 		}
@@ -211,8 +225,8 @@ describe("edit command", () => {
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		if (updated[0]!.type === "pattern") {
-			expect(updated[0]!.files).toEqual(["new.ts", "other.ts"]);
+		if (updated[0]?.type === "pattern") {
+			expect(updated[0]?.files).toEqual(["new.ts", "other.ts"]);
 		}
 	});
 
@@ -226,16 +240,18 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
 		const record: ExpertiseRecord = {
-			...records[0]!,
+			...r0,
 			outcomes: [{ status: "success" as const, duration: 1200 }],
 		};
 		const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		expect(updated[0]!.outcomes?.[0]?.status).toBe("success");
-		expect(updated[0]!.outcomes?.[0]?.duration).toBe(1200);
+		expect(updated[0]?.outcomes?.[0]?.status).toBe("success");
+		expect(updated[0]?.outcomes?.[0]?.duration).toBe(1200);
 	});
 
 	it("appends outcome to an existing record's outcomes array", async () => {
@@ -250,10 +266,12 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
 		const record: ExpertiseRecord = {
-			...records[0]!,
+			...r0,
 			outcomes: [
-				...(records[0]!.outcomes ?? []),
+				...(r0.outcomes ?? []),
 				{
 					status: "success" as const,
 					agent: "build-agent",
@@ -265,10 +283,10 @@ describe("edit command", () => {
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		expect(updated[0]!.outcomes).toHaveLength(2);
-		expect(updated[0]!.outcomes?.[1]?.status).toBe("success");
-		expect(updated[0]!.outcomes?.[1]?.agent).toBe("build-agent");
-		expect(updated[0]!.outcomes?.[1]?.test_results).toBe("Resolved");
+		expect(updated[0]?.outcomes).toHaveLength(2);
+		expect(updated[0]?.outcomes?.[1]?.status).toBe("success");
+		expect(updated[0]?.outcomes?.[1]?.agent).toBe("build-agent");
+		expect(updated[0]?.outcomes?.[1]?.test_results).toBe("Resolved");
 	});
 
 	it("preserves other record fields when adding outcomes", async () => {
@@ -282,19 +300,21 @@ describe("edit command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
+		const r0 = records[0];
+		if (!r0) throw new Error("Expected record");
 		const record: ExpertiseRecord = {
-			...records[0]!,
+			...r0,
 			outcomes: [{ status: "success" as const }],
 		};
 		const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
 		await writeExpertiseFile(filePath, [record]);
 
 		const updated = await readExpertiseFile(filePath);
-		expect(updated[0]!.type).toBe("decision");
-		if (updated[0]!.type === "decision") {
-			expect(updated[0]!.title).toBe("Use TypeScript");
-			expect(updated[0]!.rationale).toBe("Type safety");
+		expect(updated[0]?.type).toBe("decision");
+		if (updated[0]?.type === "decision") {
+			expect(updated[0]?.title).toBe("Use TypeScript");
+			expect(updated[0]?.rationale).toBe("Type safety");
 		}
-		expect(updated[0]!.outcomes?.[0]?.status).toBe("success");
+		expect(updated[0]?.outcomes?.[0]?.status).toBe("success");
 	});
 });

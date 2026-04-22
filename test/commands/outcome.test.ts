@@ -34,7 +34,9 @@ describe("outcome command", () => {
 
 			const records = await readExpertiseFile(filePath);
 			const record = records[0];
-			const id = record!.id!;
+			if (!record) throw new Error("Expected record");
+			const id = record.id;
+			if (!id) throw new Error("Expected record id");
 
 			const result = await appendOutcome(
 				"testing",
@@ -60,7 +62,10 @@ describe("outcome command", () => {
 			});
 
 			const records = await readExpertiseFile(filePath);
-			const id = records[0]!.id!;
+			const r = records[0];
+			if (!r) throw new Error("Expected record");
+			const id = r.id;
+			if (!id) throw new Error("Expected id");
 
 			const result = await appendOutcome(
 				"testing",
@@ -84,7 +89,10 @@ describe("outcome command", () => {
 			});
 
 			const records = await readExpertiseFile(filePath);
-			const id = records[0]!.id!;
+			const r = records[0];
+			if (!r) throw new Error("Expected record");
+			const id = r.id;
+			if (!id) throw new Error("Expected id");
 
 			await appendOutcome("testing", id, { status: "success" }, { cwd: tmpDir });
 			await appendOutcome("testing", id, { status: "success", agent: "agent-2" }, { cwd: tmpDir });
@@ -98,11 +106,12 @@ describe("outcome command", () => {
 			expect(result.total_outcomes).toBe(3);
 
 			const updated = await readExpertiseFile(filePath);
-			const updatedRecord = updated[0]!;
-			expect(updatedRecord!.outcomes).toHaveLength(3);
-			expect(updatedRecord.outcomes![0]!.status).toBe("success");
-			expect(updatedRecord.outcomes![1]!.status).toBe("success");
-			expect(updatedRecord.outcomes![2]!.status).toBe("partial");
+			const updatedRecord = updated[0];
+			if (!updatedRecord) throw new Error("Expected updated record");
+			expect(updatedRecord.outcomes).toHaveLength(3);
+			expect(updatedRecord.outcomes?.[0]?.status).toBe("success");
+			expect(updatedRecord.outcomes?.[1]?.status).toBe("success");
+			expect(updatedRecord.outcomes?.[2]?.status).toBe("partial");
 		});
 
 		it("persists outcomes to disk", async () => {
@@ -116,7 +125,10 @@ describe("outcome command", () => {
 			});
 
 			const records = await readExpertiseFile(filePath);
-			const id = records[0]!.id!;
+			const r = records[0];
+			if (!r) throw new Error("Expected record");
+			const id = r.id;
+			if (!id) throw new Error("Expected id");
 
 			await appendOutcome(
 				"testing",
@@ -126,10 +138,11 @@ describe("outcome command", () => {
 			);
 
 			const updated = await readExpertiseFile(filePath);
-			const updatedRecord = updated[0]!;
-			expect(updatedRecord!.outcomes).toHaveLength(1);
-			expect(updatedRecord.outcomes![0]!.duration).toBe(1234);
-			expect(updatedRecord.outcomes![0]!.test_results).toBe("all passed");
+			const updatedRecord = updated[0];
+			if (!updatedRecord) throw new Error("Expected updated record");
+			expect(updatedRecord.outcomes).toHaveLength(1);
+			expect(updatedRecord.outcomes?.[0]?.duration).toBe(1234);
+			expect(updatedRecord.outcomes?.[0]?.test_results).toBe("all passed");
 		});
 
 		it("throws when domain does not exist", async () => {
@@ -160,14 +173,17 @@ describe("outcome command", () => {
 			});
 
 			const records = await readExpertiseFile(filePath);
-			const id = records[0]!.id!;
+			const r = records[0];
+			if (!r) throw new Error("Expected record");
+			const id = r.id;
+			if (!id) throw new Error("Expected id");
 
 			await appendOutcome("testing", id, { status: "success" }, { cwd: tmpDir });
 
 			const updated = await readExpertiseFile(filePath);
 			expect(updated).toHaveLength(2);
-			expect(updated[0]!.outcomes).toHaveLength(1);
-			expect(updated[1]!.outcomes).toBeUndefined();
+			expect(updated[0]?.outcomes).toHaveLength(1);
+			expect(updated[1]?.outcomes).toBeUndefined();
 		});
 
 		it("sets recorded_at on the outcome", async () => {
@@ -180,7 +196,10 @@ describe("outcome command", () => {
 			});
 
 			const records = await readExpertiseFile(filePath);
-			const id = records[0]!.id!;
+			const r = records[0];
+			if (!r) throw new Error("Expected record");
+			const id = r.id;
+			if (!id) throw new Error("Expected id");
 
 			const result = await appendOutcome("testing", id, { status: "success" }, { cwd: tmpDir });
 
