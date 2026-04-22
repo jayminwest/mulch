@@ -37,7 +37,7 @@ function buildRetryCommand(
 	options: Record<string, unknown>,
 	missingFlags: Array<{ flag: string; placeholder: string }>,
 ): string {
-	const parts = ["mulch record", domain];
+	const parts = ["ml record", domain];
 	if (content) parts.push(JSON.stringify(content));
 	if (options.type) parts.push(`--type ${options.type as string}`);
 	if (options.classification && options.classification !== "tactical") {
@@ -291,9 +291,9 @@ Required fields per record type:
   guide        --name, --description (or [content])
 
 Batch recording examples:
-  mulch record cli --batch records.json
-  mulch record cli --batch records.json --dry-run
-  echo '[{"type":"convention","content":"test"}]' > batch.json && mulch record cli --batch batch.json
+  ml record cli --batch records.json
+  ml record cli --batch records.json --dry-run
+  echo '[{"type":"convention","content":"test"}]' > batch.json && ml record cli --batch batch.json
 `,
 		)
 		.action(

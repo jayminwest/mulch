@@ -1058,6 +1058,10 @@ describe("prime command", () => {
 			expect(output).toContain("ml record <domain>");
 			expect(output).toContain("--evidence-commit");
 			expect(output).toContain("--evidence-bead");
+			expect(output).toContain("--evidence-seeds");
+			expect(output).toContain("--evidence-gh");
+			expect(output).toContain("--evidence-linear");
+			expect(output).toContain("--relates-to");
 			expect(output).toContain("ml doctor");
 		});
 

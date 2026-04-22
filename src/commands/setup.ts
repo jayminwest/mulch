@@ -346,7 +346,7 @@ patterns applied, failures encountered, or decisions made — and record them:
 ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
 \`\`\`
 
-Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
+Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
 
 **Before you finish**, run:
 
@@ -426,7 +426,7 @@ patterns applied, failures encountered, or decisions made — and record them:
 ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
 \`\`\`
 
-Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
+Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
 
 **Before you finish**, run:
 
@@ -520,7 +520,7 @@ patterns applied, failures encountered, or decisions made — and record them:
 ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
 \`\`\`
 
-Link evidence: \`--evidence-commit <sha>\`, \`--evidence-bead <id>\`
+Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
 
 **Before you finish**, run:
 

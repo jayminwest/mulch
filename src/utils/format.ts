@@ -245,7 +245,7 @@ export function formatPrimeOutputCompact(domainSections: string[]): string {
 	lines.push("- `ml prime --context` — load records for git-changed files");
 	lines.push('- `ml record <domain> --type <type> --description "..."`');
 	lines.push(
-		"  - Evidence: `--evidence-commit <sha>`, `--evidence-bead <id>`, `--relates-to <id>`",
+		"  - Evidence: commit + files auto-populate from git. Trackers: `--evidence-seeds` / `--evidence-gh` / `--evidence-linear` / `--evidence-bead`. Override commit: `--evidence-commit <sha>`. Link records: `--relates-to <mx-id>`",
 	);
 	lines.push("- `ml doctor` — check record health");
 	lines.push("");
@@ -358,14 +358,16 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	lines.push('| `reference` | `--name "..." --description "..."` |');
 	lines.push('| `guide` | `--name "..." --description "..."` |');
 	lines.push("");
-	lines.push("**Link evidence** to records when available:");
+	lines.push(
+		"**Link evidence** to records. The current commit and changed files auto-populate from git; link trackers or related records explicitly:",
+	);
 	lines.push("");
 	lines.push("```bash");
 	lines.push(
-		'ml record <domain> --type pattern --name "..." --description "..." --evidence-commit abc123',
+		'ml record <domain> --type pattern --name "..." --description "..." --evidence-seeds SEED-123',
 	);
 	lines.push(
-		'ml record <domain> --type decision --title "..." --rationale "..." --evidence-bead seeds-xxx',
+		'ml record <domain> --type decision --title "..." --rationale "..." --evidence-gh 42 --evidence-linear ENG-9',
 	);
 	lines.push(
 		'ml record <domain> --type convention "..." --relates-to mx-abc  # link to related records',

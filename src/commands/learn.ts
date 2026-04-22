@@ -160,7 +160,7 @@ export function registerLearnCommand(program: Command): void {
 				}
 
 				console.log(chalk.dim("\nRecord learnings with:"));
-				console.log(chalk.dim('  mulch record <domain> --type <type> --description "..."'));
+				console.log(chalk.dim('  ml record <domain> --type <type> --description "..."'));
 				console.log();
 			} catch (err) {
 				if (jsonMode) {
