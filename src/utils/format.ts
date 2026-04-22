@@ -1,4 +1,4 @@
-import type {
+ import type {
 	ConventionRecord,
 	DecisionRecord,
 	ExpertiseRecord,
@@ -228,7 +228,7 @@ export function formatPrimeOutputCompact(domainSections: string[]): string {
 
 	if (domainSections.length === 0) {
 		lines.push(
-			"No expertise recorded yet. Use `mulch add <domain>` to create a domain, then `mulch record` to add records.",
+			"No expertise recorded yet. Use `ml add <domain>` to create a domain, then `ml record` to add records.",
 		);
 	} else {
 		lines.push(domainSections.join("\n\n"));
@@ -237,16 +237,16 @@ export function formatPrimeOutputCompact(domainSections: string[]): string {
 	lines.push("");
 	lines.push("## Quick Reference");
 	lines.push("");
-	lines.push('- `mulch search "query"` — find relevant records before implementing');
+	lines.push('- `ml search "query"` — find relevant records before implementing');
 	lines.push(
-		"- `mulch prime --files src/foo.ts` — prime **before** editing a file, not just at session start",
+		"- `ml prime --files src/foo.ts` — prime **before** editing a file, not just at session start",
 	);
-	lines.push("- `mulch prime --context` — load records for git-changed files");
-	lines.push('- `mulch record <domain> --type <type> --description "..."`');
+	lines.push("- `ml prime --context` — load records for git-changed files");
+	lines.push('- `ml record <domain> --type <type> --description "..."`');
 	lines.push(
 		"  - Evidence: `--evidence-commit <sha>`, `--evidence-bead <id>`, `--relates-to <id>`",
 	);
-	lines.push("- `mulch doctor` — check record health");
+	lines.push("- `ml doctor` — check record health");
 	lines.push("");
 	lines.push("**Record types and required flags:**");
 	lines.push("");
@@ -301,28 +301,28 @@ export function formatPrimeOutput(domainSections: string[]): string {
 
 	lines.push("# Project Expertise (via Mulch)");
 	lines.push("");
-	lines.push("> **Context Recovery**: Run `mulch prime` after compaction, clear, or new session");
+	lines.push("> **Context Recovery**: Run `ml prime` after compaction, clear, or new session");
 	lines.push("");
 	lines.push("## Rules");
 	lines.push("");
 	lines.push(
-		"- **Record learnings**: When you discover a pattern, fix a bug, or make a design decision — record it with `mulch record`",
+		"- **Record learnings**: When you discover a pattern, fix a bug, or make a design decision — record it with `ml record`",
 	);
 	lines.push(
-		"- **Check expertise first**: Before implementing, check if relevant expertise exists with `mulch search` or `mulch prime --context`",
+		"- **Check expertise first**: Before implementing, check if relevant expertise exists with `ml search` or `ml prime --context`",
 	);
 	lines.push(
-		"- **Targeted priming**: Use `mulch prime --files src/foo.ts` to load only records relevant to specific files",
+		"- **Targeted priming**: Use `ml prime --files src/foo.ts` to load only records relevant to specific files",
 	);
 	lines.push(
-		"- **Do NOT** store expertise in code comments, markdown files, or memory tools — use `mulch record`",
+		"- **Do NOT** store expertise in code comments, markdown files, or memory tools — use `ml record`",
 	);
-	lines.push("- Run `mulch doctor` if you are unsure whether records are healthy");
+	lines.push("- Run `ml doctor` if you are unsure whether records are healthy");
 	lines.push("");
 
 	if (domainSections.length === 0) {
 		lines.push(
-			"No expertise recorded yet. Use `mulch add <domain>` to create a domain, then `mulch record` to add records.",
+			"No expertise recorded yet. Use `ml add <domain>` to create a domain, then `ml record` to add records.",
 		);
 		lines.push("");
 	} else {
@@ -338,14 +338,12 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	);
 	lines.push("");
 	lines.push("```bash");
-	lines.push('mulch record <domain> --type convention "description"');
-	lines.push('mulch record <domain> --type failure --description "..." --resolution "..."');
-	lines.push('mulch record <domain> --type decision --title "..." --rationale "..."');
-	lines.push('mulch record <domain> --type pattern --name "..." --description "..." --files "..."');
-	lines.push(
-		'mulch record <domain> --type reference --name "..." --description "..." --files "..."',
-	);
-	lines.push('mulch record <domain> --type guide --name "..." --description "..."');
+	lines.push('ml record <domain> --type convention "description"');
+	lines.push('ml record <domain> --type failure --description "..." --resolution "..."');
+	lines.push('ml record <domain> --type decision --title "..." --rationale "..."');
+	lines.push('ml record <domain> --type pattern --name "..." --description "..." --files "..."');
+	lines.push('ml record <domain> --type reference --name "..." --description "..." --files "..."');
+	lines.push('ml record <domain> --type guide --name "..." --description "..."');
 	lines.push("```");
 	lines.push("");
 	lines.push("**Required fields by type:**");
@@ -363,36 +361,36 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	lines.push("");
 	lines.push("```bash");
 	lines.push(
-		'mulch record <domain> --type pattern --name "..." --description "..." --evidence-commit abc123',
+		'ml record <domain> --type pattern --name "..." --description "..." --evidence-commit abc123',
 	);
 	lines.push(
-		'mulch record <domain> --type decision --title "..." --rationale "..." --evidence-bead seeds-xxx',
+		'ml record <domain> --type decision --title "..." --rationale "..." --evidence-bead seeds-xxx',
 	);
 	lines.push(
-		'mulch record <domain> --type convention "..." --relates-to mx-abc  # link to related records',
+		'ml record <domain> --type convention "..." --relates-to mx-abc  # link to related records',
 	);
 	lines.push("```");
 	lines.push("");
 	lines.push("**Batch record** multiple records at once:");
 	lines.push("");
 	lines.push("```bash");
-	lines.push("mulch record <domain> --batch records.json  # from file");
+	lines.push("ml record <domain> --batch records.json  # from file");
 	lines.push(
-		'echo \'[{"type":"convention","content":"..."}]\' | mulch record <domain> --stdin  # from stdin',
+		'echo \'[{"type":"convention","content":"..."}]\' | ml record <domain> --stdin  # from stdin',
 	);
 	lines.push("```");
 	lines.push("");
 	lines.push("## Searching Expertise");
 	lines.push("");
 	lines.push(
-		"Use `mulch search` to find relevant records across all domains. Results are ranked by relevance (BM25):",
+		"Use `ml search` to find relevant records across all domains. Results are ranked by relevance (BM25):",
 	);
 	lines.push("");
 	lines.push("```bash");
-	lines.push('mulch search "file locking"              # multi-word queries ranked by relevance');
-	lines.push('mulch search "atomic" --domain cli        # limit to a specific domain');
-	lines.push('mulch search "ESM" --type convention      # filter by record type');
-	lines.push('mulch search "concurrency" --tag safety   # filter by tag');
+	lines.push('ml search "file locking"              # multi-word queries ranked by relevance');
+	lines.push('ml search "atomic" --domain cli        # limit to a specific domain');
+	lines.push('ml search "ESM" --type convention      # filter by record type');
+	lines.push('ml search "concurrency" --tag safety   # filter by tag');
 	lines.push("```");
 	lines.push("");
 	lines.push("Search before implementing — existing expertise may already cover your use case.");
@@ -402,14 +400,14 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	lines.push("When a domain grows large, compact it to keep expertise focused:");
 	lines.push("");
 	lines.push("```bash");
-	lines.push("mulch compact --auto --dry-run     # preview what would be merged");
-	lines.push("mulch compact --auto               # merge same-type record groups");
+	lines.push("ml compact --auto --dry-run     # preview what would be merged");
+	lines.push("ml compact --auto               # merge same-type record groups");
 	lines.push("```");
 	lines.push("");
-	lines.push("Use `mulch diff` to review what expertise changed:");
+	lines.push("Use `ml diff` to review what expertise changed:");
 	lines.push("");
 	lines.push("```bash");
-	lines.push("mulch diff HEAD~3                  # see record changes over last 3 commits");
+	lines.push("ml diff HEAD~3                  # see record changes over last 3 commits");
 	lines.push("```");
 	lines.push("");
 	lines.push("## Session End");
@@ -417,9 +415,9 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	lines.push("**IMPORTANT**: Before ending your session, record what you learned and sync:");
 	lines.push("");
 	lines.push("```");
-	lines.push("[ ] mulch learn          # see what files changed — decide what to record");
-	lines.push("[ ] mulch record ...     # record learnings (see above)");
-	lines.push("[ ] mulch sync           # validate, stage, and commit .mulch/ changes");
+	lines.push("[ ] ml learn          # see what files changed — decide what to record");
+	lines.push("[ ] ml record ...     # record learnings (see above)");
+	lines.push("[ ] ml sync           # validate, stage, and commit .mulch/ changes");
 	lines.push("```");
 	lines.push("");
 	lines.push("Do NOT skip this. Unrecorded learnings are lost for the next session.");
@@ -513,7 +511,7 @@ export function formatPrimeOutputXml(domainSections: string[]): string {
 
 	if (domainSections.length === 0) {
 		lines.push(
-			"  <empty>No expertise recorded yet. Use mulch add and mulch record to get started.</empty>",
+			"  <empty>No expertise recorded yet. Use ml add and ml record to get started.</empty>",
 		);
 	} else {
 		lines.push(domainSections.join("\n"));
@@ -615,9 +613,7 @@ export function formatPrimeOutputPlain(domainSections: string[]): string {
 	lines.push("");
 
 	if (domainSections.length === 0) {
-		lines.push(
-			"No expertise recorded yet. Use `mulch add <domain>` and `mulch record` to get started.",
-		);
+		lines.push("No expertise recorded yet. Use `ml add <domain>` and `ml record` to get started.");
 	} else {
 		lines.push(domainSections.join("\n\n"));
 	}
@@ -642,9 +638,9 @@ export function getSessionEndReminder(format: PrimeFormat): string {
 				'<session_close_protocol priority="critical">',
 				"  <instruction>Before saying done or complete, you MUST run this checklist:</instruction>",
 				"  <checklist>",
-				"    <step>mulch learn — see what files changed, decide what to record</step>",
-				"    <step>mulch record &lt;domain&gt; --type &lt;type&gt; --description &quot;...&quot;</step>",
-				"    <step>mulch sync — validate, stage, and commit .mulch/ changes</step>",
+				"    <step>ml learn — see what files changed, decide what to record</step>",
+				"    <step>ml record &lt;domain&gt; --type &lt;type&gt; --description &quot;...&quot;</step>",
+				"    <step>ml sync — validate, stage, and commit .mulch/ changes</step>",
 				"  </checklist>",
 				"  <warning>NEVER skip this. Unrecorded learnings are lost for the next session.</warning>",
 				"</session_close_protocol>",
@@ -655,9 +651,9 @@ export function getSessionEndReminder(format: PrimeFormat): string {
 				"",
 				'Before saying "done" or "complete", you MUST run this checklist:',
 				"",
-				"[ ] 1. mulch learn              (see what files changed — decide what to record)",
-				'[ ] 2. mulch record <domain> --type <type> --description "..."',
-				"[ ] 3. mulch sync               (validate, stage, and commit .mulch/ changes)",
+				"[ ] 1. ml learn              (see what files changed — decide what to record)",
+				'[ ] 2. ml record <domain> --type <type> --description "..."',
+				"[ ] 3. ml sync               (validate, stage, and commit .mulch/ changes)",
 				"",
 				"NEVER skip this. Unrecorded learnings are lost for the next session.",
 			].join("\n");
@@ -668,9 +664,9 @@ export function getSessionEndReminder(format: PrimeFormat): string {
 				'**CRITICAL**: Before saying "done" or "complete", you MUST run this checklist:',
 				"",
 				"```",
-				"[ ] 1. mulch learn              # see what files changed — decide what to record",
-				'[ ] 2. mulch record <domain> --type <type> --description "..."',
-				"[ ] 3. mulch sync               # validate, stage, and commit .mulch/ changes",
+				"[ ] 1. ml learn              # see what files changed — decide what to record",
+				'[ ] 2. ml record <domain> --type <type> --description "..."',
+				"[ ] 3. ml sync               # validate, stage, and commit .mulch/ changes",
 				"```",
 				"",
 				"**NEVER skip this.** Unrecorded learnings are lost for the next session.",

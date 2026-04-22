@@ -180,7 +180,7 @@ describe("setup command", () => {
 			const agentsPath = join(tmpDir, "AGENTS.md");
 			const content = await readFile(agentsPath, "utf-8");
 			expect(content).toContain("<!-- mulch:start -->");
-			expect(content).toContain("mulch prime");
+			expect(content).toContain("ml prime");
 		});
 
 		it("appends to existing AGENTS.md", async () => {
@@ -241,7 +241,7 @@ describe("setup command", () => {
 
 			const content = await readFile(filePath, "utf-8");
 			expect(content).toContain("<!-- mulch:start -->");
-			expect(content).toContain("mulch prime");
+			expect(content).toContain("ml prime");
 		});
 
 		it("check passes after install", async () => {
@@ -271,7 +271,7 @@ describe("setup command", () => {
 			expect(existsSync(filePath)).toBe(true);
 
 			const content = await readFile(filePath, "utf-8");
-			expect(content).toContain("mulch prime");
+			expect(content).toContain("ml prime");
 		});
 
 		it("check passes after install", async () => {
@@ -301,7 +301,7 @@ describe("setup command", () => {
 			expect(existsSync(filePath)).toBe(true);
 
 			const content = await readFile(filePath, "utf-8");
-			expect(content).toContain("mulch prime");
+			expect(content).toContain("ml prime");
 		});
 
 		it("check passes after install", async () => {

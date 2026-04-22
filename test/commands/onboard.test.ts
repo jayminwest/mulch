@@ -19,17 +19,17 @@ describe("onboard command", () => {
 
 	// ── Basic creation ────────────────────────────────────────
 
-	it("creates AGENTS.md by default when no agent file exists", async () => {
+	it("creates CLAUDE.md by default when no agent file exists", async () => {
 		const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
 		try {
 			await runOnboard({ cwd: tmpDir });
 
-			expect(existsSync(join(tmpDir, "AGENTS.md"))).toBe(true);
-			const content = await readFile(join(tmpDir, "AGENTS.md"), "utf-8");
+			expect(existsSync(join(tmpDir, "CLAUDE.md"))).toBe(true);
+			const content = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
 			expect(content).toContain("## Project Expertise (Mulch)");
-			expect(content).toContain("mulch prime");
-			expect(content).toContain("mulch record");
-			expect(content).toContain("mulch status");
+			expect(content).toContain("ml prime");
+			expect(content).toContain("ml record");
+			expect(content).toContain("ml status");
 			expect(content).toContain(MARKER_START);
 			expect(content).toContain(MARKER_END);
 		} finally {
@@ -77,7 +77,7 @@ describe("onboard command", () => {
 			await runOnboard({ cwd: tmpDir });
 			await runOnboard({ cwd: tmpDir });
 
-			const content = await readFile(join(tmpDir, "AGENTS.md"), "utf-8");
+			const content = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
 			const matches = content.match(/## Project Expertise \(Mulch\)/g);
 			expect(matches).toHaveLength(1);
 		} finally {
@@ -124,7 +124,7 @@ describe("onboard command", () => {
 
 			const output = (stdoutSpy.mock.calls[0] as string[])[0];
 			expect(output).toContain("At the start of every session");
-			expect(output).toContain("mulch prime");
+			expect(output).toContain("ml prime");
 		} finally {
 			stdoutSpy.mockRestore();
 		}
@@ -141,7 +141,7 @@ describe("onboard command", () => {
 
 			const output = (stdoutSpy.mock.calls[0] as string[])[0];
 			expect(output).toContain("At the start of every session");
-			expect(output).toContain("mulch prime");
+			expect(output).toContain("ml prime");
 		} finally {
 			stdoutSpy.mockRestore();
 		}
@@ -156,8 +156,8 @@ describe("onboard command", () => {
 
 			const output = (stdoutSpy.mock.calls[0] as string[])[0];
 			expect(output).toContain("Before You Finish");
-			expect(output).toContain("mulch learn");
-			expect(output).toContain("mulch sync");
+			expect(output).toContain("ml learn");
+			expect(output).toContain("ml sync");
 		} finally {
 			stdoutSpy.mockRestore();
 		}
@@ -170,8 +170,8 @@ describe("onboard command", () => {
 
 			const output = (stdoutSpy.mock.calls[0] as string[])[0];
 			expect(output).toContain("Before You Finish");
-			expect(output).toContain("mulch learn");
-			expect(output).toContain("mulch sync");
+			expect(output).toContain("ml learn");
+			expect(output).toContain("ml sync");
 		} finally {
 			stdoutSpy.mockRestore();
 		}
@@ -183,9 +183,9 @@ describe("onboard command", () => {
 			await runOnboard({ stdout: true, cwd: tmpDir });
 
 			const output = (stdoutSpy.mock.calls[0] as string[])[0];
-			expect(output).toContain("mulch prime");
-			expect(output).toContain("mulch record");
-			expect(output).toContain("mulch status");
+			expect(output).toContain("ml prime");
+			expect(output).toContain("ml record");
+			expect(output).toContain("ml status");
 		} finally {
 			stdoutSpy.mockRestore();
 		}
@@ -203,7 +203,7 @@ describe("onboard command", () => {
 				await runOnboard({ cwd: tmpDir });
 
 				const content = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
-				expect(content).toContain("mulch prime");
+				expect(content).toContain("ml prime");
 				expect(content).toContain(MARKER_START);
 				expect(content).toContain(MARKER_END);
 				expect(content).not.toContain("Old content here.");
@@ -258,7 +258,7 @@ describe("onboard command", () => {
 				expect(content).toContain("Some intro text.");
 				expect(content).toContain("## Other Section");
 				expect(content).toContain("More content.");
-				expect(content).toContain("mulch prime");
+				expect(content).toContain("ml prime");
 			} finally {
 				consoleSpy.mockRestore();
 			}
@@ -273,7 +273,7 @@ describe("onboard command", () => {
 			try {
 				await runOnboard({ cwd: tmpDir });
 
-				const content = await readFile(join(tmpDir, "AGENTS.md"), "utf-8");
+				const content = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
 				expect(content).toContain(VERSION_MARKER);
 			} finally {
 				consoleSpy.mockRestore();
@@ -443,7 +443,7 @@ Run \`mulch --help\` for full usage.
 				await runOnboard({ cwd: tmpDir });
 
 				const content = await readFile(join(tmpDir, ".claude", "CLAUDE.md"), "utf-8");
-				expect(content).toContain("mulch prime");
+				expect(content).toContain("ml prime");
 				// Should NOT create root files
 				expect(existsSync(join(tmpDir, "CLAUDE.md"))).toBe(false);
 				expect(existsSync(join(tmpDir, "AGENTS.md"))).toBe(false);
@@ -464,7 +464,7 @@ Run \`mulch --help\` for full usage.
 
 				// Root should be updated
 				const rootContent = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
-				expect(rootContent).toContain("mulch prime");
+				expect(rootContent).toContain("ml prime");
 				// Should warn about duplicate
 				expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("also found in"));
 			} finally {
@@ -484,7 +484,7 @@ Run \`mulch --help\` for full usage.
 
 				// Should update AGENTS.md, not add to CLAUDE.md
 				const agentsContent = await readFile(join(tmpDir, "AGENTS.md"), "utf-8");
-				expect(agentsContent).toContain("mulch prime");
+				expect(agentsContent).toContain("ml prime");
 				const claudeContent = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
 				expect(claudeContent).not.toContain("mulch");
 			} finally {
@@ -506,7 +506,7 @@ Run \`mulch --help\` for full usage.
 
 				const content = await readFile(join(tmpDir, ".claude", "CLAUDE.md"), "utf-8");
 				expect(content).toContain(MARKER_START);
-				expect(content).toContain("mulch prime");
+				expect(content).toContain("ml prime");
 				expect(existsSync(join(tmpDir, "CLAUDE.md"))).toBe(false);
 				expect(existsSync(join(tmpDir, "AGENTS.md"))).toBe(false);
 			} finally {
