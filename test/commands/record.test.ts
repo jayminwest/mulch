@@ -1754,4 +1754,143 @@ describe("auto-create domain in CLI mode", () => {
 		expect(result.created).toBe(1);
 		expect(result.errors).toHaveLength(0);
 	});
+
+	it("upsert merges outcomes from existing named record", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+
+		const original = {
+			type: "pattern",
+			name: "merge-outcomes-pattern",
+			description: "Pattern description",
+			classification: "tactical",
+			recorded_at: "2025-01-01T00:00:00.000Z",
+			outcomes: [{ status: "failure", agent: "session-1" }],
+		};
+		await appendRecord(filePath, original as ExpertiseRecord);
+
+		const updated = {
+			type: "pattern",
+			name: "merge-outcomes-pattern",
+			description: "Pattern description updated",
+			classification: "foundational",
+			recorded_at: "2025-01-02T00:00:00.000Z",
+			outcomes: [{ status: "success", agent: "session-2" }],
+		};
+
+		const result = await processStdinRecords(
+			"testing",
+			false,
+			false,
+			false,
+			JSON.stringify(updated),
+			tmpDir,
+		);
+
+		expect(result.updated).toBe(1);
+
+		const records = await readExpertiseFile(filePath);
+		expect(records).toHaveLength(1);
+		expect(records[0]!.outcomes).toHaveLength(2);
+		expect(records[0]!.outcomes?.[0]?.agent).toBe("session-1");
+		expect(records[0]!.outcomes?.[1]?.agent).toBe("session-2");
+	});
+});
+
+describe("evidence schema: multi-tracker fields", () => {
+	it("evidence.seeds validates against schema", () => {
+		const ajv = new Ajv();
+		const validate = ajv.compile(recordSchema);
+
+		const record = {
+			type: "pattern",
+			name: "seeds-linked",
+			description: "Pattern with seeds evidence",
+			classification: "tactical",
+			recorded_at: new Date().toISOString(),
+			evidence: { seeds: "mulch-123a" },
+		};
+
+		expect(validate(record)).toBe(true);
+	});
+
+	it("evidence.gh validates against schema", () => {
+		const ajv = new Ajv();
+		const validate = ajv.compile(recordSchema);
+
+		const record = {
+			type: "convention",
+			content: "Convention linked to GitHub PR",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			evidence: { gh: "org/repo#42" },
+		};
+
+		expect(validate(record)).toBe(true);
+	});
+
+	it("evidence.linear validates against schema", () => {
+		const ajv = new Ajv();
+		const validate = ajv.compile(recordSchema);
+
+		const record = {
+			type: "decision",
+			title: "Use Linear for tracking",
+			rationale: "Better UX than Jira",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			evidence: { linear: "ENG-123" },
+		};
+
+		expect(validate(record)).toBe(true);
+	});
+
+	it("all multi-tracker evidence fields together validate", () => {
+		const ajv = new Ajv();
+		const validate = ajv.compile(recordSchema);
+
+		const record = {
+			type: "pattern",
+			name: "multi-tracker",
+			description: "Pattern with all tracker evidence",
+			classification: "tactical",
+			recorded_at: new Date().toISOString(),
+			evidence: {
+				commit: "abc123def",
+				bead: "bd-001",
+				seeds: "mulch-abc",
+				gh: "org/repo#99",
+				linear: "ENG-456",
+			},
+		};
+
+		expect(validate(record)).toBe(true);
+	});
+
+	it("evidence.seeds is stored and read back correctly", async () => {
+		const tmpDir2 = await mkdtemp(join(tmpdir(), "mulch-ev-test-"));
+		try {
+			await initMulchDir(tmpDir2);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir2);
+			const filePath = getExpertisePath("testing", tmpDir2);
+			await createExpertiseFile(filePath);
+
+			const record: ExpertiseRecord = {
+				type: "pattern",
+				name: "seeds-evidence",
+				description: "Pattern with seeds tracker evidence",
+				classification: "tactical",
+				recorded_at: new Date().toISOString(),
+				evidence: { seeds: "mulch-xyz", gh: "org/repo#10" },
+			};
+			await appendRecord(filePath, record);
+
+			const records = await readExpertiseFile(filePath);
+			expect(records).toHaveLength(1);
+			expect(records[0]!.evidence?.seeds).toBe("mulch-xyz");
+			expect(records[0]!.evidence?.gh).toBe("org/repo#10");
+		} finally {
+			await rm(tmpDir2, { recursive: true, force: true });
+		}
+	});
 });

@@ -8,6 +8,9 @@ export interface Evidence {
 	issue?: string;
 	file?: string;
 	bead?: string;
+	seeds?: string;
+	gh?: string;
+	linear?: string;
 }
 
 export interface Outcome {
