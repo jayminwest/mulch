@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `ml onboard` snippet rewritten to cover 0.6.4 agent workflow: multi-tracker evidence (`--evidence-seeds`/`--evidence-gh`/`--evidence-linear`), git auto-context for commit + files, `--relates-to`, outcome merge on upserts, retry hints on validation failures, `ml doctor --fix` for broken file anchors, and worktree-safe storage
+- `ONBOARD_VERSION` bumped to 2 so existing `v:1` installs are detected as outdated and migrated on the next `ml onboard`
+
 ## [0.6.5] - 2026-04-22
 
 ### Fixed
