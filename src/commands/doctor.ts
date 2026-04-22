@@ -1,9 +1,11 @@
 import { existsSync } from "node:fs";
 import { writeFile as fsWriteFile, readdir, readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import Ajv from "ajv";
 import chalk from "chalk";
 import type { Command } from "commander";
 import type { MulchConfig } from "../schemas/config.ts";
+import type { ExpertiseRecord } from "../schemas/record.ts";
 import { recordSchema } from "../schemas/record-schema.ts";
 import {
 	getExpertiseDir,
@@ -317,6 +319,46 @@ async function checkLegacyOutcome(config: MulchConfig, cwd?: string): Promise<Do
 	};
 }
 
+async function checkFileAnchors(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+	const projectRoot = cwd ?? process.cwd();
+	const details: string[] = [];
+
+	for (const domain of config.domains) {
+		const filePath = getExpertisePath(domain, cwd);
+		const records = await readExpertiseFile(filePath);
+		for (const record of records) {
+			const id = record.id ? `[${record.id}]` : "";
+			if ("files" in record && Array.isArray(record.files)) {
+				for (const f of record.files) {
+					if (!existsSync(resolve(projectRoot, f))) {
+						details.push(`${domain}${id}: files[] path not found: ${f}`);
+					}
+				}
+			}
+			if (record.evidence?.file && !existsSync(resolve(projectRoot, record.evidence.file))) {
+				details.push(`${domain}${id}: evidence.file not found: ${record.evidence.file}`);
+			}
+		}
+	}
+
+	if (details.length > 0) {
+		return {
+			name: "file-anchors",
+			status: "warn",
+			message: `${details.length} broken file anchor(s) found`,
+			fixable: true,
+			details,
+		};
+	}
+	return {
+		name: "file-anchors",
+		status: "pass",
+		message: "All file anchors resolve to existing paths",
+		fixable: true,
+		details: [],
+	};
+}
+
 async function checkGovernance(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
 	const details: string[] = [];
 	let worstStatus: "pass" | "warn" | "fail" = "pass";
@@ -543,6 +585,38 @@ async function applyFixes(
 				break;
 			}
 
+			case "file-anchors": {
+				const projectRoot = cwd ?? process.cwd();
+				for (const domain of config.domains) {
+					const filePath = getExpertisePath(domain, cwd);
+					await withFileLock(filePath, async () => {
+						const records = await readExpertiseFile(filePath);
+						let removedCount = 0;
+						const updated: ExpertiseRecord[] = records.map((record) => {
+							let r: ExpertiseRecord = record;
+							if ("files" in r && Array.isArray(r.files)) {
+								const before = r.files.length;
+								const kept = r.files.filter((f) => existsSync(resolve(projectRoot, f)));
+								if (kept.length < before) {
+									removedCount += before - kept.length;
+									r = { ...r, files: kept.length > 0 ? kept : undefined } as ExpertiseRecord;
+								}
+							}
+							if (r.evidence?.file && !existsSync(resolve(projectRoot, r.evidence.file))) {
+								removedCount++;
+								r = { ...r, evidence: { ...r.evidence, file: undefined } };
+							}
+							return r;
+						});
+						if (removedCount > 0) {
+							await writeExpertiseFile(filePath, updated);
+							fixed.push(`Removed ${removedCount} broken file anchor(s) from ${domain}`);
+						}
+					});
+				}
+				break;
+			}
+
 			case "orphaned-domains": {
 				const expertiseDir = getExpertiseDir(cwd);
 				// Add missing domains to config
@@ -612,6 +686,7 @@ export function registerDoctorCommand(program: Command): void {
 			checks.push(await checkStaleRecords(config));
 			checks.push(await checkOrphanedDomains(config));
 			checks.push(await checkDuplicates(config));
+			checks.push(await checkFileAnchors(config));
 			checks.push(await checkGovernance(config));
 			checks.push(await checkUpdateAvailable());
 

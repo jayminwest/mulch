@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
@@ -216,5 +217,111 @@ describe("doctor health checks", () => {
 		expect(records.length).toBe(7);
 		expect(records.length).toBeGreaterThan(config.governance.warn_entries);
 		expect(records.length).toBeLessThan(config.governance.max_entries);
+	});
+});
+
+describe("file-anchors check", () => {
+	it("passes when files[] paths all exist on disk", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		const realFile = join(tmpDir, "real-file.ts");
+		await writeFile(realFile, "", "utf-8");
+
+		await appendRecord(filePath, {
+			type: "pattern",
+			name: "my-pattern",
+			description: "desc",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			files: ["real-file.ts"],
+		});
+
+		const apiPath = getExpertisePath("api", tmpDir);
+		await createExpertiseFile(apiPath);
+
+		const records = await readExpertiseFile(filePath);
+		const record = records[0]!;
+		const broken =
+			"files" in record && Array.isArray(record.files)
+				? record.files.filter((f) => !existsSync(resolve(tmpDir, f)))
+				: [];
+		expect(broken).toHaveLength(0);
+	});
+
+	it("detects broken files[] paths in pattern records", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+
+		await appendRecord(filePath, {
+			type: "pattern",
+			name: "my-pattern",
+			description: "desc",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			files: ["src/commands/nonexistent.ts", "src/utils/also-gone.ts"],
+		});
+
+		const apiPath = getExpertisePath("api", tmpDir);
+		await createExpertiseFile(apiPath);
+
+		const records = await readExpertiseFile(filePath);
+		const record = records[0]!;
+		const brokenPaths: string[] = [];
+		if ("files" in record && Array.isArray(record.files)) {
+			for (const f of record.files) {
+				if (!existsSync(resolve(tmpDir, f))) {
+					brokenPaths.push(f);
+				}
+			}
+		}
+		expect(brokenPaths).toHaveLength(2);
+		expect(brokenPaths).toContain("src/commands/nonexistent.ts");
+		expect(brokenPaths).toContain("src/utils/also-gone.ts");
+	});
+
+	it("detects broken evidence.file paths", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "some rule",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			evidence: { file: "src/deleted-file.ts" },
+		});
+
+		const apiPath = getExpertisePath("api", tmpDir);
+		await createExpertiseFile(apiPath);
+
+		const records = await readExpertiseFile(filePath);
+		const record = records[0]!;
+		const evidenceFile = record.evidence?.file;
+		expect(evidenceFile).toBe("src/deleted-file.ts");
+		expect(existsSync(resolve(tmpDir, evidenceFile!))).toBe(false);
+	});
+
+	it("passes when evidence.file exists on disk", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		const realFile = join(tmpDir, "real-evidence.ts");
+		await writeFile(realFile, "", "utf-8");
+
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "some rule",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			evidence: { file: "real-evidence.ts" },
+		});
+
+		const apiPath = getExpertisePath("api", tmpDir);
+		await createExpertiseFile(apiPath);
+
+		const records = await readExpertiseFile(filePath);
+		const record = records[0]!;
+		const evidenceFile = record.evidence?.file;
+		expect(evidenceFile).toBe("real-evidence.ts");
+		expect(existsSync(resolve(tmpDir, evidenceFile!))).toBe(true);
 	});
 });
