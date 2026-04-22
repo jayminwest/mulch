@@ -2137,7 +2137,7 @@ describe("prime command", () => {
 
 		it("compact quick reference frames --files as per-edit priming", () => {
 			const output = formatPrimeOutputCompact([]);
-			expect(output).toContain("mulch prime --files");
+			expect(output).toContain("ml prime --files");
 			expect(output).toContain("before");
 		});
 

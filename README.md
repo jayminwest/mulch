@@ -47,6 +47,7 @@ ml record database --type failure \
 ml query database                                  # See accumulated expertise
 ml prime                                           # Get full context for agent injection
 ml prime database                                  # Get context for one domain only
+ml prime --files src/foo.ts                        # Prime only records relevant to specific files
 ```
 
 ## Commands
@@ -125,7 +126,7 @@ All records support optional `--classification` (foundational / tactical / obser
 ```
 $ ml query database
 
-## database (6 entries, updated 2h ago)
+## database (6 records, updated 2h ago)
 
 ### Conventions
 - Use WAL mode for all SQLite connections

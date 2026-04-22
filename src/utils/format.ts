@@ -1,4 +1,4 @@
- import type {
+import type {
 	ConventionRecord,
 	DecisionRecord,
 	ExpertiseRecord,
@@ -688,7 +688,7 @@ export function formatStatusOutput(
 	lines.push("");
 
 	if (domainStats.length === 0) {
-		lines.push("No domains configured. Run `mulch add <domain>` to get started.");
+		lines.push("No domains configured. Run `ml add <domain>` to get started.");
 		return lines.join("\n");
 	}
 
