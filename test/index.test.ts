@@ -206,7 +206,7 @@ governance:
 
 			const matches = searchRecords(records, "JavaScript");
 			expect(matches).toHaveLength(1);
-			expect((matches[0] as ConventionRecord).content).toContain("JavaScript");
+			expect(matches[0]).toMatchObject({ content: expect.stringContaining("JavaScript") });
 		});
 
 		it("exports and uses appendRecord", async () => {
@@ -224,7 +224,7 @@ governance:
 
 			const records = await readExpertiseFile(filePath);
 			expect(records).toHaveLength(1);
-			expect((records[0] as ConventionRecord).content).toBe("Appended record");
+			expect(records[0]).toMatchObject({ content: "Appended record" });
 		});
 
 		it("exports and uses writeExpertiseFile", async () => {
@@ -248,8 +248,8 @@ governance:
 
 			const readBack = await readExpertiseFile(filePath);
 			expect(readBack).toHaveLength(2);
-			expect((readBack[0] as ConventionRecord).content).toBe("First record");
-			expect((readBack[1] as ConventionRecord).content).toBe("Second record");
+			expect(readBack[0]).toMatchObject({ content: "First record" });
+			expect(readBack[1]).toMatchObject({ content: "Second record" });
 		});
 
 		it("exports and uses findDuplicate", () => {
@@ -271,7 +271,7 @@ governance:
 			expect(duplicate).toBeDefined();
 			expect(duplicate).not.toBeNull();
 			expect(duplicate?.record.type).toBe("convention");
-			expect((duplicate?.record as ConventionRecord).content).toBe("Unique convention");
+			expect(duplicate?.record).toMatchObject({ content: "Unique convention" });
 		});
 
 		it("exports and uses generateRecordId", () => {

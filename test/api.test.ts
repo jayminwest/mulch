@@ -100,7 +100,7 @@ describe("programmatic API", () => {
 
 			const records = await queryDomain("testing", { cwd: tmpDir });
 			expect(records).toHaveLength(1);
-			expect((records[0] as { description: string }).description).toBe("Use withFileLock helper");
+			expect(records[0]).toMatchObject({ description: "Use withFileLock helper" });
 		});
 
 		it("force-creates duplicate convention records when force=true", async () => {
@@ -378,12 +378,9 @@ describe("programmatic API", () => {
 			const mid = makeRecord([{ status: "success" }]);
 			const sorted = sortByConfirmationScore([low, high, mid]);
 			const [s0, s1, s2] = sorted;
-			expect(computeConfirmationScore(s0 as ExpertiseRecord)).toBeGreaterThanOrEqual(
-				computeConfirmationScore(s1 as ExpertiseRecord),
-			);
-			expect(computeConfirmationScore(s1 as ExpertiseRecord)).toBeGreaterThanOrEqual(
-				computeConfirmationScore(s2 as ExpertiseRecord),
-			);
+			if (!s0 || !s1 || !s2) throw new Error("expected 3 sorted records");
+			expect(computeConfirmationScore(s0)).toBeGreaterThanOrEqual(computeConfirmationScore(s1));
+			expect(computeConfirmationScore(s1)).toBeGreaterThanOrEqual(computeConfirmationScore(s2));
 		});
 	});
 
@@ -396,7 +393,8 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id as string;
+			const id = created.record.id;
+			if (!id) throw new Error("expected record id");
 
 			const updated = await editRecord(
 				"testing",
@@ -405,7 +403,7 @@ describe("programmatic API", () => {
 				{ cwd: tmpDir },
 			);
 
-			expect((updated as { content: string }).content).toBe("Updated content");
+			expect(updated).toMatchObject({ content: "Updated content" });
 		});
 
 		it("edits pattern name and description", async () => {
@@ -417,7 +415,8 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id as string;
+			const id = created.record.id;
+			if (!id) throw new Error("expected record id");
 
 			const updated = await editRecord(
 				"testing",
@@ -426,7 +425,7 @@ describe("programmatic API", () => {
 				{ cwd: tmpDir },
 			);
 
-			expect((updated as { description: string }).description).toBe("Updated description");
+			expect(updated).toMatchObject({ description: "Updated description" });
 		});
 
 		it("edits classification", async () => {
@@ -437,7 +436,8 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id as string;
+			const id = created.record.id;
+			if (!id) throw new Error("expected record id");
 
 			const updated = await editRecord(
 				"testing",
@@ -458,7 +458,8 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id as string;
+			const id = created.record.id;
+			if (!id) throw new Error("expected record id");
 
 			const updated = await editRecord(
 				"testing",
@@ -467,7 +468,7 @@ describe("programmatic API", () => {
 				{ cwd: tmpDir },
 			);
 
-			expect((updated as { resolution: string }).resolution).toBe("Use process.exitCode = 1");
+			expect(updated).toMatchObject({ resolution: "Use process.exitCode = 1" });
 		});
 
 		it("throws on unknown domain", async () => {
@@ -490,12 +491,13 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id as string;
+			const id = created.record.id;
+			if (!id) throw new Error("expected record id");
 
 			await editRecord("testing", id, { content: "Persisted" }, { cwd: tmpDir });
 
 			const records = await queryDomain("testing", { cwd: tmpDir });
-			expect((records[0] as { content: string }).content).toBe("Persisted");
+			expect(records[0]).toMatchObject({ content: "Persisted" });
 		});
 	});
 });

@@ -87,7 +87,9 @@ describe("expertise utils", () => {
 			const content = await readFile(filePath, "utf-8");
 			const lines = content.split("\n").filter((l) => l.trim().length > 0);
 			expect(lines).toHaveLength(1);
-			expect(JSON.parse(lines[0] as string)).toEqual(record);
+			const line0 = lines[0];
+			if (!line0) throw new Error("expected JSONL line");
+			expect(JSON.parse(line0)).toEqual(record);
 		});
 
 		it("appends multiple records", async () => {
@@ -160,7 +162,7 @@ describe("expertise utils", () => {
 			];
 			const matches = searchRecords(records, "esm");
 			expect(matches).toHaveLength(1);
-			expect((matches[0] as { content: string }).content).toBe("Something unrelated");
+			expect(matches[0]).toMatchObject({ content: "Something unrelated" });
 		});
 
 		it("finds records by files array value", () => {
@@ -242,8 +244,8 @@ describe("expertise utils", () => {
 
 			const result = await readExpertiseFile(filePath);
 			expect(result).toHaveLength(2);
-			expect((result[0] as { content: string }).content).toBe("Use single quotes");
-			expect((result[1] as { name: string }).name).toBe("atomic-pattern");
+			expect(result[0]).toMatchObject({ content: "Use single quotes" });
+			expect(result[1]).toMatchObject({ name: "atomic-pattern" });
 		});
 	});
 });

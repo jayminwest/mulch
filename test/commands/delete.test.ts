@@ -307,8 +307,9 @@ describe("delete command -- bulk flags", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(3);
-		const id0 = records[0]?.id as string;
-		const id2 = records[2]?.id as string;
+		const id0 = records[0]?.id;
+		const id2 = records[2]?.id;
+		if (!id0 || !id2) throw new Error("expected records with ids");
 
 		await runDelete(tmpDir, ["testing", "--records", `${id0},${id2}`]);
 
@@ -335,7 +336,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]?.id as string;
+		const id0 = records[0]?.id;
+		if (!id0) throw new Error("expected record with id");
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", "--records", id0]);
 
@@ -371,7 +373,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const keepId = records[0]?.id as string;
+		const keepId = records[0]?.id;
+		if (!keepId) throw new Error("expected record with id");
 
 		await runDelete(tmpDir, ["testing", "--all-except", keepId]);
 
@@ -404,7 +407,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const keepId = records[0]?.id as string;
+		const keepId = records[0]?.id;
+		if (!keepId) throw new Error("expected record with id");
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", "--all-except", keepId]);
 
@@ -432,7 +436,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]?.id as string;
+		const id0 = records[0]?.id;
+		if (!id0) throw new Error("expected record with id");
 
 		await runDelete(tmpDir, ["testing", "--records", id0, "--dry-run"]);
 
@@ -450,7 +455,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]?.id as string;
+		const id0 = records[0]?.id;
+		if (!id0) throw new Error("expected record with id");
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", "--records", id0, "--dry-run"]);
 
@@ -480,7 +486,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const keepId = records[0]?.id as string;
+		const keepId = records[0]?.id;
+		if (!keepId) throw new Error("expected record with id");
 
 		await runDelete(tmpDir, ["testing", "--all-except", keepId, "--dry-run"]);
 
@@ -498,7 +505,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]?.id as string;
+		const id0 = records[0]?.id;
+		if (!id0) throw new Error("expected record with id");
 
 		await runDelete(tmpDir, ["testing", id0, "--dry-run"]);
 
@@ -516,7 +524,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]?.id as string;
+		const id0 = records[0]?.id;
+		if (!id0) throw new Error("expected record with id");
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", id0, "--dry-run"]);
 
@@ -563,7 +572,8 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]?.id as string;
+		const id0 = records[0]?.id;
+		if (!id0) throw new Error("expected record with id");
 
 		const prevExitCode = process.exitCode;
 		process.exitCode = 0;

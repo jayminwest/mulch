@@ -88,7 +88,9 @@ describe("doctor health checks", () => {
 		// Import isStale to verify
 		const { isStale } = await import("../../src/commands/prune.js");
 		const shelfLife = DEFAULT_CONFIG.classification_defaults.shelf_life;
-		expect(isStale(records[0] as ExpertiseRecord, new Date(), shelfLife)).toBe(true);
+		const r0 = records[0];
+		if (!r0) throw new Error("expected record");
+		expect(isStale(r0, new Date(), shelfLife)).toBe(true);
 	});
 
 	it("detects orphaned domain files", async () => {
@@ -127,7 +129,10 @@ describe("doctor health checks", () => {
 		expect(records).toHaveLength(2);
 
 		const { findDuplicate } = await import("../../src/utils/expertise.js");
-		const dup = findDuplicate([records[0] as ExpertiseRecord], records[1] as ExpertiseRecord);
+		const r0dup = records[0];
+		const r1dup = records[1];
+		if (!r0dup || !r1dup) throw new Error("expected two records");
+		const dup = findDuplicate([r0dup], r1dup);
 		expect(dup).not.toBeNull();
 	});
 
@@ -240,7 +245,8 @@ describe("file-anchors check", () => {
 		await createExpertiseFile(apiPath);
 
 		const records = await readExpertiseFile(filePath);
-		const record = records[0] as ExpertiseRecord;
+		const record = records[0];
+		if (!record) throw new Error("expected record");
 		const broken =
 			"files" in record && Array.isArray(record.files)
 				? record.files.filter((f) => !existsSync(resolve(tmpDir, f)))
@@ -265,7 +271,8 @@ describe("file-anchors check", () => {
 		await createExpertiseFile(apiPath);
 
 		const records = await readExpertiseFile(filePath);
-		const record = records[0] as ExpertiseRecord;
+		const record = records[0];
+		if (!record) throw new Error("expected record");
 		const brokenPaths: string[] = [];
 		if ("files" in record && Array.isArray(record.files)) {
 			for (const f of record.files) {
@@ -295,10 +302,12 @@ describe("file-anchors check", () => {
 		await createExpertiseFile(apiPath);
 
 		const records = await readExpertiseFile(filePath);
-		const record = records[0] as ExpertiseRecord;
+		const record = records[0];
+		if (!record) throw new Error("expected record");
 		const evidenceFile = record.evidence?.file;
 		expect(evidenceFile).toBe("src/deleted-file.ts");
-		expect(existsSync(resolve(tmpDir, evidenceFile as string))).toBe(false);
+		if (!evidenceFile) throw new Error("expected evidenceFile");
+		expect(existsSync(resolve(tmpDir, evidenceFile))).toBe(false);
 	});
 
 	it("passes when evidence.file exists on disk", async () => {
@@ -319,9 +328,11 @@ describe("file-anchors check", () => {
 		await createExpertiseFile(apiPath);
 
 		const records = await readExpertiseFile(filePath);
-		const record = records[0] as ExpertiseRecord;
+		const record = records[0];
+		if (!record) throw new Error("expected record");
 		const evidenceFile = record.evidence?.file;
 		expect(evidenceFile).toBe("real-evidence.ts");
-		expect(existsSync(resolve(tmpDir, evidenceFile as string))).toBe(true);
+		if (!evidenceFile) throw new Error("expected evidenceFile");
+		expect(existsSync(resolve(tmpDir, evidenceFile))).toBe(true);
 	});
 });

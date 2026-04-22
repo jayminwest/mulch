@@ -299,14 +299,15 @@ describe("deduplication", () => {
 
 			const dup = findDuplicate(records, newRecord);
 			expect(dup).not.toBeNull();
+			if (!dup) throw new Error("expected duplicate");
 
 			// Simulate upsert
-			records[(dup as { index: number }).index] = newRecord;
+			records[dup.index] = newRecord;
 			await writeExpertiseFile(filePath, records);
 
 			const updated = await readExpertiseFile(filePath);
 			expect(updated).toHaveLength(2);
-			expect((updated[0] as { description: string }).description).toBe("New improved description");
+			expect(updated[0]).toMatchObject({ description: "New improved description" });
 			expect(updated[1]?.type).toBe("convention"); // untouched
 		});
 
@@ -332,12 +333,13 @@ describe("deduplication", () => {
 			};
 
 			const dup = findDuplicate(records, newRecord);
-			records[(dup as { index: number }).index] = newRecord;
+			if (!dup) throw new Error("expected duplicate");
+			records[dup.index] = newRecord;
 			await writeExpertiseFile(filePath, records);
 
 			const updated = await readExpertiseFile(filePath);
 			expect(updated).toHaveLength(1);
-			expect((updated[0] as { rationale: string }).rationale).toBe("Better rationale");
+			expect(updated[0]).toMatchObject({ rationale: "Better rationale" });
 		});
 	});
 });

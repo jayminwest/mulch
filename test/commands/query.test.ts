@@ -49,7 +49,7 @@ describe("query command", () => {
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
 		expect(records[0]?.type).toBe("convention");
-		expect((records[0] as { content: string }).content).toBe("Use vitest for all tests");
+		expect(records[0]).toMatchObject({ content: "Use vitest for all tests" });
 	});
 
 	it("filters records by type", async () => {
@@ -233,9 +233,7 @@ describe("query command", () => {
 			const foundational = filterByClassification(records, "foundational");
 			const foundationalConventions = filterByType(foundational, "convention");
 			expect(foundationalConventions).toHaveLength(1);
-			expect((foundationalConventions[0] as { content: string }).content).toBe(
-				"Foundational convention",
-			);
+			expect(foundationalConventions[0]).toMatchObject({ content: "Foundational convention" });
 		});
 	});
 
@@ -276,7 +274,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "testing"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					command: string;
 					domains: Array<{ domain: string; records: unknown[] }>;
@@ -318,7 +316,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					command: string;
 					domains: Array<{ domain: string; records: unknown[] }>;
@@ -344,7 +342,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					command: string;
 					domains: unknown[];
@@ -367,7 +365,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(errorSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					command: string;
 					error: string;
@@ -390,9 +388,9 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("ml add nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0]).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain("ml add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}
@@ -408,7 +406,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(errorSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					command: string;
 					error: string;
@@ -431,7 +429,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(errorSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					command: string;
 					error: string;
@@ -478,7 +476,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: Array<{ type: string }> }>;
 				};
@@ -522,7 +520,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{
 						domain: string;
@@ -573,7 +571,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{
 						domain: string;
@@ -600,7 +598,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "testing"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: unknown[] }>;
 				};
@@ -638,7 +636,7 @@ describe("query command", () => {
 			const records = await readExpertiseFile(filePath);
 			const filtered = filterByFile(records, "test/helpers");
 			expect(filtered).toHaveLength(1);
-			expect((filtered[0] as { name: string }).name).toBe("test-helper");
+			expect(filtered[0]).toMatchObject({ name: "test-helper" });
 		});
 
 		it("filters reference records by file path", async () => {
@@ -658,7 +656,7 @@ describe("query command", () => {
 			const records = await readExpertiseFile(filePath);
 			const filtered = filterByFile(records, "api/routes");
 			expect(filtered).toHaveLength(1);
-			expect((filtered[0] as { name: string }).name).toBe("api-ref");
+			expect(filtered[0]).toMatchObject({ name: "api-ref" });
 		});
 
 		it("records without files field are excluded", async () => {
@@ -716,9 +714,9 @@ describe("query command", () => {
 			const filteredArch = filterByFile(archRecords, "src/shared");
 
 			expect(filteredTesting).toHaveLength(1);
-			expect((filteredTesting[0] as { name: string }).name).toBe("test-pattern");
+			expect(filteredTesting[0]).toMatchObject({ name: "test-pattern" });
 			expect(filteredArch).toHaveLength(1);
-			expect((filteredArch[0] as { name: string }).name).toBe("arch-pattern");
+			expect(filteredArch[0]).toMatchObject({ name: "arch-pattern" });
 		});
 	});
 
@@ -782,7 +780,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{
 						domain: string;
@@ -833,7 +831,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: Array<{ type: string }> }>;
 				};
@@ -872,7 +870,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: unknown[] }>;
 				};
@@ -921,7 +919,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0]) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: Array<{ name: string }> }>;
 				};
@@ -970,8 +968,8 @@ describe("query command", () => {
 			const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
 
 			expect(sorted).toHaveLength(2);
-			expect((sorted[0] as { name: string }).name).toBe("high-confirm");
-			expect((sorted[1] as { name: string }).name).toBe("low-confirm");
+			expect(sorted[0]).toMatchObject({ name: "high-confirm" });
+			expect(sorted[1]).toMatchObject({ name: "low-confirm" });
 		});
 
 		it("records without outcomes sort to the end", async () => {
@@ -999,8 +997,8 @@ describe("query command", () => {
 			const patterns = filterByType(records, "pattern");
 			const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
 
-			expect((sorted[0] as { name: string }).name).toBe("with-outcomes");
-			expect((sorted[sorted.length - 1] as { name: string }).name).toBe("no-outcomes");
+			expect(sorted[0]).toMatchObject({ name: "with-outcomes" });
+			expect(sorted[sorted.length - 1]).toMatchObject({ name: "no-outcomes" });
 		});
 
 		it("sort combined with type filter works correctly", async () => {
@@ -1039,8 +1037,8 @@ describe("query command", () => {
 			// Only patterns; convention excluded
 			expect(sorted.every((r) => r.type === "pattern")).toBe(true);
 			// b-pattern (2 successes) before a-pattern (1 success)
-			expect((sorted[0] as { name: string }).name).toBe("b-pattern");
-			expect((sorted[1] as { name: string }).name).toBe("a-pattern");
+			expect(sorted[0]).toMatchObject({ name: "b-pattern" });
+			expect(sorted[1]).toMatchObject({ name: "a-pattern" });
 		});
 
 		it("does not mutate original record array order", async () => {
@@ -1067,11 +1065,14 @@ describe("query command", () => {
 
 			const records = await readExpertiseFile(filePath);
 			const patterns = filterByType(records, "pattern");
-			const originalFirst = (patterns[0] as { name: string }).name;
+			const [firstPattern] = patterns;
+			if (!firstPattern || firstPattern.type !== "pattern")
+				throw new Error("expected pattern record");
+			const originalFirst = firstPattern.name;
 
 			sortByConfirmationScore(patterns as ScoredRecord[]); // not reassigned
 
-			expect((patterns[0] as { name: string }).name).toBe(originalFirst);
+			expect(patterns[0]).toMatchObject({ name: originalFirst });
 		});
 	});
 
@@ -1113,7 +1114,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "compact"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				expect(output).toContain("[convention]");
 			} finally {
 				logSpy.mockRestore();
@@ -1146,7 +1147,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "ids"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				const lines = output.split("\n");
 				expect(lines).toContain("mx-aaa");
 				expect(lines).toContain("mx-bbb");
@@ -1181,7 +1182,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "ids"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				const lines = output.split("\n");
 				expect(lines).toHaveLength(1);
 				expect(lines[0]).toBe("mx-ccc");
@@ -1208,7 +1209,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				expect(output).toContain("## testing");
 			} finally {
 				logSpy.mockRestore();
