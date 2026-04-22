@@ -229,7 +229,7 @@ describe("budget utility", () => {
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
 			expect(result.kept[0]?.records).toHaveLength(1);
-			expect((result.kept[0]?.records[0] as { content: string }).content).toBe("new convention");
+			expect(result.kept[0]?.records[0]).toMatchObject({ content: "new convention" });
 		});
 
 		it("preserves original record order within kept records", () => {
@@ -242,8 +242,11 @@ describe("budget utility", () => {
 			const domains: DomainRecords[] = [{ domain: "d1", records: [r1, r2, r3] }];
 
 			const result = applyBudget(domains, 100000, simpleEstimate);
-			const contents = result.kept[0]?.records.map((r) => (r as { content: string }).content);
-			expect(contents).toEqual(["first", "second", "third"]);
+			expect(result.kept[0]?.records).toMatchObject([
+				{ content: "first" },
+				{ content: "second" },
+				{ content: "third" },
+			]);
 		});
 
 		it("preserves original domain order", () => {
@@ -280,7 +283,9 @@ describe("budget utility", () => {
 				},
 			];
 
-			const keepCost = estimateTokens(simpleEstimate(domains[0]?.records[0] as ExpertiseRecord));
+			const d0r0 = domains[0]?.records[0];
+			if (!d0r0) throw new Error("expected domain record");
+			const keepCost = estimateTokens(simpleEstimate(d0r0));
 			const result = applyBudget(domains, keepCost + 1, simpleEstimate);
 
 			expect(result.kept).toHaveLength(1);
@@ -331,7 +336,7 @@ describe("budget utility", () => {
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
 			expect(result.kept[0]?.records).toHaveLength(1);
-			expect((result.kept[0]?.records[0] as { name: string }).name).toBe("confirmed");
+			expect(result.kept[0]?.records[0]).toMatchObject({ name: "confirmed" });
 		});
 
 		it("prioritizes records with more confirmations over those with fewer", () => {
@@ -352,7 +357,7 @@ describe("budget utility", () => {
 			const result = applyBudget(domains, cost + 1, simpleEstimate);
 
 			expect(result.kept[0]?.records).toHaveLength(1);
-			expect((result.kept[0]?.records[0] as { name: string }).name).toBe("three-successes");
+			expect(result.kept[0]?.records[0]).toMatchObject({ name: "three-successes" });
 		});
 
 		it("partial outcomes contribute 0.5 to confirmation score", () => {
@@ -374,7 +379,7 @@ describe("budget utility", () => {
 
 			// success (score=1) > partial (score=0.5)
 			expect(result.kept[0]?.records).toHaveLength(1);
-			expect((result.kept[0]?.records[0] as { name: string }).name).toBe("one-success");
+			expect(result.kept[0]?.records[0]).toMatchObject({ name: "one-success" });
 		});
 
 		it("type priority still takes precedence over confirmation score", () => {

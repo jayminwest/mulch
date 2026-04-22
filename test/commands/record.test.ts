@@ -40,7 +40,7 @@ describe("record command", () => {
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
 		expect(records[0]?.type).toBe("convention");
-		expect((records[0] as { content: string }).content).toBe("Always use vitest for testing");
+		expect(records[0]).toMatchObject({ content: "Always use vitest for testing" });
 	});
 
 	it("record includes recorded_at timestamp", async () => {
@@ -890,7 +890,7 @@ describe("processStdinRecords", () => {
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
 		expect(records[0]?.type).toBe("convention");
-		expect((records[0] as { content: string }).content).toBe("Use vitest");
+		expect(records[0]).toMatchObject({ content: "Use vitest" });
 	});
 
 	it("processes array of JSON objects from stdin", async () => {
@@ -1035,7 +1035,7 @@ describe("processStdinRecords", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect((records[0] as { description: string }).description).toBe("Updated description");
+		expect(records[0]).toMatchObject({ description: "Updated description" });
 		expect(records[0]?.classification).toBe("foundational");
 	});
 
@@ -1230,7 +1230,7 @@ describe("processStdinRecords", () => {
 		// Verify original record was not modified
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect((records[0] as { description: string }).description).toBe("Original description");
+		expect(records[0]).toMatchObject({ description: "Original description" });
 	});
 
 	it("dry-run shows what would be skipped without writing", async () => {
@@ -1383,7 +1383,7 @@ describe("batch mode (--batch)", () => {
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
 		expect(records[0]?.type).toBe("convention");
-		expect((records[0] as { content: string }).content).toBe("Use vitest for testing");
+		expect(records[0]).toMatchObject({ content: "Use vitest for testing" });
 	});
 
 	it("processes array of JSON objects from batch file", async () => {
@@ -1533,7 +1533,7 @@ describe("batch mode (--batch)", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect((records[0] as { description: string }).description).toBe("Updated description");
+		expect(records[0]).toMatchObject({ description: "Updated description" });
 		expect(records[0]?.classification).toBe("foundational");
 	});
 

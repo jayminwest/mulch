@@ -811,11 +811,14 @@ describe("compact command", () => {
 			expect(before).toHaveLength(3);
 
 			// Simulate compaction: remove conventions 1,2, add consolidated
-			const idA = before[0]?.id as string;
-			const idB = before[1]?.id as string;
+			const idA = before[0]?.id;
+			const idB = before[1]?.id;
+			if (!idA || !idB) throw new Error("expected records with ids");
 
 			// Remove records at indices 0 and 1, keep pattern at index 2
-			const remaining = [before[2] as ExpertiseRecord];
+			const r2 = before[2];
+			if (!r2) throw new Error("expected third record");
+			const remaining = [r2];
 			const replacement: ExpertiseRecord = {
 				type: "convention",
 				content: "Combined: Convention A and B",
@@ -868,7 +871,9 @@ describe("compact command", () => {
 			expect(before).toHaveLength(3);
 
 			// Remove failures, keep convention, add compacted failure
-			const remaining = [before[2] as ExpertiseRecord];
+			const r2b = before[2];
+			if (!r2b) throw new Error("expected third record");
+			const remaining = [r2b];
 			const replacement: ExpertiseRecord = {
 				type: "failure",
 				description: "Combined failures",
@@ -907,13 +912,17 @@ describe("compact command", () => {
 			});
 
 			const before = await readExpertiseFile(filePath);
+			const beforeIds = before.map((r) => {
+				if (!r.id) throw new Error("expected record to have id");
+				return r.id;
+			});
 			const replacement: ExpertiseRecord = {
 				type: "pattern",
 				name: "consolidated-pattern",
 				description: "Consolidated from old patterns",
 				classification: "foundational",
 				recorded_at: new Date().toISOString(),
-				supersedes: before.map((r) => r.id as string),
+				supersedes: beforeIds,
 			};
 
 			const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
@@ -944,7 +953,10 @@ describe("compact command", () => {
 			});
 
 			const before = await readExpertiseFile(filePath);
-			const sourceIds = before.map((r) => r.id as string);
+			const sourceIds = before.map((r) => {
+				if (!r.id) throw new Error("expected record to have id");
+				return r.id;
+			});
 
 			const replacement: ExpertiseRecord = {
 				type: "decision",

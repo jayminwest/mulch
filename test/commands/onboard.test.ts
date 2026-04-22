@@ -107,7 +107,7 @@ describe("onboard command", () => {
 		try {
 			await runOnboard({ stdout: true, cwd: tmpDir });
 
-			const output = (stdoutSpy.mock.calls[0] as string[])[0];
+			const output = stdoutSpy.mock.calls[0]?.[0];
 			expect(output).toContain(MARKER_START);
 			expect(output).toContain(MARKER_END);
 		} finally {
@@ -122,7 +122,7 @@ describe("onboard command", () => {
 		try {
 			await runOnboard({ stdout: true, provider: "claude", cwd: tmpDir });
 
-			const output = (stdoutSpy.mock.calls[0] as string[])[0];
+			const output = stdoutSpy.mock.calls[0]?.[0];
 			expect(output).toContain("At the start of every session");
 			expect(output).toContain("ml prime");
 		} finally {
@@ -139,7 +139,7 @@ describe("onboard command", () => {
 				cwd: tmpDir,
 			});
 
-			const output = (stdoutSpy.mock.calls[0] as string[])[0];
+			const output = stdoutSpy.mock.calls[0]?.[0];
 			expect(output).toContain("At the start of every session");
 			expect(output).toContain("ml prime");
 		} finally {
@@ -154,7 +154,7 @@ describe("onboard command", () => {
 		try {
 			await runOnboard({ stdout: true, cwd: tmpDir });
 
-			const output = (stdoutSpy.mock.calls[0] as string[])[0];
+			const output = stdoutSpy.mock.calls[0]?.[0];
 			expect(output).toContain("Before You Finish");
 			expect(output).toContain("ml learn");
 			expect(output).toContain("ml sync");
@@ -168,7 +168,7 @@ describe("onboard command", () => {
 		try {
 			await runOnboard({ stdout: true, provider: "claude", cwd: tmpDir });
 
-			const output = (stdoutSpy.mock.calls[0] as string[])[0];
+			const output = stdoutSpy.mock.calls[0]?.[0];
 			expect(output).toContain("Before You Finish");
 			expect(output).toContain("ml learn");
 			expect(output).toContain("ml sync");
@@ -182,7 +182,7 @@ describe("onboard command", () => {
 		try {
 			await runOnboard({ stdout: true, cwd: tmpDir });
 
-			const output = (stdoutSpy.mock.calls[0] as string[])[0];
+			const output = stdoutSpy.mock.calls[0]?.[0];
 			expect(output).toContain("ml prime");
 			expect(output).toContain("ml record");
 			expect(output).toContain("ml status");
@@ -236,7 +236,7 @@ describe("onboard command", () => {
 			try {
 				await runOnboard({ cwd: tmpDir, jsonMode: true });
 
-				const output = JSON.parse((consoleSpy.mock.calls[0] as string[])[0] as string);
+				const output = JSON.parse(consoleSpy.mock.calls[0]?.[0]);
 				expect(output.action).toBe("updated");
 				expect(output.file).toBe("CLAUDE.md");
 			} finally {
@@ -285,7 +285,7 @@ describe("onboard command", () => {
 			try {
 				await runOnboard({ stdout: true, cwd: tmpDir });
 
-				const output = (stdoutSpy.mock.calls[0] as string[])[0];
+				const output = stdoutSpy.mock.calls[0]?.[0];
 				expect(output).toContain(VERSION_MARKER);
 			} finally {
 				stdoutSpy.mockRestore();
@@ -387,7 +387,7 @@ Run \`mulch --help\` for full usage.
 			try {
 				await runOnboard({ cwd: tmpDir, jsonMode: true });
 
-				const output = JSON.parse((consoleSpy.mock.calls[0] as string[])[0] as string);
+				const output = JSON.parse(consoleSpy.mock.calls[0]?.[0]);
 				expect(output.action).toBe("migrated");
 			} finally {
 				consoleSpy.mockRestore();
@@ -600,7 +600,7 @@ Run \`mulch --help\` for full usage.
 			try {
 				await runOnboard({ cwd: tmpDir, check: true, jsonMode: true });
 
-				const output = JSON.parse((consoleSpy.mock.calls[0] as string[])[0] as string);
+				const output = JSON.parse(consoleSpy.mock.calls[0]?.[0]);
 				expect(output.command).toBe("onboard");
 				expect(output.action).toBe("outdated");
 				expect(output.file).toBe("AGENTS.md");

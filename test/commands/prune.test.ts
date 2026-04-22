@@ -55,8 +55,8 @@ describe("prune command", () => {
 
 			const readBack = await readExpertiseFile(filePath);
 			expect(readBack).toHaveLength(2);
-			expect((readBack[0] as { content: string }).content).toBe("First record");
-			expect((readBack[1] as { content: string }).content).toBe("Second record");
+			expect(readBack[0]).toMatchObject({ content: "First record" });
+			expect(readBack[1]).toMatchObject({ content: "Second record" });
 		});
 
 		it("writes empty array results in empty file", async () => {
@@ -135,7 +135,7 @@ describe("prune command", () => {
 			});
 
 			expect(kept).toHaveLength(1);
-			expect((kept[0] as { content: string }).content).toBe("Fresh tactical");
+			expect(kept[0]).toMatchObject({ content: "Fresh tactical" });
 		});
 
 		it("observational records older than 30 days are stale", async () => {
@@ -173,7 +173,7 @@ describe("prune command", () => {
 			});
 
 			expect(kept).toHaveLength(1);
-			expect((kept[0] as { content: string }).content).toBe("Fresh observational");
+			expect(kept[0]).toMatchObject({ content: "Fresh observational" });
 		});
 	});
 
@@ -236,8 +236,8 @@ describe("prune command", () => {
 			// Verify file was rewritten correctly
 			const afterPrune = await readExpertiseFile(filePath);
 			expect(afterPrune).toHaveLength(2);
-			expect((afterPrune[0] as { content: string }).content).toBe("Permanent");
-			expect((afterPrune[1] as { content: string }).content).toBe("Fresh tactical");
+			expect(afterPrune[0]).toMatchObject({ content: "Permanent" });
+			expect(afterPrune[1]).toMatchObject({ content: "Fresh tactical" });
 		});
 
 		it("prune across multiple domains", async () => {
@@ -308,12 +308,12 @@ describe("prune command", () => {
 			// Verify
 			const afterTesting = await readExpertiseFile(testingPath);
 			expect(afterTesting).toHaveLength(1);
-			expect((afterTesting[0] as { content: string }).content).toBe("Fresh testing");
+			expect(afterTesting[0]).toMatchObject({ content: "Fresh testing" });
 
 			const afterArch = await readExpertiseFile(archPath);
 			expect(afterArch).toHaveLength(1);
 			expect(afterArch[0]?.type).toBe("decision");
-			expect((afterArch[0] as { title: string }).title).toBe("Recent decision");
+			expect(afterArch[0]).toMatchObject({ title: "Recent decision" });
 		});
 
 		it("no stale entries means no file rewrite", async () => {

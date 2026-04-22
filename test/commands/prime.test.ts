@@ -1856,7 +1856,7 @@ describe("prime command", () => {
 			const result = applyBudget(domains, oneRecordCost + 1, simpleEstimate);
 
 			expect(result.kept[0]?.records).toHaveLength(1);
-			expect((result.kept[0]?.records[0] as { content: string }).content).toBe("New convention");
+			expect(result.kept[0]?.records[0]).toMatchObject({ content: "New convention" });
 		});
 
 		it("applyBudget preserves original domain order", () => {
@@ -2104,9 +2104,9 @@ describe("prime command", () => {
 				await program.parseAsync(["node", "mulch", "prime", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("ml add nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0]).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain("ml add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}
@@ -2121,9 +2121,9 @@ describe("prime command", () => {
 				await program.parseAsync(["node", "mulch", "prime", "--exclude-domain", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("ml add nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0]).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain("ml add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}

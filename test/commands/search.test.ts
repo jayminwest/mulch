@@ -71,7 +71,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(getExpertisePath("database", tmpDir));
 			const matches = searchRecords(records, "wal");
 			expect(matches).toHaveLength(1);
-			expect((matches[0] as { content: string }).content).toContain("WAL");
+			expect(matches[0]).toMatchObject({ content: expect.stringContaining("WAL") });
 		});
 
 		it("matches failure description", async () => {
@@ -187,7 +187,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const matches = searchRecords(records, "security");
 			expect(matches).toHaveLength(1);
-			expect((matches[0] as { content: string }).content).toBe("Use parameterized queries");
+			expect(matches[0]).toMatchObject({ content: "Use parameterized queries" });
 		});
 
 		it("tag filter matches exact tag (case-insensitive)", async () => {
@@ -205,7 +205,7 @@ describe("search command", () => {
 			const tagLower = "redis";
 			const filtered = records.filter((r) => r.tags?.some((t) => t.toLowerCase() === tagLower));
 			expect(filtered).toHaveLength(1);
-			expect((filtered[0] as { name: string }).name).toBe("caching-layer");
+			expect(filtered[0]).toMatchObject({ name: "caching-layer" });
 		});
 
 		it("tag filter is case-insensitive", async () => {
@@ -329,7 +329,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const filtered = filterByFile(records, "src/utils/db.ts");
 			expect(filtered).toHaveLength(1);
-			expect((filtered[0] as { name: string }).name).toBe("query-builder");
+			expect(filtered[0]).toMatchObject({ name: "query-builder" });
 		});
 
 		it("filters records by partial file path (substring match)", async () => {
@@ -346,7 +346,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const filtered = filterByFile(records, "repositories");
 			expect(filtered).toHaveLength(1);
-			expect((filtered[0] as { name: string }).name).toBe("repo-pattern");
+			expect(filtered[0]).toMatchObject({ name: "repo-pattern" });
 		});
 
 		it("file filter is case-insensitive", async () => {
@@ -363,7 +363,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const filtered = filterByFile(records, "config/settings");
 			expect(filtered).toHaveLength(1);
-			expect((filtered[0] as { name: string }).name).toBe("config-ref");
+			expect(filtered[0]).toMatchObject({ name: "config-ref" });
 		});
 
 		it("excludes records with no files field", async () => {
@@ -403,7 +403,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const filtered = filterByFile(records, "src/b.ts");
 			expect(filtered).toHaveLength(1);
-			expect((filtered[0] as { name: string }).name).toBe("multi-file-pattern");
+			expect(filtered[0]).toMatchObject({ name: "multi-file-pattern" });
 		});
 
 		it("file filter combined with classification filter narrows results", async () => {
@@ -431,7 +431,7 @@ describe("search command", () => {
 
 			const foundationalWithFile = filterByClassification(withFile, "foundational");
 			expect(foundationalWithFile).toHaveLength(1);
-			expect((foundationalWithFile[0] as { name: string }).name).toBe("foundational-file-pattern");
+			expect(foundationalWithFile[0]).toMatchObject({ name: "foundational-file-pattern" });
 		});
 	});
 
@@ -456,7 +456,7 @@ describe("search command", () => {
 			const records = await readExpertiseFile(dbPath);
 			const successes = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
 			expect(successes).toHaveLength(1);
-			expect((successes[0] as { content: string }).content).toBe("Successful approach");
+			expect(successes[0]).toMatchObject({ content: "Successful approach" });
 		});
 
 		it("filters records with outcomes containing failure", async () => {
@@ -507,7 +507,7 @@ describe("search command", () => {
 			const successRecords = records.filter((r) => r.outcomes?.some((o) => o.status === "success"));
 			const successPatterns = successRecords.filter((r) => r.type === "pattern");
 			expect(successPatterns).toHaveLength(1);
-			expect((successPatterns[0] as { name: string }).name).toBe("successful-pattern");
+			expect(successPatterns[0]).toMatchObject({ name: "successful-pattern" });
 		});
 
 		it("record with full outcomes array is stored and read back correctly", async () => {
@@ -572,8 +572,8 @@ describe("search command", () => {
 			const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
 
 			expect(sorted).toHaveLength(2);
-			expect((sorted[0] as { name: string }).name).toBe("high-confirm");
-			expect((sorted[1] as { name: string }).name).toBe("low-confirm");
+			expect(sorted[0]).toMatchObject({ name: "high-confirm" });
+			expect(sorted[1]).toMatchObject({ name: "low-confirm" });
 		});
 
 		it("records without outcomes sort to the end", async () => {
@@ -598,8 +598,8 @@ describe("search command", () => {
 			const patterns = filterByType(records, "pattern");
 			const sorted = sortByConfirmationScore(patterns as ScoredRecord[]);
 
-			expect((sorted[0] as { name: string }).name).toBe("with-outcomes");
-			expect((sorted[sorted.length - 1] as { name: string }).name).toBe("no-outcomes");
+			expect(sorted[0]).toMatchObject({ name: "with-outcomes" });
+			expect(sorted[sorted.length - 1]).toMatchObject({ name: "no-outcomes" });
 		});
 
 		it("sort combined with text query narrows then orders results", async () => {
@@ -643,8 +643,8 @@ describe("search command", () => {
 			// Only caching records should match
 			expect(sorted).toHaveLength(2);
 			// advanced has 3 successes vs basic's 1
-			expect((sorted[0] as { name: string }).name).toBe("caching-advanced");
-			expect((sorted[1] as { name: string }).name).toBe("caching-basic");
+			expect(sorted[0]).toMatchObject({ name: "caching-advanced" });
+			expect(sorted[1]).toMatchObject({ name: "caching-basic" });
 		});
 
 		it("sort combined with type filter works correctly", async () => {
@@ -680,8 +680,8 @@ describe("search command", () => {
 			// Only patterns; convention excluded
 			expect(sorted.every((r) => r.type === "pattern")).toBe(true);
 			// b-pattern (2 successes) before a-pattern (1 success)
-			expect((sorted[0] as { name: string }).name).toBe("b-pattern");
-			expect((sorted[1] as { name: string }).name).toBe("a-pattern");
+			expect(sorted[0]).toMatchObject({ name: "b-pattern" });
+			expect(sorted[1]).toMatchObject({ name: "a-pattern" });
 		});
 
 		it("partial outcomes contribute 0.5 to score", async () => {
@@ -733,12 +733,15 @@ describe("search command", () => {
 
 			const records = await readExpertiseFile(apiPath);
 			const patterns = filterByType(records, "pattern");
-			const originalFirst = (patterns[0] as { name: string }).name;
+			const [firstSearchPattern] = patterns;
+			if (!firstSearchPattern || firstSearchPattern.type !== "pattern")
+				throw new Error("expected pattern record");
+			const originalFirst = firstSearchPattern.name;
 
 			sortByConfirmationScore(patterns as ScoredRecord[]); // not reassigned
 
 			// Original array unchanged
-			expect((patterns[0] as { name: string }).name).toBe(originalFirst);
+			expect(patterns[0]).toMatchObject({ name: originalFirst });
 		});
 	});
 
@@ -769,9 +772,9 @@ describe("search command", () => {
 				await program.parseAsync(["node", "mulch", "search", "--domain", "nonexistent", "query"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("mulch add nonexistent");
-				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0]).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain("mulch add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0]).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}
@@ -821,7 +824,7 @@ describe("search command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(2); // output + match count
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				expect(output).toContain("[convention]");
 			} finally {
 				logSpy.mockRestore();
@@ -859,7 +862,7 @@ describe("search command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				const lines = output.split("\n");
 				expect(lines).toContain("mx-id1");
 				expect(lines).toContain("mx-id2");
@@ -891,7 +894,7 @@ describe("search command", () => {
 				await program.parseAsync(["node", "mulch", "search", "skiptest", "--format", "ids"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				const lines = output.split("\n");
 				expect(lines).toHaveLength(1);
 				expect(lines[0]).toBe("mx-withid");
@@ -908,7 +911,7 @@ describe("search command", () => {
 				await program.parseAsync(["node", "mulch", "search", "WAL"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(2); // output + match count
-				const output = logSpy.mock.calls[0]?.[0] as string;
+				const output = logSpy.mock.calls[0]?.[0];
 				expect(output).toContain("## database");
 			} finally {
 				logSpy.mockRestore();
