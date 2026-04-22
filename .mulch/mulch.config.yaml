@@ -6,6 +6,8 @@ domains:
   - typescript
   - agents
   - ecosystem
+  - orchestration
+  - lint
 governance:
   max_entries: 100
   warn_entries: 150
