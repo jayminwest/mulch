@@ -119,10 +119,10 @@ describe("learn command", () => {
 			const { matches } = await matchFilesToDomains(["src/a.ts", "src/b.ts", "src/c.ts"], tmpDir);
 
 			expect(matches).toHaveLength(2);
-			expect(matches[0]!.domain).toBe("beta");
-			expect(matches[0]!.matchedFiles).toHaveLength(2);
-			expect(matches[1]!.domain).toBe("alpha");
-			expect(matches[1]!.matchedFiles).toHaveLength(1);
+			expect(matches[0]?.domain).toBe("beta");
+			expect(matches[0]?.matchedFiles).toHaveLength(2);
+			expect(matches[1]?.domain).toBe("alpha");
+			expect(matches[1]?.matchedFiles).toHaveLength(1);
 		});
 
 		it("handles domains with no expertise file", async () => {
@@ -152,7 +152,7 @@ describe("learn command", () => {
 			// Changed file has exact match
 			const { matches: exact } = await matchFilesToDomains(["src/utils/config.ts"], tmpDir);
 			expect(exact).toHaveLength(1);
-			expect(exact[0]!.matchedFiles).toEqual(["src/utils/config.ts"]);
+			expect(exact[0]?.matchedFiles).toEqual(["src/utils/config.ts"]);
 		});
 	});
 });

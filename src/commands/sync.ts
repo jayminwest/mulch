@@ -72,7 +72,7 @@ async function validateExpertise(cwd?: string): Promise<ValidateResult> {
 
 		const lines = content.split("\n");
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]!.trim();
+			const line = (lines[i] ?? "").trim();
 			if (line.length === 0) continue;
 			totalRecords++;
 			const lineNumber = i + 1;

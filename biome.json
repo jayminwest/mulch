@@ -19,7 +19,7 @@
 				"noExplicitAny": "error"
 			},
 			"style": {
-				"noNonNullAssertion": "warn",
+				"noNonNullAssertion": "error",
 				"useConst": "error"
 			}
 		}

@@ -138,8 +138,7 @@ export function findDuplicate(
 	existing: ExpertiseRecord[],
 	newRecord: ExpertiseRecord,
 ): { index: number; record: ExpertiseRecord } | null {
-	for (let i = 0; i < existing.length; i++) {
-		const record = existing[i]!;
+	for (const [i, record] of existing.entries()) {
 		if (record.type !== newRecord.type) continue;
 
 		switch (record.type) {
@@ -194,20 +193,21 @@ export function resolveRecordId(records: ExpertiseRecord[], identifier: string):
 	// Try exact match first
 	const exactIndex = records.findIndex((r) => r.id === `mx-${hash}`);
 	if (exactIndex !== -1) {
-		return { ok: true, index: exactIndex, record: records[exactIndex]! };
+		const exactRecord = records[exactIndex];
+		if (exactRecord) return { ok: true, index: exactIndex, record: exactRecord };
 	}
 
 	// Try prefix match
 	const matches: Array<{ index: number; record: ExpertiseRecord }> = [];
-	for (let i = 0; i < records.length; i++) {
-		const rid = records[i]!.id;
-		if (rid?.startsWith(`mx-${hash}`)) {
-			matches.push({ index: i, record: records[i]! });
+	for (const [i, rec] of records.entries()) {
+		if (rec.id?.startsWith(`mx-${hash}`)) {
+			matches.push({ index: i, record: rec });
 		}
 	}
 
-	if (matches.length === 1) {
-		return { ok: true, index: matches[0]!.index, record: matches[0]!.record };
+	const [firstMatch] = matches;
+	if (matches.length === 1 && firstMatch) {
+		return { ok: true, index: firstMatch.index, record: firstMatch.record };
 	}
 
 	if (matches.length > 1) {

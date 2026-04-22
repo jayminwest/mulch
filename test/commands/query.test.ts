@@ -48,7 +48,7 @@ describe("query command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(1);
-		expect(records[0]!.type).toBe("convention");
+		expect(records[0]?.type).toBe("convention");
 		expect((records[0] as { content: string }).content).toBe("Use vitest for all tests");
 	});
 
@@ -78,11 +78,11 @@ describe("query command", () => {
 
 		const failures = filterByType(allRecords, "failure");
 		expect(failures).toHaveLength(1);
-		expect(failures[0]!.type).toBe("failure");
+		expect(failures[0]?.type).toBe("failure");
 
 		const conventions = filterByType(allRecords, "convention");
 		expect(conventions).toHaveLength(1);
-		expect(conventions[0]!.type).toBe("convention");
+		expect(conventions[0]?.type).toBe("convention");
 	});
 
 	it("returns empty array for domain with no records", async () => {
@@ -176,15 +176,15 @@ describe("query command", () => {
 
 			const foundational = filterByClassification(records, "foundational");
 			expect(foundational).toHaveLength(1);
-			expect(foundational[0]!.classification).toBe("foundational");
+			expect(foundational[0]?.classification).toBe("foundational");
 
 			const tactical = filterByClassification(records, "tactical");
 			expect(tactical).toHaveLength(1);
-			expect(tactical[0]!.classification).toBe("tactical");
+			expect(tactical[0]?.classification).toBe("tactical");
 
 			const observational = filterByClassification(records, "observational");
 			expect(observational).toHaveLength(1);
-			expect(observational[0]!.classification).toBe("observational");
+			expect(observational[0]?.classification).toBe("observational");
 		});
 
 		it("returns empty when no records match classification", async () => {
@@ -276,7 +276,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "testing"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					command: string;
 					domains: Array<{ domain: string; records: unknown[] }>;
@@ -284,8 +284,8 @@ describe("query command", () => {
 				expect(output.success).toBe(true);
 				expect(output.command).toBe("query");
 				expect(output.domains).toHaveLength(1);
-				expect(output.domains[0]!.domain).toBe("testing");
-				expect(output.domains[0]!.records).toHaveLength(1);
+				expect(output.domains[0]?.domain).toBe("testing");
+				expect(output.domains[0]?.records).toHaveLength(1);
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -318,7 +318,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					command: string;
 					domains: Array<{ domain: string; records: unknown[] }>;
@@ -344,7 +344,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					command: string;
 					domains: unknown[];
@@ -367,7 +367,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(errorSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					command: string;
 					error: string;
@@ -390,9 +390,9 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "nonexistent"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
-				expect(errorSpy.mock.calls[0]![0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain("ml add nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain(".mulch/mulch.config.yaml");
+				expect(errorSpy.mock.calls[0]?.[0] as string).toContain("nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain("ml add nonexistent");
+				expect(errorSpy.mock.calls[1]?.[0] as string).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
 			}
@@ -408,7 +408,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(errorSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					command: string;
 					error: string;
@@ -431,7 +431,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "--all"]);
 
 				expect(errorSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(errorSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(errorSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					command: string;
 					error: string;
@@ -478,13 +478,13 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: Array<{ type: string }> }>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(1);
-				expect(output.domains[0]!.records[0]!.type).toBe("convention");
+				expect(output.domains[0]?.records).toHaveLength(1);
+				expect(output.domains[0]?.records[0]?.type).toBe("convention");
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -522,7 +522,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{
 						domain: string;
@@ -530,8 +530,8 @@ describe("query command", () => {
 					}>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(1);
-				expect(output.domains[0]!.records[0]!.classification).toBe("foundational");
+				expect(output.domains[0]?.records).toHaveLength(1);
+				expect(output.domains[0]?.records[0]?.classification).toBe("foundational");
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -573,7 +573,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{
 						domain: string;
@@ -581,8 +581,8 @@ describe("query command", () => {
 					}>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(1);
-				expect(output.domains[0]!.records[0]!.name).toBe("query-helper");
+				expect(output.domains[0]?.records).toHaveLength(1);
+				expect(output.domains[0]?.records[0]?.name).toBe("query-helper");
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -600,12 +600,12 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "--json", "query", "testing"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: unknown[] }>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(0);
+				expect(output.domains[0]?.records).toHaveLength(0);
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -782,7 +782,7 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{
 						domain: string;
@@ -790,8 +790,8 @@ describe("query command", () => {
 					}>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(1);
-				expect(output.domains[0]!.records[0]!.content).toBe("Successful approach");
+				expect(output.domains[0]?.records).toHaveLength(1);
+				expect(output.domains[0]?.records[0]?.content).toBe("Successful approach");
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -833,13 +833,13 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: Array<{ type: string }> }>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(1);
-				expect(output.domains[0]!.records[0]!.type).toBe("failure");
+				expect(output.domains[0]?.records).toHaveLength(1);
+				expect(output.domains[0]?.records[0]?.type).toBe("failure");
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -872,12 +872,12 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: unknown[] }>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(0);
+				expect(output.domains[0]?.records).toHaveLength(0);
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -921,13 +921,13 @@ describe("query command", () => {
 				]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = JSON.parse(logSpy.mock.calls[0]![0] as string) as {
+				const output = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
 					success: boolean;
 					domains: Array<{ domain: string; records: Array<{ name: string }> }>;
 				};
 				expect(output.success).toBe(true);
-				expect(output.domains[0]!.records).toHaveLength(1);
-				expect(output.domains[0]!.records[0]!.name).toBe("successful-pattern");
+				expect(output.domains[0]?.records).toHaveLength(1);
+				expect(output.domains[0]?.records[0]?.name).toBe("successful-pattern");
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -1113,7 +1113,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "compact"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				expect(output).toContain("[convention]");
 			} finally {
 				logSpy.mockRestore();
@@ -1146,7 +1146,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "ids"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				const lines = output.split("\n");
 				expect(lines).toContain("mx-aaa");
 				expect(lines).toContain("mx-bbb");
@@ -1181,7 +1181,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "ids"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				const lines = output.split("\n");
 				expect(lines).toHaveLength(1);
 				expect(lines[0]).toBe("mx-ccc");
@@ -1208,7 +1208,7 @@ describe("query command", () => {
 				await program.parseAsync(["node", "mulch", "query", "testing"]);
 
 				expect(logSpy).toHaveBeenCalledTimes(1);
-				const output = logSpy.mock.calls[0]![0] as string;
+				const output = logSpy.mock.calls[0]?.[0] as string;
 				expect(output).toContain("## testing");
 			} finally {
 				logSpy.mockRestore();

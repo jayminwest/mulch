@@ -15,11 +15,11 @@ index abc123..def456 100644
 			const entries = parseExpertiseDiff(diffOutput);
 
 			expect(entries).toHaveLength(1);
-			expect(entries[0]!.domain).toBe("cli");
-			expect(entries[0]!.added).toHaveLength(1);
-			expect(entries[0]!.added[0]!.type).toBe("pattern");
-			expect(entries[0]!.added[0]!.id).toBe("mx-bbb222");
-			expect(entries[0]!.removed).toHaveLength(0);
+			expect(entries[0]?.domain).toBe("cli");
+			expect(entries[0]?.added).toHaveLength(1);
+			expect(entries[0]?.added[0]?.type).toBe("pattern");
+			expect(entries[0]?.added[0]?.id).toBe("mx-bbb222");
+			expect(entries[0]?.removed).toHaveLength(0);
 		});
 
 		it("parses removed records from diff output", () => {
@@ -34,11 +34,11 @@ index abc123..def456 100644
 			const entries = parseExpertiseDiff(diffOutput);
 
 			expect(entries).toHaveLength(1);
-			expect(entries[0]!.domain).toBe("cli");
-			expect(entries[0]!.added).toHaveLength(0);
-			expect(entries[0]!.removed).toHaveLength(1);
-			expect(entries[0]!.removed[0]!.type).toBe("failure");
-			expect(entries[0]!.removed[0]!.id).toBe("mx-ccc333");
+			expect(entries[0]?.domain).toBe("cli");
+			expect(entries[0]?.added).toHaveLength(0);
+			expect(entries[0]?.removed).toHaveLength(1);
+			expect(entries[0]?.removed[0]?.type).toBe("failure");
+			expect(entries[0]?.removed[0]?.id).toBe("mx-ccc333");
 		});
 
 		it("groups by domain", () => {
@@ -60,12 +60,12 @@ index xyz789..uvw456 100644
 			const entries = parseExpertiseDiff(diffOutput);
 
 			expect(entries).toHaveLength(2);
-			expect(entries[0]!.domain).toBe("cli");
-			expect(entries[0]!.added).toHaveLength(1);
-			expect(entries[0]!.added[0]!.id).toBe("mx-bbb222");
-			expect(entries[1]!.domain).toBe("testing");
-			expect(entries[1]!.added).toHaveLength(1);
-			expect(entries[1]!.added[0]!.id).toBe("mx-eee555");
+			expect(entries[0]?.domain).toBe("cli");
+			expect(entries[0]?.added).toHaveLength(1);
+			expect(entries[0]?.added[0]?.id).toBe("mx-bbb222");
+			expect(entries[1]?.domain).toBe("testing");
+			expect(entries[1]?.added).toHaveLength(1);
+			expect(entries[1]?.added[0]?.id).toBe("mx-eee555");
 		});
 
 		it("handles multiple domains in one diff", () => {
@@ -86,12 +86,12 @@ index xyz789..uvw456 100644
 
 			expect(entries).toHaveLength(2);
 			// Entries are sorted by domain
-			expect(entries[0]!.domain).toBe("alpha");
-			expect(entries[0]!.added).toHaveLength(1);
-			expect(entries[0]!.removed).toHaveLength(0);
-			expect(entries[1]!.domain).toBe("beta");
-			expect(entries[1]!.added).toHaveLength(0);
-			expect(entries[1]!.removed).toHaveLength(1);
+			expect(entries[0]?.domain).toBe("alpha");
+			expect(entries[0]?.added).toHaveLength(1);
+			expect(entries[0]?.removed).toHaveLength(0);
+			expect(entries[1]?.domain).toBe("beta");
+			expect(entries[1]?.added).toHaveLength(0);
+			expect(entries[1]?.removed).toHaveLength(1);
 		});
 
 		it("skips non-JSON lines (hunk headers, context)", () => {
@@ -107,9 +107,9 @@ index abc123..def456 100644
 			const entries = parseExpertiseDiff(diffOutput);
 
 			expect(entries).toHaveLength(1);
-			expect(entries[0]!.domain).toBe("cli");
-			expect(entries[0]!.added).toHaveLength(1);
-			expect(entries[0]!.added[0]!.id).toBe("mx-bbb222");
+			expect(entries[0]?.domain).toBe("cli");
+			expect(entries[0]?.added).toHaveLength(1);
+			expect(entries[0]?.added[0]?.id).toBe("mx-bbb222");
 		});
 
 		it("returns empty array for empty diff", () => {
@@ -144,11 +144,11 @@ index abc123..def456 100644
 			const entries = parseExpertiseDiff(diffOutput);
 
 			expect(entries).toHaveLength(1);
-			expect(entries[0]!.domain).toBe("cli");
-			expect(entries[0]!.added).toHaveLength(1);
-			expect(entries[0]!.added[0]!.id).toBe("mx-bbb222");
-			expect(entries[0]!.removed).toHaveLength(1);
-			expect(entries[0]!.removed[0]!.id).toBe("mx-ccc333");
+			expect(entries[0]?.domain).toBe("cli");
+			expect(entries[0]?.added).toHaveLength(1);
+			expect(entries[0]?.added[0]?.id).toBe("mx-bbb222");
+			expect(entries[0]?.removed).toHaveLength(1);
+			expect(entries[0]?.removed[0]?.id).toBe("mx-ccc333");
 		});
 	});
 

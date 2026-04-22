@@ -17,8 +17,8 @@ function parseDuration(input: string): number {
 	if (!match) {
 		throw new Error(`Invalid duration: "${input}". Use format like "24h", "7d", "2w".`);
 	}
-	const value = Number.parseInt(match[1]!, 10);
-	const unit = match[2]!;
+	const value = Number.parseInt(match[1] ?? "", 10);
+	const unit = match[2] ?? "";
 	switch (unit) {
 		case "h":
 			return value * 3600000;

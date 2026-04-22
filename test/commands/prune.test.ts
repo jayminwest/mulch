@@ -312,7 +312,7 @@ describe("prune command", () => {
 
 			const afterArch = await readExpertiseFile(archPath);
 			expect(afterArch).toHaveLength(1);
-			expect(afterArch[0]!.type).toBe("decision");
+			expect(afterArch[0]?.type).toBe("decision");
 			expect((afterArch[0] as { title: string }).title).toBe("Recent decision");
 		});
 

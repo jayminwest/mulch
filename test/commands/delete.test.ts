@@ -53,8 +53,8 @@ describe("delete command", () => {
 
 		const after = await readExpertiseFile(filePath);
 		expect(after).toHaveLength(1);
-		if (after[0]!.type === "convention") {
-			expect(after[0]!.content).toBe("Second convention");
+		if (after[0]?.type === "convention") {
+			expect(after[0]?.content).toBe("Second convention");
 		}
 	});
 
@@ -76,7 +76,7 @@ describe("delete command", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(2);
-		const targetId = records[0]!.id;
+		const targetId = records[0]?.id;
 		expect(targetId).toBeDefined();
 
 		// Delete by ID
@@ -86,8 +86,8 @@ describe("delete command", () => {
 
 		const after = await readExpertiseFile(filePath);
 		expect(after).toHaveLength(1);
-		if (after[0]!.type === "convention") {
-			expect(after[0]!.content).toBe("Keep this one");
+		if (after[0]?.type === "convention") {
+			expect(after[0]?.content).toBe("Keep this one");
 		}
 	});
 
@@ -118,11 +118,11 @@ describe("delete command", () => {
 
 		const after = await readExpertiseFile(filePath);
 		expect(after).toHaveLength(2);
-		if (after[0]!.type === "convention") {
-			expect(after[0]!.content).toBe("First");
+		if (after[0]?.type === "convention") {
+			expect(after[0]?.content).toBe("First");
 		}
-		if (after[1]!.type === "convention") {
-			expect(after[1]!.content).toBe("Last");
+		if (after[1]?.type === "convention") {
+			expect(after[1]?.content).toBe("Last");
 		}
 	});
 
@@ -168,7 +168,7 @@ describe("delete command", () => {
 
 		const after = await readExpertiseFile(filePath);
 		expect(after).toHaveLength(1);
-		expect(after[0]!.type).toBe("convention");
+		expect(after[0]?.type).toBe("convention");
 	});
 });
 
@@ -307,15 +307,15 @@ describe("delete command -- bulk flags", () => {
 
 		const records = await readExpertiseFile(filePath);
 		expect(records).toHaveLength(3);
-		const id0 = records[0]!.id as string;
-		const id2 = records[2]!.id as string;
+		const id0 = records[0]?.id as string;
+		const id2 = records[2]?.id as string;
 
 		await runDelete(tmpDir, ["testing", "--records", `${id0},${id2}`]);
 
 		const after = await readExpertiseFile(filePath);
 		expect(after).toHaveLength(1);
-		if (after[0]!.type === "convention") {
-			expect(after[0]!.content).toBe("Beta");
+		if (after[0]?.type === "convention") {
+			expect(after[0]?.content).toBe("Beta");
 		}
 	});
 
@@ -335,7 +335,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]!.id as string;
+		const id0 = records[0]?.id as string;
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", "--records", id0]);
 
@@ -345,7 +345,7 @@ describe("delete command -- bulk flags", () => {
 		expect(Array.isArray(result?.deleted)).toBe(true);
 		const deleted = result?.deleted as Array<Record<string, unknown>>;
 		expect(deleted).toHaveLength(1);
-		expect(deleted[0]!.id).toBe(id0);
+		expect(deleted[0]?.id).toBe(id0);
 		expect(result?.kept).toBe(1);
 	});
 
@@ -371,14 +371,14 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const keepId = records[0]!.id as string;
+		const keepId = records[0]?.id as string;
 
 		await runDelete(tmpDir, ["testing", "--all-except", keepId]);
 
 		const after = await readExpertiseFile(filePath);
 		expect(after).toHaveLength(1);
-		if (after[0]!.type === "convention") {
-			expect(after[0]!.content).toBe("Keep me");
+		if (after[0]?.type === "convention") {
+			expect(after[0]?.content).toBe("Keep me");
 		}
 	});
 
@@ -404,7 +404,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const keepId = records[0]!.id as string;
+		const keepId = records[0]?.id as string;
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", "--all-except", keepId]);
 
@@ -432,7 +432,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]!.id as string;
+		const id0 = records[0]?.id as string;
 
 		await runDelete(tmpDir, ["testing", "--records", id0, "--dry-run"]);
 
@@ -450,7 +450,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]!.id as string;
+		const id0 = records[0]?.id as string;
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", "--records", id0, "--dry-run"]);
 
@@ -480,7 +480,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const keepId = records[0]!.id as string;
+		const keepId = records[0]?.id as string;
 
 		await runDelete(tmpDir, ["testing", "--all-except", keepId, "--dry-run"]);
 
@@ -498,7 +498,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]!.id as string;
+		const id0 = records[0]?.id as string;
 
 		await runDelete(tmpDir, ["testing", id0, "--dry-run"]);
 
@@ -516,7 +516,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]!.id as string;
+		const id0 = records[0]?.id as string;
 
 		const { result } = await runDeleteJson(tmpDir, ["testing", id0, "--dry-run"]);
 
@@ -563,7 +563,7 @@ describe("delete command -- bulk flags", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const id0 = records[0]!.id as string;
+		const id0 = records[0]?.id as string;
 
 		const prevExitCode = process.exitCode;
 		process.exitCode = 0;

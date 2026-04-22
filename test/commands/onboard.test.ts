@@ -236,7 +236,7 @@ describe("onboard command", () => {
 			try {
 				await runOnboard({ cwd: tmpDir, jsonMode: true });
 
-				const output = JSON.parse((consoleSpy.mock.calls[0]! as string[])[0]!);
+				const output = JSON.parse((consoleSpy.mock.calls[0] as string[])[0] as string);
 				expect(output.action).toBe("updated");
 				expect(output.file).toBe("CLAUDE.md");
 			} finally {
@@ -387,7 +387,7 @@ Run \`mulch --help\` for full usage.
 			try {
 				await runOnboard({ cwd: tmpDir, jsonMode: true });
 
-				const output = JSON.parse((consoleSpy.mock.calls[0]! as string[])[0]!);
+				const output = JSON.parse((consoleSpy.mock.calls[0] as string[])[0] as string);
 				expect(output.action).toBe("migrated");
 			} finally {
 				consoleSpy.mockRestore();
@@ -600,7 +600,7 @@ Run \`mulch --help\` for full usage.
 			try {
 				await runOnboard({ cwd: tmpDir, check: true, jsonMode: true });
 
-				const output = JSON.parse((consoleSpy.mock.calls[0]! as string[])[0]!);
+				const output = JSON.parse((consoleSpy.mock.calls[0] as string[])[0] as string);
 				expect(output.command).toBe("onboard");
 				expect(output.action).toBe("outdated");
 				expect(output.file).toBe("AGENTS.md");

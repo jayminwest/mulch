@@ -775,10 +775,10 @@ describe("compact command", () => {
 
 			// Each domain should only have its own records
 			expect(testingRecords).toHaveLength(1);
-			expect(testingRecords[0]!.type).toBe("convention");
+			expect(testingRecords[0]?.type).toBe("convention");
 
 			expect(archRecords).toHaveLength(1);
-			expect(archRecords[0]!.type).toBe("pattern");
+			expect(archRecords[0]?.type).toBe("pattern");
 		});
 	});
 
@@ -811,11 +811,11 @@ describe("compact command", () => {
 			expect(before).toHaveLength(3);
 
 			// Simulate compaction: remove conventions 1,2, add consolidated
-			const idA = before[0]!.id!;
-			const idB = before[1]!.id!;
+			const idA = before[0]?.id as string;
+			const idB = before[1]?.id as string;
 
 			// Remove records at indices 0 and 1, keep pattern at index 2
-			const remaining = [before[2]!];
+			const remaining = [before[2] as ExpertiseRecord];
 			const replacement: ExpertiseRecord = {
 				type: "convention",
 				content: "Combined: Convention A and B",
@@ -830,12 +830,12 @@ describe("compact command", () => {
 
 			const after = await readExpertiseFile(filePath);
 			expect(after).toHaveLength(2);
-			expect(after[0]!.type).toBe("pattern");
-			expect(after[1]!.type).toBe("convention");
-			if (after[1]!.type === "convention") {
-				expect(after[1]!.content).toBe("Combined: Convention A and B");
-				expect(after[1]!.classification).toBe("foundational");
-				expect(after[1]!.supersedes).toEqual([idA, idB]);
+			expect(after[0]?.type).toBe("pattern");
+			expect(after[1]?.type).toBe("convention");
+			if (after[1]?.type === "convention") {
+				expect(after[1]?.content).toBe("Combined: Convention A and B");
+				expect(after[1]?.classification).toBe("foundational");
+				expect(after[1]?.supersedes).toEqual([idA, idB]);
 			}
 		});
 
@@ -868,7 +868,7 @@ describe("compact command", () => {
 			expect(before).toHaveLength(3);
 
 			// Remove failures, keep convention, add compacted failure
-			const remaining = [before[2]!];
+			const remaining = [before[2] as ExpertiseRecord];
 			const replacement: ExpertiseRecord = {
 				type: "failure",
 				description: "Combined failures",
@@ -883,8 +883,8 @@ describe("compact command", () => {
 
 			const after = await readExpertiseFile(filePath);
 			expect(after).toHaveLength(2);
-			expect(after[0]!.type).toBe("convention");
-			expect(after[1]!.type).toBe("failure");
+			expect(after[0]?.type).toBe("convention");
+			expect(after[1]?.type).toBe("failure");
 		});
 
 		it("compacted record gets foundational classification", async () => {
@@ -913,7 +913,7 @@ describe("compact command", () => {
 				description: "Consolidated from old patterns",
 				classification: "foundational",
 				recorded_at: new Date().toISOString(),
-				supersedes: before.map((r) => r.id!),
+				supersedes: before.map((r) => r.id as string),
 			};
 
 			const { writeExpertiseFile } = await import("../../src/utils/expertise.js");
@@ -921,7 +921,7 @@ describe("compact command", () => {
 
 			const after = await readExpertiseFile(filePath);
 			expect(after).toHaveLength(1);
-			expect(after[0]!.classification).toBe("foundational");
+			expect(after[0]?.classification).toBe("foundational");
 		});
 
 		it("compacted record has supersedes links to source IDs", async () => {
@@ -944,7 +944,7 @@ describe("compact command", () => {
 			});
 
 			const before = await readExpertiseFile(filePath);
-			const sourceIds = before.map((r) => r.id!);
+			const sourceIds = before.map((r) => r.id as string);
 
 			const replacement: ExpertiseRecord = {
 				type: "decision",
@@ -959,7 +959,7 @@ describe("compact command", () => {
 			await writeExpertiseFile(filePath, [replacement]);
 
 			const after = await readExpertiseFile(filePath);
-			expect(after[0]!.supersedes).toEqual(sourceIds);
+			expect(after[0]?.supersedes).toEqual(sourceIds);
 		});
 	});
 });

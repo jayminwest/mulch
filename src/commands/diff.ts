@@ -23,7 +23,7 @@ export function parseExpertiseDiff(diffOutput: string): DiffEntry[] {
 		if (line.startsWith("diff --git")) {
 			const match = line.match(/\.mulch\/expertise\/([^/]+)\.jsonl/);
 			if (match) {
-				currentDomain = match[1]!;
+				currentDomain = match[1] ?? "";
 				if (!entriesMap.has(currentDomain)) {
 					entriesMap.set(currentDomain, {
 						domain: currentDomain,

@@ -35,7 +35,8 @@ function formatEvidence(evidence: ConventionRecord["evidence"]): string {
 
 function formatOutcome(outcomes: Outcome[] | undefined): string {
 	if (!outcomes || outcomes.length === 0) return "";
-	const latest = outcomes[outcomes.length - 1]!;
+	const latest = outcomes.at(-1);
+	if (!latest) return "";
 	const statusSymbol = latest.status === "success" ? "✓" : latest.status === "partial" ? "~" : "✗";
 	const parts: string[] = [statusSymbol];
 	if (latest.duration !== undefined) parts.push(`${latest.duration}ms`);

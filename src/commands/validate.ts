@@ -36,7 +36,7 @@ export function registerValidateCommand(program: Command): void {
 
 				const lines = content.split("\n");
 				for (let i = 0; i < lines.length; i++) {
-					const line = lines[i]!.trim();
+					const line = (lines[i] ?? "").trim();
 					if (line.length === 0) continue;
 
 					totalRecords++;

@@ -149,7 +149,7 @@ describe("programmatic API", () => {
 
 			const records = await queryDomain("testing", { cwd: tmpDir });
 			expect(records).toHaveLength(1);
-			expect(records[0]!.type).toBe("failure");
+			expect(records[0]?.type).toBe("failure");
 		});
 	});
 
@@ -275,7 +275,7 @@ describe("programmatic API", () => {
 			});
 
 			expect(records).toHaveLength(1);
-			expect(records[0]!.type).toBe("convention");
+			expect(records[0]?.type).toBe("convention");
 		});
 
 		it("filters by classification", async () => {
@@ -285,7 +285,7 @@ describe("programmatic API", () => {
 			});
 
 			expect(records).toHaveLength(1);
-			expect(records[0]!.classification).toBe("foundational");
+			expect(records[0]?.classification).toBe("foundational");
 		});
 
 		it("throws on unknown domain", async () => {
@@ -377,11 +377,12 @@ describe("programmatic API", () => {
 			const high = makeRecord([{ status: "success" }, { status: "success" }]);
 			const mid = makeRecord([{ status: "success" }]);
 			const sorted = sortByConfirmationScore([low, high, mid]);
-			expect(computeConfirmationScore(sorted[0]!)).toBeGreaterThanOrEqual(
-				computeConfirmationScore(sorted[1]!),
+			const [s0, s1, s2] = sorted;
+			expect(computeConfirmationScore(s0 as ExpertiseRecord)).toBeGreaterThanOrEqual(
+				computeConfirmationScore(s1 as ExpertiseRecord),
 			);
-			expect(computeConfirmationScore(sorted[1]!)).toBeGreaterThanOrEqual(
-				computeConfirmationScore(sorted[2]!),
+			expect(computeConfirmationScore(s1 as ExpertiseRecord)).toBeGreaterThanOrEqual(
+				computeConfirmationScore(s2 as ExpertiseRecord),
 			);
 		});
 	});
@@ -395,7 +396,7 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id!;
+			const id = created.record.id as string;
 
 			const updated = await editRecord(
 				"testing",
@@ -416,7 +417,7 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id!;
+			const id = created.record.id as string;
 
 			const updated = await editRecord(
 				"testing",
@@ -436,7 +437,7 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id!;
+			const id = created.record.id as string;
 
 			const updated = await editRecord(
 				"testing",
@@ -457,7 +458,7 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id!;
+			const id = created.record.id as string;
 
 			const updated = await editRecord(
 				"testing",
@@ -489,7 +490,7 @@ describe("programmatic API", () => {
 				recorded_at: new Date().toISOString(),
 			};
 			const created = await recordExpertise("testing", record, { cwd: tmpDir });
-			const id = created.record.id!;
+			const id = created.record.id as string;
 
 			await editRecord("testing", id, { content: "Persisted" }, { cwd: tmpDir });
 

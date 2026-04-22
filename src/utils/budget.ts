@@ -43,12 +43,9 @@ function recordSortKey(r: ScoredRecord): [number, number, number, number] {
 }
 
 function compareRecords(a: ScoredRecord, b: ScoredRecord): number {
-	const ka = recordSortKey(a);
-	const kb = recordSortKey(b);
-	for (let i = 0; i < 4; i++) {
-		if (ka[i]! !== kb[i]!) return ka[i]! - kb[i]!;
-	}
-	return 0;
+	const [a0, a1, a2, a3] = recordSortKey(a);
+	const [b0, b1, b2, b3] = recordSortKey(b);
+	return a0 - b0 || a1 - b1 || a2 - b2 || a3 - b3;
 }
 
 /**
@@ -86,8 +83,8 @@ export function applyBudget(
 	let usedTokens = 0;
 	const kept = new Set<number>();
 
-	for (let i = 0; i < tagged.length; i++) {
-		const formatted = formatRecord(tagged[i]!.record, tagged[i]!.domain);
+	for (const [i, item] of tagged.entries()) {
+		const formatted = formatRecord(item.record, item.domain);
 		const cost = estimateTokens(formatted);
 		if (usedTokens + cost <= budget) {
 			usedTokens += cost;
@@ -116,7 +113,7 @@ export function applyBudget(
 
 		if (keptRecords.length > 0) {
 			result.push({ domain: domainName, records: keptRecords });
-		} else if (originalRecords!.length > 0) {
+		} else if ((originalRecords ?? []).length > 0) {
 			droppedDomains.add(domainName);
 		}
 	}

@@ -77,7 +77,7 @@ async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<D
 		}
 		const lines = content.split("\n");
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]!.trim();
+			const line = (lines[i] ?? "").trim();
 			if (line.length === 0) continue;
 			try {
 				JSON.parse(line);
@@ -119,7 +119,7 @@ async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise
 		}
 		const lines = content.split("\n");
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]!.trim();
+			const line = (lines[i] ?? "").trim();
 			if (line.length === 0) continue;
 			let parsed: unknown;
 			try {
@@ -240,11 +240,13 @@ async function checkDuplicates(config: MulchConfig, cwd?: string): Promise<Docto
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath);
 		for (let i = 1; i < records.length; i++) {
-			const dup = findDuplicate(records.slice(0, i), records[i]!);
+			const rec = records[i];
+			if (!rec) continue;
+			const dup = findDuplicate(records.slice(0, i), rec);
 			if (dup) {
 				dupCount++;
 				details.push(
-					`${domain}: duplicate ${records[i]!.type} at index ${i + 1} (matches #${dup.index + 1})`,
+					`${domain}: duplicate ${rec.type} at index ${i + 1} (matches #${dup.index + 1})`,
 				);
 			}
 		}
@@ -280,7 +282,7 @@ async function checkLegacyOutcome(config: MulchConfig, cwd?: string): Promise<Do
 		}
 		const lines = content.split("\n");
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]!.trim();
+			const line = (lines[i] ?? "").trim();
 			if (line.length === 0) continue;
 			let parsed: unknown;
 			try {
