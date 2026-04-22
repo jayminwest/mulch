@@ -8,6 +8,7 @@ import type {
 	PatternRecord,
 	ReferenceRecord,
 } from "../schemas/record.ts";
+import { computeConfirmationScore } from "./scoring.ts";
 
 export function formatTimeAgo(date: Date): string {
 	const now = new Date();
@@ -159,32 +160,47 @@ export function getRecordSummary(record: ExpertiseRecord): string {
 	}
 }
 
-function compactId(r: ExpertiseRecord): string {
-	return r.id ? ` (${r.id})` : "";
+function formatClassificationAge(r: ExpertiseRecord): string {
+	const c = r.classification;
+	if (c === "foundational") return c;
+	// tactical/observational: show age so agents can gauge staleness
+	const age = formatTimeAgo(new Date(r.recorded_at));
+	return `${c} ${age}`;
+}
+
+function compactMeta(r: ExpertiseRecord): string {
+	const parts: string[] = [];
+	if (r.id) parts.push(r.id);
+	parts.push(formatClassificationAge(r));
+	const score = computeConfirmationScore(r);
+	if (score > 0) {
+		parts.push(Number.isInteger(score) ? `★${score}` : `★${score.toFixed(1)}`);
+	}
+	return ` (${parts.join(", ")})`;
 }
 
 function compactLine(r: ExpertiseRecord): string {
 	const links = formatLinks(r);
-	const id = compactId(r);
+	const meta = compactMeta(r);
 	const outcome = formatOutcome(r.outcomes);
 	switch (r.type) {
 		case "convention":
-			return `- [convention] ${truncate(r.content)}${id}${outcome}${links}`;
+			return `- [convention] ${truncate(r.content)}${meta}${outcome}${links}`;
 		case "pattern": {
 			const files = r.files && r.files.length > 0 ? ` (${r.files.join(", ")})` : "";
-			return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${id}${outcome}${links}`;
+			return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${meta}${outcome}${links}`;
 		}
 		case "failure":
-			return `- [failure] ${truncate(r.description)} → ${truncate(r.resolution)}${id}${outcome}${links}`;
+			return `- [failure] ${truncate(r.description)} → ${truncate(r.resolution)}${meta}${outcome}${links}`;
 		case "decision":
-			return `- [decision] ${r.title}: ${truncate(r.rationale)}${id}${outcome}${links}`;
+			return `- [decision] ${r.title}: ${truncate(r.rationale)}${meta}${outcome}${links}`;
 		case "reference": {
 			const refFiles =
 				r.files && r.files.length > 0 ? `: ${r.files.join(", ")}` : `: ${truncate(r.description)}`;
-			return `- [reference] ${r.name}${refFiles}${id}${outcome}${links}`;
+			return `- [reference] ${r.name}${refFiles}${meta}${outcome}${links}`;
 		}
 		case "guide":
-			return `- [guide] ${r.name}: ${truncate(r.description)}${id}${outcome}${links}`;
+			return `- [guide] ${r.name}: ${truncate(r.description)}${meta}${outcome}${links}`;
 	}
 }
 
@@ -222,12 +238,26 @@ export function formatPrimeOutputCompact(domainSections: string[]): string {
 	lines.push("## Quick Reference");
 	lines.push("");
 	lines.push('- `mulch search "query"` — find relevant records before implementing');
-	lines.push("- `mulch prime --files src/foo.ts` — load records for specific files");
+	lines.push(
+		"- `mulch prime --files src/foo.ts` — prime **before** editing a file, not just at session start",
+	);
 	lines.push("- `mulch prime --context` — load records for git-changed files");
 	lines.push('- `mulch record <domain> --type <type> --description "..."`');
-	lines.push("  - Types: `convention`, `pattern`, `failure`, `decision`, `reference`, `guide`");
-	lines.push("  - Evidence: `--evidence-commit <sha>`, `--evidence-bead <id>`");
+	lines.push(
+		"  - Evidence: `--evidence-commit <sha>`, `--evidence-bead <id>`, `--relates-to <id>`",
+	);
 	lines.push("- `mulch doctor` — check record health");
+	lines.push("");
+	lines.push("**Record types and required flags:**");
+	lines.push("");
+	lines.push("| Type | Required flags |");
+	lines.push("|------|----------------|");
+	lines.push('| `convention` | `"<content>"` (positional) |');
+	lines.push('| `pattern` | `--name "..." --description "..."` |');
+	lines.push('| `failure` | `--description "..." --resolution "..."` |');
+	lines.push('| `decision` | `--title "..." --rationale "..."` |');
+	lines.push('| `reference` | `--name "..." --description "..."` |');
+	lines.push('| `guide` | `--name "..." --description "..."` |');
 
 	return lines.join("\n");
 }
@@ -337,6 +367,9 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	);
 	lines.push(
 		'mulch record <domain> --type decision --title "..." --rationale "..." --evidence-bead seeds-xxx',
+	);
+	lines.push(
+		'mulch record <domain> --type convention "..." --relates-to mx-abc  # link to related records',
 	);
 	lines.push("```");
 	lines.push("");

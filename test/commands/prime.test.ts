@@ -2121,4 +2121,140 @@ describe("prime command", () => {
 			}
 		});
 	});
+
+	describe("prime output enrichment", () => {
+		it("compact quick reference includes type→required-fields table", () => {
+			const output = formatPrimeOutputCompact([]);
+			expect(output).toContain("**Record types and required flags:**");
+			expect(output).toContain("| Type | Required flags |");
+			expect(output).toContain("| `convention`");
+			expect(output).toContain("| `pattern`");
+			expect(output).toContain("| `failure`");
+			expect(output).toContain("| `decision`");
+			expect(output).toContain("| `reference`");
+			expect(output).toContain("| `guide`");
+		});
+
+		it("compact quick reference frames --files as per-edit priming", () => {
+			const output = formatPrimeOutputCompact([]);
+			expect(output).toContain("mulch prime --files");
+			expect(output).toContain("before");
+		});
+
+		it("compact quick reference includes --relates-to", () => {
+			const output = formatPrimeOutputCompact([]);
+			expect(output).toContain("--relates-to");
+		});
+
+		it("verbose prime output includes --relates-to in evidence section", () => {
+			const output = formatPrimeOutput([]);
+			expect(output).toContain("--relates-to");
+		});
+
+		it("compact lines show classification badge for foundational records", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+
+			await appendRecord(filePath, {
+				type: "convention",
+				content: "Use foundational pattern",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+
+			const records = await readExpertiseFile(filePath);
+			const lastUpdated = await getFileModTime(filePath);
+			const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
+
+			expect(section).toContain("foundational");
+		});
+
+		it("compact lines show classification badge for tactical records", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+
+			await appendRecord(filePath, {
+				type: "pattern",
+				name: "session-pattern",
+				description: "A tactical pattern",
+				classification: "tactical",
+				recorded_at: new Date().toISOString(),
+			});
+
+			const records = await readExpertiseFile(filePath);
+			const lastUpdated = await getFileModTime(filePath);
+			const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
+
+			expect(section).toContain("tactical");
+		});
+
+		it("compact lines show confirmation score when outcomes are present", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+
+			await appendRecord(filePath, {
+				type: "convention",
+				content: "A confirmed convention",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+				outcomes: [
+					{ status: "success", agent: "agent-a" },
+					{ status: "success", agent: "agent-b" },
+					{ status: "success", agent: "agent-c" },
+				],
+			});
+
+			const records = await readExpertiseFile(filePath);
+			const lastUpdated = await getFileModTime(filePath);
+			const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
+
+			expect(section).toContain("★3");
+		});
+
+		it("compact lines omit score marker when no outcomes", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+
+			await appendRecord(filePath, {
+				type: "convention",
+				content: "Unconfirmed convention",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+
+			const records = await readExpertiseFile(filePath);
+			const lastUpdated = await getFileModTime(filePath);
+			const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
+
+			expect(section).not.toContain("★");
+		});
+
+		it("compact lines show partial score as decimal", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+
+			await appendRecord(filePath, {
+				type: "decision",
+				title: "Partially confirmed",
+				rationale: "Tried it",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+				outcomes: [
+					{ status: "success", agent: "agent-a" },
+					{ status: "partial", agent: "agent-b" },
+				],
+			});
+
+			const records = await readExpertiseFile(filePath);
+			const lastUpdated = await getFileModTime(filePath);
+			const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
+
+			expect(section).toContain("★1.5");
+		});
+	});
 });
