@@ -17,6 +17,7 @@ import {
 	readExpertiseFile,
 	writeExpertiseFile,
 } from "../utils/expertise.ts";
+import { getContextFiles, getCurrentCommit } from "../utils/git-context.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
@@ -29,6 +30,46 @@ const RECORD_TYPE_REQUIREMENTS: Record<string, string> = {
 	reference: "reference records require: name, description",
 	guide: "guide records require: name, description",
 };
+
+function buildRetryCommand(
+	domain: string,
+	content: string | undefined,
+	options: Record<string, unknown>,
+	missingFlags: Array<{ flag: string; placeholder: string }>,
+): string {
+	const parts = ["mulch record", domain];
+	if (content) parts.push(JSON.stringify(content));
+	if (options.type) parts.push(`--type ${options.type as string}`);
+	if (options.classification && options.classification !== "tactical") {
+		parts.push(`--classification ${options.classification as string}`);
+	}
+	if (options.name) parts.push(`--name ${JSON.stringify(options.name as string)}`);
+	if (options.description)
+		parts.push(`--description ${JSON.stringify(options.description as string)}`);
+	if (options.resolution)
+		parts.push(`--resolution ${JSON.stringify(options.resolution as string)}`);
+	if (options.title) parts.push(`--title ${JSON.stringify(options.title as string)}`);
+	if (options.rationale) parts.push(`--rationale ${JSON.stringify(options.rationale as string)}`);
+	if (options.files) parts.push(`--files ${JSON.stringify(options.files as string)}`);
+	if (options.tags) parts.push(`--tags ${JSON.stringify(options.tags as string)}`);
+	if (options.evidenceCommit) parts.push(`--evidence-commit ${options.evidenceCommit as string}`);
+	if (options.evidenceIssue)
+		parts.push(`--evidence-issue ${JSON.stringify(options.evidenceIssue as string)}`);
+	if (options.evidenceFile)
+		parts.push(`--evidence-file ${JSON.stringify(options.evidenceFile as string)}`);
+	if (options.evidenceBead)
+		parts.push(`--evidence-bead ${JSON.stringify(options.evidenceBead as string)}`);
+	if (options.evidenceSeeds)
+		parts.push(`--evidence-seeds ${JSON.stringify(options.evidenceSeeds as string)}`);
+	if (options.evidenceGh)
+		parts.push(`--evidence-gh ${JSON.stringify(options.evidenceGh as string)}`);
+	if (options.evidenceLinear)
+		parts.push(`--evidence-linear ${JSON.stringify(options.evidenceLinear as string)}`);
+	for (const { flag, placeholder } of missingFlags) {
+		parts.push(`${flag} ${JSON.stringify(placeholder)}`);
+	}
+	return parts.join(" ");
+}
 
 /**
  * Process records from stdin (JSON single object or array)
@@ -156,8 +197,11 @@ export async function processStdinRecords(
 						record.type === "guide";
 
 					if (isNamed) {
-						// Upsert: replace in place
-						currentRecords[dup.index] = record;
+						// Upsert: replace in place, merging outcomes from existing
+						const existingRecord = currentRecords[dup.index]!;
+						const mergedOutcomes = [...(existingRecord.outcomes ?? []), ...(record.outcomes ?? [])];
+						currentRecords[dup.index] =
+							mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
 						updated++;
 					} else {
 						// Exact match: skip
@@ -208,10 +252,16 @@ export function registerRecordCommand(program: Command): void {
 		.option("--rationale <rationale>", "rationale for decision records")
 		.option("--files <files>", "related files (comma-separated)")
 		.option("--tags <tags>", "comma-separated tags")
-		.option("--evidence-commit <commit>", "evidence: commit hash")
+		.option(
+			"--evidence-commit <commit>",
+			"evidence: commit hash (auto-populated from git if omitted)",
+		)
 		.option("--evidence-issue <issue>", "evidence: issue reference")
 		.option("--evidence-file <file>", "evidence: file path")
 		.option("--evidence-bead <bead>", "evidence: bead ID")
+		.option("--evidence-seeds <id>", "evidence: seeds issue ID")
+		.option("--evidence-gh <ref>", "evidence: GitHub issue or PR reference")
+		.option("--evidence-linear <ticket>", "evidence: Linear ticket reference")
 		.option("--relates-to <ids>", "comma-separated record IDs this relates to")
 		.option("--supersedes <ids>", "comma-separated record IDs this supersedes")
 		.addOption(
@@ -486,13 +536,28 @@ Batch recording examples:
 					options.evidenceCommit ||
 					options.evidenceIssue ||
 					options.evidenceFile ||
-					options.evidenceBead
+					options.evidenceBead ||
+					options.evidenceSeeds ||
+					options.evidenceGh ||
+					options.evidenceLinear
 				) {
 					evidence = {};
 					if (options.evidenceCommit) evidence.commit = options.evidenceCommit as string;
 					if (options.evidenceIssue) evidence.issue = options.evidenceIssue as string;
 					if (options.evidenceFile) evidence.file = options.evidenceFile as string;
 					if (options.evidenceBead) evidence.bead = options.evidenceBead as string;
+					if (options.evidenceSeeds) evidence.seeds = options.evidenceSeeds as string;
+					if (options.evidenceGh) evidence.gh = options.evidenceGh as string;
+					if (options.evidenceLinear) evidence.linear = options.evidenceLinear as string;
+				}
+
+				// Auto-populate evidence.commit from git HEAD if not explicitly provided
+				if (!options.evidenceCommit) {
+					const autoCommit = getCurrentCommit();
+					if (autoCommit) {
+						evidence = evidence ?? {};
+						evidence.commit = autoCommit;
+					}
 				}
 
 				const tags =
@@ -553,6 +618,10 @@ Batch recording examples:
 										"Error: convention records require content (positional argument or --description).",
 									),
 								);
+								const retryCmd = buildRetryCommand(domain, content, options, [
+									{ flag: "--description", placeholder: "<content>" },
+								]);
+								console.error(chalk.dim(`  Retry: ${retryCmd}`));
 							}
 							process.exitCode = 1;
 							return;
@@ -575,6 +644,10 @@ Batch recording examples:
 						const patternName = options.name as string | undefined;
 						const patternDesc = (options.description as string | undefined) ?? content;
 						if (!patternName || !patternDesc) {
+							const missing: Array<{ flag: string; placeholder: string }> = [];
+							if (!patternName) missing.push({ flag: "--name", placeholder: "<name>" });
+							if (!patternDesc)
+								missing.push({ flag: "--description", placeholder: "<description>" });
 							if (jsonMode) {
 								outputJsonError(
 									"record",
@@ -586,10 +659,14 @@ Batch recording examples:
 										"Error: pattern records require --name and --description (or positional content).",
 									),
 								);
+								const retryCmd = buildRetryCommand(domain, content, options, missing);
+								console.error(chalk.dim(`  Retry: ${retryCmd}`));
 							}
 							process.exitCode = 1;
 							return;
 						}
+						const patternFiles =
+							typeof options.files === "string" ? options.files.split(",") : getContextFiles();
 						record = {
 							type: "pattern",
 							name: patternName,
@@ -597,9 +674,7 @@ Batch recording examples:
 							classification,
 							recorded_at: recordedAt,
 							...(evidence && { evidence }),
-							...(typeof options.files === "string" && {
-								files: options.files.split(","),
-							}),
+							...(patternFiles.length > 0 && { files: patternFiles }),
 							...(tags && tags.length > 0 && { tags }),
 							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
 							...(supersedes && supersedes.length > 0 && { supersedes }),
@@ -612,6 +687,11 @@ Batch recording examples:
 						const failureDesc = options.description as string | undefined;
 						const failureResolution = options.resolution as string | undefined;
 						if (!failureDesc || !failureResolution) {
+							const missing: Array<{ flag: string; placeholder: string }> = [];
+							if (!failureDesc)
+								missing.push({ flag: "--description", placeholder: "<description>" });
+							if (!failureResolution)
+								missing.push({ flag: "--resolution", placeholder: "<resolution>" });
 							if (jsonMode) {
 								outputJsonError(
 									"record",
@@ -621,6 +701,8 @@ Batch recording examples:
 								console.error(
 									chalk.red("Error: failure records require --description and --resolution."),
 								);
+								const retryCmd = buildRetryCommand(domain, content, options, missing);
+								console.error(chalk.dim(`  Retry: ${retryCmd}`));
 							}
 							process.exitCode = 1;
 							return;
@@ -644,12 +726,18 @@ Batch recording examples:
 						const decisionTitle = options.title as string | undefined;
 						const decisionRationale = options.rationale as string | undefined;
 						if (!decisionTitle || !decisionRationale) {
+							const missing: Array<{ flag: string; placeholder: string }> = [];
+							if (!decisionTitle) missing.push({ flag: "--title", placeholder: "<title>" });
+							if (!decisionRationale)
+								missing.push({ flag: "--rationale", placeholder: "<rationale>" });
 							if (jsonMode) {
 								outputJsonError("record", "Decision records require --title and --rationale.");
 							} else {
 								console.error(
 									chalk.red("Error: decision records require --title and --rationale."),
 								);
+								const retryCmd = buildRetryCommand(domain, content, options, missing);
+								console.error(chalk.dim(`  Retry: ${retryCmd}`));
 							}
 							process.exitCode = 1;
 							return;
@@ -673,6 +761,9 @@ Batch recording examples:
 						const refName = options.name as string | undefined;
 						const refDesc = (options.description as string | undefined) ?? content;
 						if (!refName || !refDesc) {
+							const missing: Array<{ flag: string; placeholder: string }> = [];
+							if (!refName) missing.push({ flag: "--name", placeholder: "<name>" });
+							if (!refDesc) missing.push({ flag: "--description", placeholder: "<description>" });
 							if (jsonMode) {
 								outputJsonError(
 									"record",
@@ -684,10 +775,14 @@ Batch recording examples:
 										"Error: reference records require --name and --description (or positional content).",
 									),
 								);
+								const retryCmd = buildRetryCommand(domain, content, options, missing);
+								console.error(chalk.dim(`  Retry: ${retryCmd}`));
 							}
 							process.exitCode = 1;
 							return;
 						}
+						const refFiles =
+							typeof options.files === "string" ? options.files.split(",") : getContextFiles();
 						record = {
 							type: "reference",
 							name: refName,
@@ -695,9 +790,7 @@ Batch recording examples:
 							classification,
 							recorded_at: recordedAt,
 							...(evidence && { evidence }),
-							...(typeof options.files === "string" && {
-								files: options.files.split(","),
-							}),
+							...(refFiles.length > 0 && { files: refFiles }),
 							...(tags && tags.length > 0 && { tags }),
 							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
 							...(supersedes && supersedes.length > 0 && { supersedes }),
@@ -710,6 +803,9 @@ Batch recording examples:
 						const guideName = options.name as string | undefined;
 						const guideDesc = (options.description as string | undefined) ?? content;
 						if (!guideName || !guideDesc) {
+							const missing: Array<{ flag: string; placeholder: string }> = [];
+							if (!guideName) missing.push({ flag: "--name", placeholder: "<name>" });
+							if (!guideDesc) missing.push({ flag: "--description", placeholder: "<description>" });
 							if (jsonMode) {
 								outputJsonError(
 									"record",
@@ -721,6 +817,8 @@ Batch recording examples:
 										"Error: guide records require --name and --description (or positional content).",
 									),
 								);
+								const retryCmd = buildRetryCommand(domain, content, options, missing);
+								console.error(chalk.dim(`  Retry: ${retryCmd}`));
 							}
 							process.exitCode = 1;
 							return;
@@ -828,8 +926,15 @@ Batch recording examples:
 								record.type === "guide";
 
 							if (isNamed) {
-								// Upsert: replace in place
-								existing[dup.index] = record;
+								// Upsert: replace in place, merging outcomes from existing
+								const existingRecord = existing[dup.index]!;
+								const mergedOutcomes = [
+									...(existingRecord.outcomes ?? []),
+									...(record.outcomes ?? []),
+								];
+								const upsertRecord =
+									mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
+								existing[dup.index] = upsertRecord;
 								await writeExpertiseFile(filePath, existing);
 								if (jsonMode) {
 									outputJson({
@@ -839,7 +944,7 @@ Batch recording examples:
 										domain,
 										type: recordType,
 										index: dup.index + 1,
-										record,
+										record: upsertRecord,
 									});
 								} else {
 									if (!isQuiet())
