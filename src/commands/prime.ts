@@ -106,7 +106,7 @@ export function registerPrimeCommand(program: Command): void {
 								`Error: Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
 							);
 							console.error(
-								`Hint: Run \`mulch add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
+								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
 							);
 						}
 						process.exitCode = 1;
@@ -127,7 +127,7 @@ export function registerPrimeCommand(program: Command): void {
 								`Error: Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
 							);
 							console.error(
-								`Hint: Run \`mulch add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
+								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
 							);
 						}
 						process.exitCode = 1;

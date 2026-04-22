@@ -2097,7 +2097,7 @@ describe("prime command", () => {
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
 				expect(errorSpy.mock.calls[0]![0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain("mulch add nonexistent");
+				expect(errorSpy.mock.calls[1]![0] as string).toContain("ml add nonexistent");
 				expect(errorSpy.mock.calls[1]![0] as string).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
@@ -2114,7 +2114,7 @@ describe("prime command", () => {
 
 				expect(errorSpy).toHaveBeenCalledTimes(2);
 				expect(errorSpy.mock.calls[0]![0] as string).toContain("nonexistent");
-				expect(errorSpy.mock.calls[1]![0] as string).toContain("mulch add nonexistent");
+				expect(errorSpy.mock.calls[1]![0] as string).toContain("ml add nonexistent");
 				expect(errorSpy.mock.calls[1]![0] as string).toContain(".mulch/mulch.config.yaml");
 			} finally {
 				errorSpy.mockRestore();
