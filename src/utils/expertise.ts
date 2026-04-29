@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { appendFile, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import type { Classification, ExpertiseRecord, RecordType } from "../schemas/record.ts";
 import { DEFAULT_BM25_PARAMS, searchBM25 } from "./bm25.ts";
+import { applyConfirmationBoost } from "./scoring.ts";
 
 export async function readExpertiseFile(filePath: string): Promise<ExpertiseRecord[]> {
 	let content: string;
@@ -224,13 +225,33 @@ export function resolveRecordId(records: ExpertiseRecord[], identifier: string):
 	};
 }
 
+export interface SearchRecordsOptions {
+	// Multiplier passed to applyConfirmationBoost. >0 reorders BM25 results
+	// so records with confirmed outcomes float up; 0 / undefined = pure BM25.
+	boostFactor?: number;
+}
+
 /**
  * Search records using BM25 ranking algorithm.
- * Returns records sorted by relevance (highest score first).
+ * Returns records sorted by relevance (highest score first), optionally
+ * re-ranked by confirmation-frequency boost.
  */
-export function searchRecords(records: ExpertiseRecord[], query: string): ExpertiseRecord[] {
+export function searchRecords(
+	records: ExpertiseRecord[],
+	query: string,
+	options: SearchRecordsOptions = {},
+): ExpertiseRecord[] {
 	const results = searchBM25(records, query, DEFAULT_BM25_PARAMS);
-	return results.map((r) => r.record);
+	const factor = options.boostFactor ?? 0;
+	if (factor <= 0) {
+		return results.map((r) => r.record);
+	}
+	const boosted = results.map((r) => ({
+		record: r.record,
+		score: applyConfirmationBoost(r.score, r.record, factor),
+	}));
+	boosted.sort((a, b) => b.score - a.score);
+	return boosted.map((r) => r.record);
 }
 
 export interface DomainHealth {

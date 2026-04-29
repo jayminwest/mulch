@@ -1,5 +1,7 @@
 export type PrimeMode = "manifest" | "full";
 
+export const DEFAULT_SEARCH_BOOST_FACTOR = 0.1;
+
 export interface MulchConfig {
 	version: string;
 	domains: string[];
@@ -16,6 +18,10 @@ export interface MulchConfig {
 	};
 	prime?: {
 		default_mode: PrimeMode;
+	};
+	search?: {
+		// Multiplier applied to BM25 scores via applyConfirmationBoost. 0 disables.
+		boost_factor: number;
 	};
 }
 

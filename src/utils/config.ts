@@ -30,6 +30,12 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #   # (quick-reference + domain index). Useful in large monoliths — agents
 #   # scope-load with \`ml prime <domain>\` or \`ml prime --files <path>\`.
 #   default_mode: manifest    # one of: full (default), manifest
+#
+# search:
+#   # Multiplier applied to BM25 scores so records with more confirmed outcomes
+#   # rank higher. 0 disables (pure BM25). Default 0.1: a record with N successes
+#   # gets a (1 + 0.1*N) boost. Override per-call with \`ml search --no-boost\`.
+#   boost_factor: 0.1
 `;
 
 export function buildInitialConfigYaml(): string {
@@ -68,6 +74,11 @@ prime:
   default_mode: manifest   # or "full" (default). "manifest" emits a domain index
                            # for monolith projects; agents scope-load with
                            # \`ml prime <domain>\` or \`ml prime --files <path>\`.
+
+search:
+  boost_factor: 0.1        # multiplier on BM25 scores for confirmed records.
+                           # 0 disables (pure BM25). Override with
+                           # \`ml search --no-boost\`.
 \`\`\`
 `;
 

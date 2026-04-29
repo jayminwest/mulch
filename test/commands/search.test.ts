@@ -538,6 +538,96 @@ describe("search command", () => {
 		});
 	});
 
+	describe("BM25 boost integration", () => {
+		function makeOutcome(status: Outcome["status"]): Outcome {
+			return { status, recorded_at: new Date().toISOString() };
+		}
+
+		it("default boost lifts confirmed records above unconfirmed at equal BM25", async () => {
+			const apiPath = getExpertisePath("api", tmpDir);
+			// Two patterns with identical text → identical BM25 score.
+			// Boost should break the tie in favor of the one with successes.
+			await appendRecord(apiPath, {
+				type: "pattern",
+				name: "no-confirm",
+				description: "caching layer pattern",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(apiPath, {
+				type: "pattern",
+				name: "confirmed",
+				description: "caching layer pattern",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+				outcomes: [makeOutcome("success"), makeOutcome("success")],
+			});
+
+			const records = await readExpertiseFile(apiPath);
+			const boosted = searchRecords(records, "caching", { boostFactor: 0.1 });
+			expect(boosted).toHaveLength(2);
+			expect(boosted[0]).toMatchObject({ name: "confirmed" });
+			expect(boosted[1]).toMatchObject({ name: "no-confirm" });
+		});
+
+		it("boostFactor=0 (i.e. --no-boost) preserves pure BM25 ordering", async () => {
+			const apiPath = getExpertisePath("api", tmpDir);
+			// Pattern A: query term in name + description (high BM25), no outcomes.
+			// Pattern B: query term once in description, lots of outcomes.
+			// Without boost, A should win; with boost, B might overtake.
+			await appendRecord(apiPath, {
+				type: "pattern",
+				name: "ratelimit-bucket",
+				description: "ratelimit bucket ratelimit token bucket",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(apiPath, {
+				type: "pattern",
+				name: "popular",
+				description: "miscellaneous ratelimit notes",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+				outcomes: Array.from({ length: 20 }, () => makeOutcome("success")),
+			});
+
+			const records = await readExpertiseFile(apiPath);
+			const pure = searchRecords(records, "ratelimit", { boostFactor: 0 });
+			expect(pure[0]).toMatchObject({ name: "ratelimit-bucket" });
+
+			// Sanity: the heavy boost would actually flip the order, so this is a
+			// real test of the --no-boost escape hatch.
+			const boosted = searchRecords(records, "ratelimit", { boostFactor: 0.5 });
+			expect(boosted[0]).toMatchObject({ name: "popular" });
+		});
+
+		it("records with no outcomes are unchanged by the boost", async () => {
+			const apiPath = getExpertisePath("api", tmpDir);
+			await appendRecord(apiPath, {
+				type: "pattern",
+				name: "alpha",
+				description: "shared keyword alpha-only context",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(apiPath, {
+				type: "pattern",
+				name: "beta",
+				description: "shared keyword beta",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+
+			const records = await readExpertiseFile(apiPath);
+			const pure = searchRecords(records, "shared", { boostFactor: 0 });
+			const boosted = searchRecords(records, "shared", { boostFactor: 0.1 });
+			// Same order: nothing has outcomes, so the boost is a no-op.
+			expect(boosted.map((r) => (r.type === "pattern" ? r.name : null))).toEqual(
+				pure.map((r) => (r.type === "pattern" ? r.name : null)),
+			);
+		});
+	});
+
 	describe("scoring sort integration", () => {
 		function makeOutcome(status: Outcome["status"]): Outcome {
 			return { status, recorded_at: new Date().toISOString() };

@@ -1,4 +1,5 @@
 import { type Command, Option } from "commander";
+import { DEFAULT_SEARCH_BOOST_FACTOR } from "../schemas/config.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
 	filterByClassification,
@@ -8,7 +9,13 @@ import {
 	readExpertiseFile,
 	searchRecords,
 } from "../utils/expertise.ts";
-import { formatDomainExpertise, formatDomainExpertiseCompact } from "../utils/format.ts";
+import {
+	formatDomainExpertise,
+	formatDomainExpertiseCompact,
+	formatDomainExpertisePlain,
+	formatDomainExpertiseXml,
+	type PrimeFormat,
+} from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { type ScoredRecord, sortByConfirmationScore } from "../utils/scoring.ts";
 
@@ -45,10 +52,15 @@ export function registerSearchCommand(program: Command): void {
 			]),
 		)
 		.option("--sort-by-score", "sort results by confirmation-frequency score (highest first)")
+		.option("--no-boost", "disable confirmation-frequency boost on BM25 ranking (pure BM25)")
 		.addOption(
-			new Option("--format <format>", "output format for records")
-				.choices(["markdown", "compact", "ids"])
-				.default("markdown"),
+			new Option("--format <format>", "output format for records").choices([
+				"markdown",
+				"compact",
+				"xml",
+				"plain",
+				"ids",
+			]),
 		)
 		.action(
 			async (
@@ -61,6 +73,7 @@ export function registerSearchCommand(program: Command): void {
 					file?: string;
 					outcomeStatus?: string;
 					sortByScore?: boolean;
+					boost?: boolean;
 					format?: string;
 				},
 			) => {
@@ -90,6 +103,10 @@ export function registerSearchCommand(program: Command): void {
 					}
 
 					const config = await readConfig();
+					const boostFactor =
+						options.boost === false
+							? 0
+							: (config.search?.boost_factor ?? DEFAULT_SEARCH_BOOST_FACTOR);
 
 					let domainsToSearch: string[];
 
@@ -141,7 +158,7 @@ export function registerSearchCommand(program: Command): void {
 									r.outcomes?.some((o) => o.status === options.outcomeStatus),
 								);
 							}
-							let matches = query ? searchRecords(records, query) : records;
+							let matches = query ? searchRecords(records, query, { boostFactor }) : records;
 							if (options.sortByScore) {
 								matches = sortByConfirmationScore(matches as ScoredRecord[]);
 							}
@@ -158,7 +175,8 @@ export function registerSearchCommand(program: Command): void {
 							domains: result,
 						});
 					} else {
-						const fmt = options.format ?? "markdown";
+						const globalFormat = program.opts().format as PrimeFormat | undefined;
+						const fmt = options.format ?? (globalFormat as string | undefined) ?? "markdown";
 						const label = query ? `matching "${query}"` : "matching filters";
 
 						if (fmt === "ids") {
@@ -186,7 +204,7 @@ export function registerSearchCommand(program: Command): void {
 										r.outcomes?.some((o) => o.status === options.outcomeStatus),
 									);
 								}
-								let matches = query ? searchRecords(records, query) : records;
+								let matches = query ? searchRecords(records, query, { boostFactor }) : records;
 								if (options.sortByScore) {
 									matches = sortByConfirmationScore(matches as ScoredRecord[]);
 								}
@@ -225,16 +243,25 @@ export function registerSearchCommand(program: Command): void {
 										r.outcomes?.some((o) => o.status === options.outcomeStatus),
 									);
 								}
-								let matches = query ? searchRecords(records, query) : records;
+								let matches = query ? searchRecords(records, query, { boostFactor }) : records;
 								if (options.sortByScore) {
 									matches = sortByConfirmationScore(matches as ScoredRecord[]);
 								}
 								if (matches.length > 0) {
 									totalMatches += matches.length;
-									if (fmt === "compact") {
-										sections.push(formatDomainExpertiseCompact(domain, matches, lastUpdated));
-									} else {
-										sections.push(formatDomainExpertise(domain, matches, lastUpdated));
+									switch (fmt) {
+										case "compact":
+											sections.push(formatDomainExpertiseCompact(domain, matches, lastUpdated));
+											break;
+										case "xml":
+											sections.push(formatDomainExpertiseXml(domain, matches, lastUpdated));
+											break;
+										case "plain":
+											sections.push(formatDomainExpertisePlain(domain, matches, lastUpdated));
+											break;
+										default:
+											sections.push(formatDomainExpertise(domain, matches, lastUpdated));
+											break;
 									}
 								}
 							}
