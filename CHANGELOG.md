@@ -7,28 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-28
+
 ### Added
 
+#### Global `--format` Flag
 - Global `--format <markdown|compact|xml|plain>` flag that routes record-rendering commands (`ml prime`, `ml query`, `ml search`) through the selected formatter. `xml` is Claude-optimized, `plain` is Codex-optimized, `compact` emits one-liners (the default for `ml prime`), `markdown` emits the full sectioned layout. Per-command `--format` (including `ml query --format ids` and `ml search --format ids`) still wins over the global flag. `ml prime --compact` and `ml prime --full` are kept as aliases for `--format compact` and `--format markdown` respectively.
 - `ml query --format xml|plain` and `ml search --format xml|plain` — the four formatters are now reachable from any record-rendering command, not just `ml prime`.
-- `ml search <query>` now applies a confirmation-frequency boost to BM25 scores by default: records with successful outcomes float above unconfirmed records at the same relevance. Boost factor is `1 + 0.1 * confirmation_score` per record (records with no outcomes are unaffected). Activates the previously-unused `applyConfirmationBoost` helper.
-- Optional `search.boost_factor` knob in `.mulch/mulch.config.yaml` to tune or disable the boost (`0` = pure BM25)
-- `ml search --no-boost` flag as a per-call escape hatch back to pure BM25 ordering. `--sort-by-score` is unchanged and continues to work as a confirmation-only post-sort.
+
+#### Manifest Mode for Monoliths
 - `ml prime --manifest` emits a quick reference + per-domain index (with per-record-type counts and governance status) instead of full records — designed for monolith projects where dumping every record across every domain wastes agent context
 - Optional `prime.default_mode` config knob in `.mulch/mulch.config.yaml`: set to `manifest` so plain `ml prime` (with no scoping args) emits the index by default; `ml prime <domain>` and `ml prime --files <path>` keep loading full records for the requested scope
 - `--full` flag forces full output even when config says `manifest`
 - `--manifest` combined with any scoping argument (`<domain>`, `--domain`, `--exclude-domain`, `--context`, `--files`) is a hard error with a usage hint
 - `ml prime --manifest --json` emits a structured `{ type: "manifest", quick_reference, domains[] }` payload with per-type counts and per-domain health status
 
+#### Search Confirmation-Frequency Boost
+- `ml search <query>` now applies a confirmation-frequency boost to BM25 scores by default: records with successful outcomes float above unconfirmed records at the same relevance. Boost factor is `1 + 0.1 * confirmation_score` per record (records with no outcomes are unaffected). Activates the previously-unused `applyConfirmationBoost` helper.
+- Optional `search.boost_factor` knob in `.mulch/mulch.config.yaml` to tune or disable the boost (`0` = pure BM25)
+- `ml search --no-boost` flag as a per-call escape hatch back to pure BM25 ordering. `--sort-by-score` is unchanged and continues to work as a confirmation-only post-sort.
+
+#### Init Scaffolding
+- `ml init` now writes `.mulch/mulch.config.yaml` from a templated string with a header comment and a commented-out optional-knobs section (currently `prime.default_mode`) so users can discover settings without reading the source. The body is generated via `yaml.dump(DEFAULT_CONFIG)` so required-field values can't drift; subsequent `writeConfig()` calls still round-trip through the YAML serializer and strip comments — by design, the scaffold lives only at init time.
+
+#### Tooling
+- `scripts/version-bump.ts` — atomically bumps `package.json` and `src/cli.ts` in lockstep; wired into `bun run version:bump <major|minor|patch>`. (The script existed in `package.json` since 2026-03-05 but was never committed; fresh clones used to fail to bump.)
+
 ### Changed
 
 - `ml onboard` snippet rewritten to cover 0.6.4 agent workflow: multi-tracker evidence (`--evidence-seeds`/`--evidence-gh`/`--evidence-linear`), git auto-context for commit + files, `--relates-to`, outcome merge on upserts, retry hints on validation failures, `ml doctor --fix` for broken file anchors, and worktree-safe storage; now also mentions manifest mode for monolith discovery
 - `ONBOARD_VERSION` bumped to 3 so existing `v:1` and `v:2` installs are detected as outdated and migrated on the next `ml onboard`
 - `MULCH_README` (rendered to `.mulch/README.md` on `ml init`) now documents the optional `prime.default_mode` knob
+- `formatMcpOutput` / `McpDomain` renamed to `formatJsonOutput` / `JsonDomain` to match reality (no MCP integration was ever wired up)
+- TypeScript bumped from 5.9.3 to **6.0.3** (Dependabot #20); `bun.lock` regenerated to match
 
 ### Removed
 
 - `ml prime --mcp` flag (use `--json` instead — the two produced identical output and there was no MCP integration consuming the flag)
+
+### Testing
+
+- 840 tests across 41 files, 1935 expect() calls (up from 811 / 41 / 1848 in 0.6.5)
+- Expanded `test/commands/prime.test.ts` (+401 lines): manifest-mode output, scoping-conflict errors, `prime.default_mode` config resolution, `--full` override, JSON manifest payload shape
+- Expanded `test/commands/query.test.ts` (+122 lines) and `test/commands/search.test.ts` (+140 lines): global `--format` resolution across xml/plain/markdown/compact, per-command `--format` precedence
+- Expanded `test/commands/init.test.ts` (+26 lines): scaffolded YAML header comment and commented-out `prime.default_mode` block
 
 ## [0.6.5] - 2026-04-22
 
@@ -447,7 +469,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jayminwest/mulch/compare/v0.6.5...v0.7.0
 [0.6.5]: https://github.com/jayminwest/mulch/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/jayminwest/mulch/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/jayminwest/mulch/compare/v0.6.2...v0.6.3

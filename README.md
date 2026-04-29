@@ -67,7 +67,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml delete-domain <domain>` | Remove a domain from config and delete its expertise JSONL file (`--yes`, `--dry-run`) |
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
 | `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`) |
-| `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--format`) |
+| `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--no-boost`, `--format`) |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
 | `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
