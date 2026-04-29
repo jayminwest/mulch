@@ -120,4 +120,30 @@ describe("init command", () => {
 		expect(content).toContain("ml query");
 		expect(content).toContain("ml prime");
 	});
+
+	it("scaffolds config with commented-out optional knobs", async () => {
+		await initMulchDir(tmpDir);
+
+		const content = await readFile(getConfigPath(tmpDir), "utf-8");
+		// Header comment surfaces the docs link and the comment-stripping caveat
+		expect(content).toContain("# Mulch configuration");
+		expect(content).toContain("https://github.com/jayminwest/mulch");
+		// Optional knob is present as commented YAML so users can discover it
+		expect(content).toContain("# prime:");
+		expect(content).toContain("#   default_mode: manifest");
+		// Required fields are real YAML, not commented out
+		expect(content).toMatch(/^version: '1'$/m);
+		expect(content).toMatch(/^governance:$/m);
+	});
+
+	it("scaffolded config still parses to default values", async () => {
+		await initMulchDir(tmpDir);
+
+		const config = await readConfig(tmpDir);
+		expect(config.version).toBe("1");
+		expect(config.domains).toEqual([]);
+		expect(config.governance.max_entries).toBe(100);
+		expect(config.classification_defaults.shelf_life.tactical).toBe(14);
+		expect(config.prime).toBeUndefined();
+	});
 });

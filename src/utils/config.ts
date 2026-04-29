@@ -13,6 +13,30 @@ const EXPERTISE_DIR = "expertise";
 
 export const GITATTRIBUTES_LINE = ".mulch/expertise/*.jsonl merge=union";
 
+const INIT_CONFIG_HEADER = `# Mulch configuration. See https://github.com/jayminwest/mulch for docs.
+#
+# Required fields below. Optional knobs are commented out at the bottom — uncomment
+# to enable. Note: commands that mutate this file (e.g. \`ml add <domain>\`,
+# \`ml record\` auto-creating a domain) rewrite it via the YAML serializer and
+# strip these comments.
+
+`;
+
+const INIT_CONFIG_OPTIONAL_KNOBS = `
+# ─── Optional knobs (uncomment to enable) ────────────────────────────────────
+#
+# prime:
+#   # Switch \`ml prime\` from dumping all records to emitting a manifest
+#   # (quick-reference + domain index). Useful in large monoliths — agents
+#   # scope-load with \`ml prime <domain>\` or \`ml prime --files <path>\`.
+#   default_mode: manifest    # one of: full (default), manifest
+`;
+
+export function buildInitialConfigYaml(): string {
+	const body = yaml.dump(DEFAULT_CONFIG, { lineWidth: -1 });
+	return INIT_CONFIG_HEADER + body + INIT_CONFIG_OPTIONAL_KNOBS;
+}
+
 export const MULCH_README = `# .mulch/
 
 This directory is managed by [mulch](https://github.com/jayminwest/mulch) — a structured expertise layer for coding agents.
@@ -172,10 +196,12 @@ export async function initMulchDir(cwd: string = process.cwd()): Promise<void> {
 	await mkdir(mulchDir, { recursive: true });
 	await mkdir(expertiseDir, { recursive: true });
 
-	// Only write default config if none exists — preserve user customizations
+	// Only write default config if none exists — preserve user customizations.
+	// Use the templated YAML (with commented-out optional knobs) for discoverability;
+	// subsequent writes via writeConfig() round-trip through yaml.dump and lose comments.
 	const configPath = getConfigPath(cwd);
 	if (!existsSync(configPath)) {
-		await writeConfig({ ...DEFAULT_CONFIG }, cwd);
+		await writeFile(configPath, buildInitialConfigYaml(), "utf-8");
 	}
 
 	// Create or append .gitattributes with merge=union for JSONL files
