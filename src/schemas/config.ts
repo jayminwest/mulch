@@ -1,3 +1,5 @@
+export type PrimeMode = "manifest" | "full";
+
 export interface MulchConfig {
 	version: string;
 	domains: string[];
@@ -11,6 +13,9 @@ export interface MulchConfig {
 			tactical: number;
 			observational: number;
 		};
+	};
+	prime?: {
+		default_mode: PrimeMode;
 	};
 }
 

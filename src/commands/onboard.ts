@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/markers.ts";
 
-export const ONBOARD_VERSION = 2;
+export const ONBOARD_VERSION = 3;
 export const VERSION_MARKER = `<!-- mulch-onboard-v:${String(ONBOARD_VERSION)} -->`;
 
 const SNIPPET_DEFAULT = `## Project Expertise (Mulch)
@@ -21,6 +21,11 @@ ml prime
 Injects project-specific conventions, patterns, decisions, failures, references, and guides into
 your context. Run \`ml prime --files src/foo.ts\` before editing a file to load only records
 relevant to that path (per-file framing, classification age, and confirmation scores included).
+
+For monolith projects where dumping every record wastes context, set
+\`prime.default_mode: manifest\` in \`.mulch/mulch.config.yaml\` (or pass \`--manifest\`) to emit a
+quick reference + domain index. Agents then scope-load with \`ml prime <domain>\` or
+\`ml prime --files <path>\`.
 
 **Before completing your task**, record insights worth preserving — conventions discovered,
 patterns applied, failures encountered, or decisions made:

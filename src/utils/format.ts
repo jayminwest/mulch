@@ -6,6 +6,7 @@ import type {
 	GuideRecord,
 	Outcome,
 	PatternRecord,
+	RecordType,
 	ReferenceRecord,
 } from "../schemas/record.ts";
 import { computeConfirmationScore } from "./scoring.ts";
@@ -436,6 +437,10 @@ function xmlEscape(str: string): string {
 	return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function xmlAttrEscape(str: string): string {
+	return xmlEscape(str).replace(/"/g, "&quot;");
+}
+
 export function formatDomainExpertiseXml(
 	domain: string,
 	records: ExpertiseRecord[],
@@ -624,13 +629,13 @@ export function formatPrimeOutputPlain(domainSections: string[]): string {
 	return lines.join("\n");
 }
 
-export interface McpDomain {
+export interface JsonDomain {
 	domain: string;
 	entry_count: number;
 	records: ExpertiseRecord[];
 }
 
-export function formatMcpOutput(domains: McpDomain[]): string {
+export function formatJsonOutput(domains: JsonDomain[]): string {
 	return JSON.stringify({ type: "expertise", domains }, null, 2);
 }
 
@@ -709,4 +714,240 @@ export function formatStatusOutput(
 	}
 
 	return lines.join("\n");
+}
+
+// --- Manifest mode ---
+
+export interface ManifestDomain {
+	domain: string;
+	count: number;
+	lastUpdated: Date | null;
+	typeCounts: Partial<Record<RecordType, number>>;
+}
+
+export interface ManifestGovernance {
+	max_entries: number;
+	warn_entries: number;
+	hard_limit: number;
+}
+
+interface QuickRef {
+	command: string;
+	description: string;
+}
+
+const MANIFEST_QUICK_REF: QuickRef[] = [
+	{ command: "ml prime <domain>", description: "load full records for one domain" },
+	{ command: "ml prime --files <path>", description: "load records relevant to specific files" },
+	{ command: 'ml search "<query>"', description: "search records across domains" },
+	{
+		command: 'ml record <domain> --type <type> --description "..."',
+		description: "store an insight",
+	},
+	{ command: "ml learn", description: "discover what to record from changed files" },
+	{ command: "ml sync", description: "validate, stage, and commit .mulch/ changes" },
+];
+
+function manifestStatusSuffix(count: number, governance: ManifestGovernance): string {
+	if (count >= governance.hard_limit) return " ⚠ OVER HARD LIMIT — must decompose";
+	if (count >= governance.warn_entries) return " ⚠ consider splitting domain";
+	if (count >= governance.max_entries) return " — approaching limit";
+	return "";
+}
+
+const TYPE_COUNT_ORDER: RecordType[] = [
+	"pattern",
+	"convention",
+	"failure",
+	"decision",
+	"reference",
+	"guide",
+];
+
+function pluralize(n: number, singular: string): string {
+	return n === 1 ? singular : `${singular}s`;
+}
+
+function formatTypeCounts(typeCounts: Partial<Record<RecordType, number>>): string {
+	const parts: string[] = [];
+	for (const t of TYPE_COUNT_ORDER) {
+		const n = typeCounts[t];
+		if (n && n > 0) parts.push(`${n} ${pluralize(n, t)}`);
+	}
+	return parts.join(", ");
+}
+
+export function formatPrimeManifest(
+	domains: ManifestDomain[],
+	governance: ManifestGovernance,
+	format: PrimeFormat,
+): string {
+	switch (format) {
+		case "xml":
+			return formatPrimeManifestXml(domains, governance);
+		case "plain":
+			return formatPrimeManifestPlain(domains, governance);
+		default:
+			return formatPrimeManifestMarkdown(domains, governance);
+	}
+}
+
+function formatPrimeManifestMarkdown(
+	domains: ManifestDomain[],
+	governance: ManifestGovernance,
+): string {
+	const lines: string[] = [];
+	lines.push("# Project Expertise Manifest (via Mulch)");
+	lines.push("");
+	lines.push(
+		"> Manifest mode lists available domains. Load records on demand with `ml prime <domain>` or `ml prime --files <path>`.",
+	);
+	lines.push("");
+	lines.push("## Quick Reference");
+	lines.push("");
+	for (const { command, description } of MANIFEST_QUICK_REF) {
+		lines.push(`- \`${command}\` — ${description}`);
+	}
+	lines.push("");
+	lines.push("## Available Domains");
+	lines.push("");
+	if (domains.length === 0) {
+		lines.push(
+			"No expertise recorded yet. Use `ml add <domain>` to create a domain, then `ml record` to add records.",
+		);
+	} else {
+		for (const { domain, count, lastUpdated, typeCounts } of domains) {
+			const typeStr = formatTypeCounts(typeCounts);
+			const typeSuffix = typeStr ? ` (${typeStr})` : "";
+			const updatedStr = lastUpdated ? ` — updated ${formatTimeAgo(lastUpdated)}` : "";
+			const status = manifestStatusSuffix(count, governance);
+			lines.push(
+				`- **${domain}**: ${count} ${pluralize(count, "record")}${typeSuffix}${updatedStr}${status}`,
+			);
+		}
+	}
+	return lines.join("\n");
+}
+
+function formatPrimeManifestPlain(
+	domains: ManifestDomain[],
+	governance: ManifestGovernance,
+): string {
+	const lines: string[] = [];
+	lines.push("Project Expertise Manifest (via Mulch)");
+	lines.push("======================================");
+	lines.push("");
+	lines.push(
+		"Manifest mode lists available domains. Load records on demand with `ml prime <domain>` or `ml prime --files <path>`.",
+	);
+	lines.push("");
+	lines.push("Quick Reference:");
+	for (const { command, description } of MANIFEST_QUICK_REF) {
+		lines.push(`  - ${command} — ${description}`);
+	}
+	lines.push("");
+	lines.push("Available Domains:");
+	if (domains.length === 0) {
+		lines.push(
+			"  No expertise recorded yet. Use `ml add <domain>` and `ml record` to get started.",
+		);
+	} else {
+		for (const { domain, count, lastUpdated, typeCounts } of domains) {
+			const typeStr = formatTypeCounts(typeCounts);
+			const typeSuffix = typeStr ? ` (${typeStr})` : "";
+			const updatedStr = lastUpdated ? ` — updated ${formatTimeAgo(lastUpdated)}` : "";
+			const status = manifestStatusSuffix(count, governance);
+			lines.push(
+				`  - ${domain}: ${count} ${pluralize(count, "record")}${typeSuffix}${updatedStr}${status}`,
+			);
+		}
+	}
+	return lines.join("\n");
+}
+
+function formatPrimeManifestXml(domains: ManifestDomain[], governance: ManifestGovernance): string {
+	const lines: string[] = [];
+	lines.push("<manifest>");
+	lines.push(
+		"  <description>Manifest mode lists available domains. Load records on demand with `ml prime &lt;domain&gt;` or `ml prime --files &lt;path&gt;`.</description>",
+	);
+	lines.push("  <quick_reference>");
+	for (const { command, description } of MANIFEST_QUICK_REF) {
+		lines.push(`    <command name="${xmlAttrEscape(command)}">${xmlEscape(description)}</command>`);
+	}
+	lines.push("  </quick_reference>");
+	lines.push("  <domains>");
+	for (const { domain, count, lastUpdated, typeCounts } of domains) {
+		const updatedAttr = lastUpdated ? ` updated="${formatTimeAgo(lastUpdated)}"` : "";
+		const status = manifestStatusSuffix(count, governance).trim();
+		const statusAttr = status ? ` status="${xmlAttrEscape(status)}"` : "";
+		lines.push(
+			`    <domain name="${xmlAttrEscape(domain)}" entries="${count}"${updatedAttr}${statusAttr}>`,
+		);
+		for (const t of TYPE_COUNT_ORDER) {
+			const n = typeCounts[t];
+			if (n && n > 0) lines.push(`      <type_count type="${t}" count="${n}" />`);
+		}
+		lines.push("    </domain>");
+	}
+	lines.push("  </domains>");
+	lines.push("</manifest>");
+	return lines.join("\n");
+}
+
+export interface ManifestPayload {
+	type: "manifest";
+	quick_reference: QuickRef[];
+	domains: Array<{
+		domain: string;
+		count: number;
+		lastUpdated: string | null;
+		type_counts: Partial<Record<RecordType, number>>;
+		health: {
+			status: "ok" | "approaching_limit" | "over_warn_threshold" | "over_hard_limit";
+			max_entries: number;
+			warn_entries: number;
+			hard_limit: number;
+		};
+	}>;
+}
+
+function manifestHealthStatus(
+	count: number,
+	governance: ManifestGovernance,
+): ManifestPayload["domains"][number]["health"]["status"] {
+	if (count >= governance.hard_limit) return "over_hard_limit";
+	if (count >= governance.warn_entries) return "over_warn_threshold";
+	if (count >= governance.max_entries) return "approaching_limit";
+	return "ok";
+}
+
+export function buildManifestPayload(
+	domains: ManifestDomain[],
+	governance: ManifestGovernance,
+): ManifestPayload {
+	return {
+		type: "manifest",
+		quick_reference: MANIFEST_QUICK_REF,
+		domains: domains.map(({ domain, count, lastUpdated, typeCounts }) => ({
+			domain,
+			count,
+			lastUpdated: lastUpdated ? lastUpdated.toISOString() : null,
+			type_counts: typeCounts,
+			health: {
+				status: manifestHealthStatus(count, governance),
+				max_entries: governance.max_entries,
+				warn_entries: governance.warn_entries,
+				hard_limit: governance.hard_limit,
+			},
+		})),
+	};
+}
+
+export function computeTypeCounts(records: ExpertiseRecord[]): Partial<Record<RecordType, number>> {
+	const counts: Partial<Record<RecordType, number>> = {};
+	for (const r of records) {
+		counts[r.type] = (counts[r.type] ?? 0) + 1;
+	}
+	return counts;
 }

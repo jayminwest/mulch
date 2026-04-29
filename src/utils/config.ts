@@ -34,6 +34,17 @@ This directory is managed by [mulch](https://github.com/jayminwest/mulch) — a 
 
 - \`mulch.config.yaml\` — Configuration file
 - \`expertise/\`        — JSONL files, one per domain
+
+## Configuration
+
+Optional knobs in \`mulch.config.yaml\`:
+
+\`\`\`yaml
+prime:
+  default_mode: manifest   # or "full" (default). "manifest" emits a domain index
+                           # for monolith projects; agents scope-load with
+                           # \`ml prime <domain>\` or \`ml prime --files <path>\`.
+\`\`\`
 `;
 
 function gitCommonDir(cwd: string): string | null {

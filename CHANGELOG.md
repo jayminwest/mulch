@@ -7,10 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ml prime --manifest` emits a quick reference + per-domain index (with per-record-type counts and governance status) instead of full records — designed for monolith projects where dumping every record across every domain wastes agent context
+- Optional `prime.default_mode` config knob in `.mulch/mulch.config.yaml`: set to `manifest` so plain `ml prime` (with no scoping args) emits the index by default; `ml prime <domain>` and `ml prime --files <path>` keep loading full records for the requested scope
+- `--full` flag forces full output even when config says `manifest`
+- `--manifest` combined with any scoping argument (`<domain>`, `--domain`, `--exclude-domain`, `--context`, `--files`) is a hard error with a usage hint
+- `ml prime --manifest --json` emits a structured `{ type: "manifest", quick_reference, domains[] }` payload with per-type counts and per-domain health status
+
 ### Changed
 
-- `ml onboard` snippet rewritten to cover 0.6.4 agent workflow: multi-tracker evidence (`--evidence-seeds`/`--evidence-gh`/`--evidence-linear`), git auto-context for commit + files, `--relates-to`, outcome merge on upserts, retry hints on validation failures, `ml doctor --fix` for broken file anchors, and worktree-safe storage
-- `ONBOARD_VERSION` bumped to 2 so existing `v:1` installs are detected as outdated and migrated on the next `ml onboard`
+- `ml onboard` snippet rewritten to cover 0.6.4 agent workflow: multi-tracker evidence (`--evidence-seeds`/`--evidence-gh`/`--evidence-linear`), git auto-context for commit + files, `--relates-to`, outcome merge on upserts, retry hints on validation failures, `ml doctor --fix` for broken file anchors, and worktree-safe storage; now also mentions manifest mode for monolith discovery
+- `ONBOARD_VERSION` bumped to 3 so existing `v:1` and `v:2` installs are detected as outdated and migrated on the next `ml onboard`
+- `MULCH_README` (rendered to `.mulch/README.md` on `ml init`) now documents the optional `prime.default_mode` knob
+
+### Removed
+
+- `ml prime --mcp` flag (use `--json` instead — the two produced identical output and there was no MCP integration consuming the flag)
 
 ## [0.6.5] - 2026-04-22
 

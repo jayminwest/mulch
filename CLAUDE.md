@@ -63,7 +63,7 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 <!-- mulch:start -->
 ## Project Expertise (Mulch)
-<!-- mulch-onboard-v:2 -->
+<!-- mulch-onboard-v:3 -->
 
 This project uses [Mulch](https://github.com/jayminwest/mulch) for structured expertise management.
 
@@ -75,6 +75,11 @@ ml prime
 Injects project-specific conventions, patterns, decisions, failures, references, and guides into
 your context. Run `ml prime --files src/foo.ts` before editing a file to load only records
 relevant to that path (per-file framing, classification age, and confirmation scores included).
+
+For monolith projects where dumping every record wastes context, set
+`prime.default_mode: manifest` in `.mulch/mulch.config.yaml` (or pass `--manifest`) to emit a
+quick reference + domain index. Agents then scope-load with `ml prime <domain>` or
+`ml prime --files <path>`.
 
 **Before completing your task**, record insights worth preserving — conventions discovered,
 patterns applied, failures encountered, or decisions made:

@@ -84,7 +84,7 @@ Structured expertise management for AI agents — store, query, and inject proje
 ## Explicitly Out of Scope for V1
 
 - `mulch rank` command — confirmation score top-N without text query; deferred as mulch-cky (P3)
-- Semantic clustering in `compact --analyze` (TF-IDF / cosine similarity grouping); deferred as seeds-e2bd (P3)
+- Semantic clustering in `compact --analyze` (TF-IDF / cosine similarity grouping); deferred as mulch-e2bd (P3)
 - Web UI or dashboard for browsing expertise
 - Remote/cloud sync — git is the transport layer
 - Multi-repo expertise federation (querying across repos)
@@ -100,7 +100,7 @@ Mulch is V1-complete. All 24 CLI commands are implemented and tested. 775 tests 
 
 Test count grew from 763 (v0.6.3 release) to 775 (+12) since last release — new coverage for sync git integration, upgrade version checking, and bulk delete. The upgrade `--check` test timeout was recently increased to 20s to handle npm registry latency.
 
-The only open deferred items are the `rank` command (mulch-cky, P3) and semantic clustering in compact (seeds-e2bd, P3). Neither is required for V1.
+The only open deferred items are the `rank` command (mulch-cky, P3) and semantic clustering in compact (mulch-e2bd, P3). Neither is required for V1.
 
 **Estimated completion: ~95%.** Remaining 5% is lint warning resolution and shell completion end-to-end verification.
 

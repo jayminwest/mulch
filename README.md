@@ -48,7 +48,10 @@ ml query database                                  # See accumulated expertise
 ml prime                                           # Get full context for agent injection
 ml prime database                                  # Get context for one domain only
 ml prime --files src/foo.ts                        # Prime only records relevant to specific files
+ml prime --manifest                                # Domain index for monoliths (scope-load on demand)
 ```
+
+For large monoliths where dumping every record wastes context, set `prime.default_mode: manifest` in `.mulch/mulch.config.yaml` — `ml prime` then emits a quick reference + domain index, and agents scope-load with `ml prime <domain>` or `ml prime --files <path>`.
 
 ## Commands
 
@@ -63,7 +66,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml delete <domain> [id]` | Delete records by ID, `--records <ids>`, or `--all-except <ids>` (`--dry-run`) |
 | `ml delete-domain <domain>` | Remove a domain from config and delete its expertise JSONL file (`--yes`, `--dry-run`) |
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
-| `ml prime [domains...]` | Output AI-optimized expertise context (`--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
+| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--format`) |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |

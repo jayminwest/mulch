@@ -4,13 +4,16 @@ import type { DomainRecords } from "../utils/budget.ts";
 import { applyBudget, DEFAULT_BUDGET, formatBudgetSummary } from "../utils/budget.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { getFileModTime, readExpertiseFile } from "../utils/expertise.ts";
-import type { McpDomain, PrimeFormat } from "../utils/format.ts";
+import type { JsonDomain, ManifestDomain, PrimeFormat } from "../utils/format.ts";
 import {
+	buildManifestPayload,
+	computeTypeCounts,
 	formatDomainExpertise,
 	formatDomainExpertiseCompact,
 	formatDomainExpertisePlain,
 	formatDomainExpertiseXml,
-	formatMcpOutput,
+	formatJsonOutput,
+	formatPrimeManifest,
 	formatPrimeOutput,
 	formatPrimeOutputCompact,
 	formatPrimeOutputPlain,
@@ -24,7 +27,7 @@ import { brand, isQuiet } from "../utils/palette.ts";
 interface PrimeOptions {
 	full?: boolean;
 	compact?: boolean;
-	mcp?: boolean;
+	manifest?: boolean;
 	format?: PrimeFormat;
 	export?: string;
 	domain?: string[];
@@ -70,7 +73,7 @@ export function registerPrimeCommand(program: Command): void {
 		.argument("[domains...]", "optional domain(s) to scope output to")
 		.option("--compact", "condensed quick-reference output (default)")
 		.option("--full", "include full record details (classification, evidence)")
-		.option("--mcp", "output in MCP-compatible JSON format")
+		.option("--manifest", "emit a domain index instead of full records (for monolith projects)")
 		.option("--domain <domains...>", "domain(s) to include")
 		.option("--exclude-domain <domains...>", "domain(s) to exclude")
 		.addOption(
@@ -91,8 +94,45 @@ export function registerPrimeCommand(program: Command): void {
 				const config = await readConfig();
 				const format = options.format ?? "markdown";
 
+				if (options.manifest && options.full) {
+					const msg = "Cannot combine --manifest with --full.";
+					if (jsonMode) {
+						outputJsonError("prime", msg);
+					} else {
+						console.error(`Error: ${msg}`);
+					}
+					process.exitCode = 1;
+					return;
+				}
+
 				const requested = [...domainsArg, ...(options.domain ?? [])];
 				const unique = [...new Set(requested)];
+
+				const isScoped =
+					unique.length > 0 ||
+					(options.excludeDomain ?? []).length > 0 ||
+					options.context === true ||
+					(options.files !== undefined && options.files.length > 0);
+
+				if (options.manifest && isScoped) {
+					const msg =
+						"--manifest cannot be combined with scoping arguments. Manifest mode lists available domains; use `ml prime <domain>` or `ml prime --files <path>` to load records.";
+					if (jsonMode) {
+						outputJsonError("prime", msg);
+					} else {
+						console.error(`Error: ${msg}`);
+					}
+					process.exitCode = 1;
+					return;
+				}
+
+				const configMode = config.prime?.default_mode ?? "full";
+				const effectiveMode: "manifest" | "full" = options.manifest
+					? "manifest"
+					: options.full
+						? "full"
+						: configMode;
+				const useManifest = effectiveMode === "manifest" && !isScoped;
 
 				for (const d of unique) {
 					if (!config.domains.includes(d)) {
@@ -167,15 +207,38 @@ export function registerPrimeCommand(program: Command): void {
 				}
 
 				// Determine budget settings
-				const isMachineOutput = options.mcp === true || jsonMode;
-				const budgetEnabled = !isMachineOutput && options.noLimit !== true;
+				const budgetEnabled = !jsonMode && options.noLimit !== true;
 				const budget = options.budget ? Number.parseInt(options.budget, 10) : DEFAULT_BUDGET;
 
 				let output: string;
 
-				if (isMachineOutput) {
-					// --json and --mcp produce the same structured output — no budget
-					const domains: McpDomain[] = [];
+				if (useManifest) {
+					const manifestDomains: ManifestDomain[] = [];
+					for (const domain of targetDomains) {
+						const filePath = getExpertisePath(domain);
+						const records = await readExpertiseFile(filePath);
+						const lastUpdated = await getFileModTime(filePath);
+						manifestDomains.push({
+							domain,
+							count: records.length,
+							lastUpdated,
+							typeCounts: computeTypeCounts(records),
+						});
+					}
+
+					if (jsonMode) {
+						output = JSON.stringify(
+							buildManifestPayload(manifestDomains, config.governance),
+							null,
+							2,
+						);
+					} else {
+						output = formatPrimeManifest(manifestDomains, config.governance, format);
+						output += `\n\n${getSessionEndReminder(format)}`;
+					}
+				} else if (jsonMode) {
+					// --json produces structured output — no budget
+					const domains: JsonDomain[] = [];
 					for (const domain of targetDomains) {
 						const filePath = getExpertisePath(domain);
 						let records = await readExpertiseFile(filePath);
@@ -186,7 +249,7 @@ export function registerPrimeCommand(program: Command): void {
 							domains.push({ domain, entry_count: records.length, records });
 						}
 					}
-					output = formatMcpOutput(domains);
+					output = formatJsonOutput(domains);
 				} else {
 					// Load all records per domain
 					const allDomainRecords: DomainRecords[] = [];

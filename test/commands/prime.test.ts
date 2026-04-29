@@ -25,7 +25,7 @@ import {
 	formatDomainExpertiseCompact,
 	formatDomainExpertisePlain,
 	formatDomainExpertiseXml,
-	formatMcpOutput,
+	formatJsonOutput,
 	formatPrimeOutput,
 	formatPrimeOutputCompact,
 	formatPrimeOutputPlain,
@@ -177,7 +177,7 @@ describe("prime command", () => {
 		expect(section).not.toContain("abc123");
 	});
 
-	it("--mcp outputs valid JSON with domain records", async () => {
+	it("--json outputs valid JSON with domain records", async () => {
 		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
@@ -190,7 +190,7 @@ describe("prime command", () => {
 		});
 
 		const records = await readExpertiseFile(filePath);
-		const output = formatMcpOutput([{ domain: "testing", entry_count: records.length, records }]);
+		const output = formatJsonOutput([{ domain: "testing", entry_count: records.length, records }]);
 
 		const parsed = JSON.parse(output);
 		expect(parsed.type).toBe("expertise");
@@ -338,7 +338,7 @@ describe("prime command", () => {
 			expect(config.domains.includes(domainArg)).toBe(false);
 		});
 
-		it("domain scoping works with --mcp format", async () => {
+		it("domain scoping works with --json format", async () => {
 			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
@@ -360,7 +360,7 @@ describe("prime command", () => {
 				recorded_at: new Date().toISOString(),
 			});
 
-			// Scope to just "architecture" in MCP mode
+			// Scope to just "architecture" in JSON mode
 			const targetDomains = ["architecture"];
 			const domains: {
 				domain: string;
@@ -373,7 +373,7 @@ describe("prime command", () => {
 				domains.push({ domain, entry_count: records.length, records });
 			}
 
-			const output = formatMcpOutput(domains);
+			const output = formatJsonOutput(domains);
 			const parsed = JSON.parse(output);
 			expect(parsed.domains).toHaveLength(1);
 			expect(parsed.domains[0].domain).toBe("architecture");
@@ -574,7 +574,7 @@ describe("prime command", () => {
 			expect(section).toMatch(/- \[mx-[0-9a-f]+\] deploy-guide: How to deploy/);
 		});
 
-		it("MCP output includes reference and guide records", async () => {
+		it("JSON output includes reference and guide records", async () => {
 			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
@@ -595,7 +595,9 @@ describe("prime command", () => {
 			});
 
 			const records = await readExpertiseFile(filePath);
-			const output = formatMcpOutput([{ domain: "testing", entry_count: records.length, records }]);
+			const output = formatJsonOutput([
+				{ domain: "testing", entry_count: records.length, records },
+			]);
 
 			const parsed = JSON.parse(output);
 			expect(parsed.domains[0].records).toHaveLength(2);
@@ -838,7 +840,7 @@ describe("prime command", () => {
 			expect(output).not.toContain('<domain name="architecture"');
 		});
 
-		it("exclusion works with --mcp format", async () => {
+		it("exclusion works with --json format", async () => {
 			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
@@ -875,7 +877,7 @@ describe("prime command", () => {
 				domains.push({ domain, entry_count: records.length, records });
 			}
 
-			const output = formatMcpOutput(domains);
+			const output = formatJsonOutput(domains);
 			const parsed = JSON.parse(output);
 			expect(parsed.domains).toHaveLength(1);
 			expect(parsed.domains[0].domain).toBe("testing");
@@ -1606,7 +1608,7 @@ describe("prime command", () => {
 			expect(reminder).toContain("NEVER skip this");
 		});
 
-		it("MCP/JSON output does NOT include session close protocol", () => {
+		it("JSON output does NOT include session close protocol", () => {
 			const records = [
 				{
 					type: "convention" as const,
@@ -1615,7 +1617,9 @@ describe("prime command", () => {
 					recorded_at: new Date().toISOString(),
 				},
 			];
-			const output = formatMcpOutput([{ domain: "testing", entry_count: records.length, records }]);
+			const output = formatJsonOutput([
+				{ domain: "testing", entry_count: records.length, records },
+			]);
 			expect(output).not.toContain("SESSION CLOSE PROTOCOL");
 			expect(output).not.toContain("session_close_protocol");
 			// Verify it's valid JSON without reminder text
@@ -2014,7 +2018,7 @@ describe("prime command", () => {
 			expect(reminder).toContain("SESSION CLOSE PROTOCOL");
 		});
 
-		it("MCP/JSON output is NOT subject to budget", () => {
+		it("JSON output is NOT subject to budget", () => {
 			const records: ExpertiseRecord[] = [];
 			for (let i = 0; i < 20; i++) {
 				records.push(
@@ -2024,8 +2028,10 @@ describe("prime command", () => {
 				);
 			}
 
-			// MCP output is always complete regardless of any budget considerations
-			const output = formatMcpOutput([{ domain: "testing", entry_count: records.length, records }]);
+			// JSON output is always complete regardless of any budget considerations
+			const output = formatJsonOutput([
+				{ domain: "testing", entry_count: records.length, records },
+			]);
 			const parsed = JSON.parse(output);
 			expect(parsed.domains[0].records).toHaveLength(20);
 			expect(output).not.toContain("--budget");
@@ -2267,6 +2273,228 @@ describe("prime command", () => {
 			const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
 
 			expect(section).toContain("★1.5");
+		});
+	});
+
+	describe("manifest mode", () => {
+		let originalCwd: string;
+
+		beforeEach(() => {
+			originalCwd = process.cwd();
+		});
+
+		afterEach(() => {
+			process.chdir(originalCwd);
+			process.exitCode = 0;
+		});
+
+		function makeProgram(): Command {
+			const program = new Command();
+			program.name("mulch").option("--json", "output as structured JSON").exitOverride();
+			registerPrimeCommand(program);
+			return program;
+		}
+
+		async function seedTwoDomains(): Promise<void> {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli", "testing"] }, tmpDir);
+			const cliPath = getExpertisePath("cli", tmpDir);
+			const testingPath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(cliPath);
+			await createExpertiseFile(testingPath);
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Use bun",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "init-flow",
+				description: "How init wires up files",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(testingPath, {
+				type: "convention",
+				content: "No mocks",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+		}
+
+		it("config-driven manifest emits manifest output when no flags set", async () => {
+			await seedTwoDomains();
+			const config = await readConfig(tmpDir);
+			await writeConfig({ ...config, prime: { default_mode: "manifest" } }, tmpDir);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise Manifest");
+				expect(output).toContain("## Quick Reference");
+				expect(output).toContain("## Available Domains");
+				expect(output).toContain("**cli**: 2 records");
+				expect(output).toContain("**testing**: 1 record");
+				expect(output).toContain("SESSION CLOSE PROTOCOL");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--manifest forces manifest even when config says full", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise Manifest");
+				expect(output).not.toContain("Use bun");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--full forces full output even when config says manifest", async () => {
+			await seedTwoDomains();
+			const config = await readConfig(tmpDir);
+			await writeConfig({ ...config, prime: { default_mode: "manifest" } }, tmpDir);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Expertise Manifest");
+				expect(output).toContain("Use bun");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--manifest combined with --full errors", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest", "--full"]);
+				expect(process.exitCode).toBe(1);
+				const errors = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errors).toContain("Cannot combine --manifest with --full");
+			} finally {
+				errorSpy.mockRestore();
+			}
+		});
+
+		it("--manifest with positional domain errors with usage hint", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest", "cli"]);
+				expect(process.exitCode).toBe(1);
+				const errors = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errors).toContain("--manifest cannot be combined with scoping arguments");
+				expect(errors).toContain("ml prime <domain>");
+			} finally {
+				errorSpy.mockRestore();
+			}
+		});
+
+		it("--manifest with --files errors", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest", "--files", "src/x.ts"]);
+				expect(process.exitCode).toBe(1);
+				const errors = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errors).toContain("--manifest cannot be combined with scoping arguments");
+			} finally {
+				errorSpy.mockRestore();
+			}
+		});
+
+		it("scoping wins over manifest config: positional domain emits full records", async () => {
+			await seedTwoDomains();
+			const config = await readConfig(tmpDir);
+			await writeConfig({ ...config, prime: { default_mode: "manifest" } }, tmpDir);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "cli"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Expertise Manifest");
+				expect(output).toContain("Use bun");
+				expect(output).toContain("init-flow");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("manifest output shows per-type counts and omits zero-count types", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toMatch(/\*\*cli\*\*: 2 records \([^)]*1 pattern[^)]*1 convention[^)]*\)/);
+				const cliLine = output.split("\n").find((l) => l.includes("**cli**"));
+				expect(cliLine).toBeDefined();
+				expect(cliLine ?? "").not.toContain("0 failure");
+				expect(cliLine ?? "").not.toContain("0 decision");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--json + manifest emits structured manifest payload", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--json", "prime", "--manifest"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const parsed = JSON.parse(output);
+				expect(parsed.type).toBe("manifest");
+				expect(Array.isArray(parsed.quick_reference)).toBe(true);
+				expect(parsed.quick_reference.length).toBeGreaterThan(0);
+				expect(parsed.domains).toHaveLength(2);
+				const cli = parsed.domains.find((d: { domain: string }) => d.domain === "cli");
+				expect(cli.count).toBe(2);
+				expect(cli.type_counts.pattern).toBe(1);
+				expect(cli.type_counts.convention).toBe(1);
+				expect(cli.health.status).toBe("ok");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("manifest output appends session-close protocol", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("SESSION CLOSE PROTOCOL");
+				expect(output).toContain("ml learn");
+				expect(output).toContain("ml record");
+				expect(output).toContain("ml sync");
+			} finally {
+				logSpy.mockRestore();
+			}
 		});
 	});
 });
