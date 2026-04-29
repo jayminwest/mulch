@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Global `--format <markdown|compact|xml|plain>` flag that routes record-rendering commands (`ml prime`, `ml query`, `ml search`) through the selected formatter. `xml` is Claude-optimized, `plain` is Codex-optimized, `compact` emits one-liners (the default for `ml prime`), `markdown` emits the full sectioned layout. Per-command `--format` (including `ml query --format ids` and `ml search --format ids`) still wins over the global flag. `ml prime --compact` and `ml prime --full` are kept as aliases for `--format compact` and `--format markdown` respectively.
+- `ml query --format xml|plain` and `ml search --format xml|plain` — the four formatters are now reachable from any record-rendering command, not just `ml prime`.
+- `ml search <query>` now applies a confirmation-frequency boost to BM25 scores by default: records with successful outcomes float above unconfirmed records at the same relevance. Boost factor is `1 + 0.1 * confirmation_score` per record (records with no outcomes are unaffected). Activates the previously-unused `applyConfirmationBoost` helper.
+- Optional `search.boost_factor` knob in `.mulch/mulch.config.yaml` to tune or disable the boost (`0` = pure BM25)
+- `ml search --no-boost` flag as a per-call escape hatch back to pure BM25 ordering. `--sort-by-score` is unchanged and continues to work as a confirmation-only post-sort.
 - `ml prime --manifest` emits a quick reference + per-domain index (with per-record-type counts and governance status) instead of full records — designed for monolith projects where dumping every record across every domain wastes agent context
 - Optional `prime.default_mode` config knob in `.mulch/mulch.config.yaml`: set to `manifest` so plain `ml prime` (with no scoping args) emits the index by default; `ml prime <domain>` and `ml prime --files <path>` keep loading full records for the requested scope
 - `--full` flag forces full output even when config says `manifest`

@@ -429,7 +429,7 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	return lines.join("\n");
 }
 
-export type PrimeFormat = "markdown" | "xml" | "plain";
+export type PrimeFormat = "markdown" | "compact" | "xml" | "plain";
 
 // --- XML format (optimized for Claude) ---
 

@@ -7,7 +7,13 @@ import {
 	getFileModTime,
 	readExpertiseFile,
 } from "../utils/expertise.ts";
-import { formatDomainExpertise, formatDomainExpertiseCompact } from "../utils/format.ts";
+import {
+	formatDomainExpertise,
+	formatDomainExpertiseCompact,
+	formatDomainExpertisePlain,
+	formatDomainExpertiseXml,
+	type PrimeFormat,
+} from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { type ScoredRecord, sortByConfirmationScore } from "../utils/scoring.ts";
 
@@ -34,9 +40,13 @@ export function registerQueryCommand(program: Command): void {
 		.option("--sort-by-score", "sort results by confirmation-frequency score (highest first)")
 		.option("--all", "show all domains")
 		.addOption(
-			new Option("--format <format>", "output format for records")
-				.choices(["markdown", "compact", "ids"])
-				.default("markdown"),
+			new Option("--format <format>", "output format for records").choices([
+				"markdown",
+				"compact",
+				"xml",
+				"plain",
+				"ids",
+			]),
 		)
 		.action(async (domain: string | undefined, options: Record<string, unknown>) => {
 			const jsonMode = program.opts().json === true;
@@ -110,7 +120,11 @@ export function registerQueryCommand(program: Command): void {
 					}
 					outputJson({ success: true, command: "query", domains: result });
 				} else {
-					const fmt = (options.format as string) ?? "markdown";
+					const globalFormat = program.opts().format as PrimeFormat | undefined;
+					const fmt =
+						(options.format as string | undefined) ??
+						(globalFormat as string | undefined) ??
+						"markdown";
 					if (fmt === "ids") {
 						const ids: string[] = [];
 						for (const d of domainsToQuery) {
@@ -163,10 +177,19 @@ export function registerQueryCommand(program: Command): void {
 							if (options.sortByScore) {
 								records = sortByConfirmationScore(records as ScoredRecord[]);
 							}
-							if (fmt === "compact") {
-								sections.push(formatDomainExpertiseCompact(d, records, lastUpdated));
-							} else {
-								sections.push(formatDomainExpertise(d, records, lastUpdated));
+							switch (fmt) {
+								case "compact":
+									sections.push(formatDomainExpertiseCompact(d, records, lastUpdated));
+									break;
+								case "xml":
+									sections.push(formatDomainExpertiseXml(d, records, lastUpdated));
+									break;
+								case "plain":
+									sections.push(formatDomainExpertisePlain(d, records, lastUpdated));
+									break;
+								default:
+									sections.push(formatDomainExpertise(d, records, lastUpdated));
+									break;
 							}
 						}
 						console.log(sections.join("\n\n"));

@@ -1215,5 +1215,127 @@ describe("query command", () => {
 				logSpy.mockRestore();
 			}
 		});
+
+		it("--format xml outputs XML with domain tag", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+			await appendRecord(filePath, {
+				type: "convention",
+				content: "XML format test",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "xml"]);
+
+				const output = logSpy.mock.calls[0]?.[0];
+				expect(output).toContain('<domain name="testing"');
+				expect(output).toContain("XML format test");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--format plain outputs plain-text format", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+			await appendRecord(filePath, {
+				type: "convention",
+				content: "Plain format test",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "query", "testing", "--format", "plain"]);
+
+				const output = logSpy.mock.calls[0]?.[0];
+				expect(output).toContain("[testing]");
+				expect(output).toContain("Conventions:");
+				expect(output).not.toContain("##");
+				expect(output).not.toContain("<domain");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("global --format flag (on program) is honored when per-command flag absent", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+			await appendRecord(filePath, {
+				type: "convention",
+				content: "Global format test",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = new Command();
+				program
+					.name("mulch")
+					.option("--json", "output as structured JSON")
+					.option("--format <format>", "global format")
+					.exitOverride();
+				registerQueryCommand(program);
+				await program.parseAsync(["node", "mulch", "--format", "xml", "query", "testing"]);
+
+				const output = logSpy.mock.calls[0]?.[0];
+				expect(output).toContain('<domain name="testing"');
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("per-command --format takes precedence over global --format", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			const filePath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(filePath);
+			await appendRecord(filePath, {
+				type: "convention",
+				content: "Precedence test",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = new Command();
+				program
+					.name("mulch")
+					.option("--json", "output as structured JSON")
+					.option("--format <format>", "global format")
+					.exitOverride();
+				registerQueryCommand(program);
+				await program.parseAsync([
+					"node",
+					"mulch",
+					"--format",
+					"xml",
+					"query",
+					"testing",
+					"--format",
+					"compact",
+				]);
+
+				const output = logSpy.mock.calls[0]?.[0];
+				expect(output).toContain("[convention]");
+				expect(output).not.toContain("<domain");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
 	});
 });

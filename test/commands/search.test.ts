@@ -1007,5 +1007,55 @@ describe("search command", () => {
 				logSpy.mockRestore();
 			}
 		});
+
+		it("--format xml outputs XML with domain tag", async () => {
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "search", "WAL", "--format", "xml"]);
+
+				const output = logSpy.mock.calls[0]?.[0];
+				expect(output).toContain('<domain name="database"');
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--format plain outputs plain-text format", async () => {
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "search", "WAL", "--format", "plain"]);
+
+				const output = logSpy.mock.calls[0]?.[0];
+				expect(output).toContain("[database]");
+				expect(output).not.toContain("##");
+				expect(output).not.toContain("<domain");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("global --format flag (on program) is honored when per-command flag absent", async () => {
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = new Command();
+				program
+					.name("mulch")
+					.option("--json", "output as structured JSON")
+					.option("--format <format>", "global format")
+					.exitOverride();
+				registerSearchCommand(program);
+				await program.parseAsync(["node", "mulch", "--format", "xml", "search", "WAL"]);
+
+				const output = logSpy.mock.calls[0]?.[0];
+				expect(output).toContain('<domain name="database"');
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
 	});
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import chalk from "chalk";
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { registerAddCommand } from "./commands/add.ts";
 import { registerCompactCommand } from "./commands/compact.ts";
 import { registerCompletionsCommand } from "./commands/completions.ts";
@@ -69,6 +69,12 @@ program
 	.option("-q, --quiet", "Suppress non-error output")
 	.option("--verbose", "Show full details in output")
 	.option("--timing", "Print execution time to stderr")
+	.addOption(
+		new Option(
+			"--format <format>",
+			"output format for record-rendering commands (prime, query, search)",
+		).choices(["markdown", "compact", "xml", "plain"]),
+	)
 	.configureHelp({
 		formatHelp(cmd, helper): string {
 			const lines: string[] = [];

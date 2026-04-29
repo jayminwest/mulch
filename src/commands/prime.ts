@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { type Command, Option } from "commander";
+import type { Command } from "commander";
 import type { DomainRecords } from "../utils/budget.ts";
 import { applyBudget, DEFAULT_BUDGET, formatBudgetSummary } from "../utils/budget.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
@@ -28,7 +28,6 @@ interface PrimeOptions {
 	full?: boolean;
 	compact?: boolean;
 	manifest?: boolean;
-	format?: PrimeFormat;
 	export?: string;
 	domain?: string[];
 	excludeDomain?: string[];
@@ -36,6 +35,16 @@ interface PrimeOptions {
 	files?: string[];
 	budget?: string;
 	noLimit?: boolean;
+}
+
+function resolvePrimeFormat(
+	options: PrimeOptions,
+	globalFormat: PrimeFormat | undefined,
+): PrimeFormat {
+	if (globalFormat) return globalFormat;
+	if (options.full) return "markdown";
+	if (options.compact) return "compact";
+	return "compact";
 }
 
 /**
@@ -71,16 +80,11 @@ export function registerPrimeCommand(program: Command): void {
 		.command("prime")
 		.description("Generate a priming prompt from expertise records")
 		.argument("[domains...]", "optional domain(s) to scope output to")
-		.option("--compact", "condensed quick-reference output (default)")
-		.option("--full", "include full record details (classification, evidence)")
+		.option("--compact", "alias for --format compact")
+		.option("--full", "alias for --format markdown (full record details)")
 		.option("--manifest", "emit a domain index instead of full records (for monolith projects)")
 		.option("--domain <domains...>", "domain(s) to include")
 		.option("--exclude-domain <domains...>", "domain(s) to exclude")
-		.addOption(
-			new Option("--format <format>", "output format")
-				.choices(["markdown", "xml", "plain"])
-				.default("markdown"),
-		)
 		.option("--context", "filter records to only those relevant to changed files")
 		.option("--files <paths...>", "filter records to only those relevant to specified files")
 		.option("--export <path>", "export output to a file")
@@ -92,7 +96,7 @@ export function registerPrimeCommand(program: Command): void {
 			const verbose = globalOpts.verbose === true;
 			try {
 				const config = await readConfig();
-				const format = options.format ?? "markdown";
+				const format = resolvePrimeFormat(options, globalOpts.format as PrimeFormat | undefined);
 
 				if (options.manifest && options.full) {
 					const msg = "Cannot combine --manifest with --full.";
@@ -288,41 +292,39 @@ export function registerPrimeCommand(program: Command): void {
 					for (const { domain, records } of domainRecordsToFormat) {
 						const lastUpdated = modTimes.get(domain) ?? null;
 
-						if (verbose || options.full || format !== "markdown") {
-							switch (format) {
-								case "xml":
-									domainSections.push(formatDomainExpertiseXml(domain, records, lastUpdated));
-									break;
-								case "plain":
-									domainSections.push(formatDomainExpertisePlain(domain, records, lastUpdated));
-									break;
-								default:
-									domainSections.push(
-										formatDomainExpertise(domain, records, lastUpdated, {
-											full: options.full,
-										}),
-									);
-									break;
-							}
-						} else {
-							domainSections.push(formatDomainExpertiseCompact(domain, records, lastUpdated));
+						switch (format) {
+							case "xml":
+								domainSections.push(formatDomainExpertiseXml(domain, records, lastUpdated));
+								break;
+							case "plain":
+								domainSections.push(formatDomainExpertisePlain(domain, records, lastUpdated));
+								break;
+							case "compact":
+								domainSections.push(formatDomainExpertiseCompact(domain, records, lastUpdated));
+								break;
+							default:
+								domainSections.push(
+									formatDomainExpertise(domain, records, lastUpdated, {
+										full: options.full || verbose,
+									}),
+								);
+								break;
 						}
 					}
 
-					if (verbose || options.full || format !== "markdown") {
-						switch (format) {
-							case "xml":
-								output = formatPrimeOutputXml(domainSections);
-								break;
-							case "plain":
-								output = formatPrimeOutputPlain(domainSections);
-								break;
-							default:
-								output = formatPrimeOutput(domainSections);
-								break;
-						}
-					} else {
-						output = formatPrimeOutputCompact(domainSections);
+					switch (format) {
+						case "xml":
+							output = formatPrimeOutputXml(domainSections);
+							break;
+						case "plain":
+							output = formatPrimeOutputPlain(domainSections);
+							break;
+						case "compact":
+							output = formatPrimeOutputCompact(domainSections);
+							break;
+						default:
+							output = formatPrimeOutput(domainSections);
+							break;
 					}
 
 					// Append truncation summary before session reminder

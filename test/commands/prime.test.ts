@@ -2497,4 +2497,147 @@ describe("prime command", () => {
 			}
 		});
 	});
+
+	describe("global --format flag", () => {
+		let originalCwd: string;
+
+		beforeEach(() => {
+			originalCwd = process.cwd();
+		});
+
+		afterEach(() => {
+			process.chdir(originalCwd);
+			process.exitCode = 0;
+		});
+
+		function makeProgram(): Command {
+			const program = new Command();
+			program
+				.name("mulch")
+				.option("--json", "output as structured JSON")
+				.option("--format <format>", "global format")
+				.exitOverride();
+			registerPrimeCommand(program);
+			return program;
+		}
+
+		async function seed(): Promise<void> {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+			const cliPath = getExpertisePath("cli", tmpDir);
+			await createExpertiseFile(cliPath);
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Use bun",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+		}
+
+		it("--format markdown emits full markdown layout", async () => {
+			await seed();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--format", "markdown", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("### Conventions");
+				expect(output).toContain("Use bun");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--format compact emits compact one-liner output (default behavior)", async () => {
+			await seed();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--format", "compact", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("[convention] Use bun");
+				expect(output).not.toContain("### Conventions");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--format xml emits XML expertise tree", async () => {
+			await seed();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--format", "xml", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("<expertise>");
+				expect(output).toContain('<domain name="cli"');
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--format plain emits plain-text output", async () => {
+			await seed();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--format", "plain", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise (via Mulch)");
+				expect(output).toContain("[cli]");
+				expect(output).not.toContain("<expertise>");
+				expect(output).not.toContain("###");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--compact (legacy alias) maps to --format compact", async () => {
+			await seed();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--compact"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("[convention] Use bun");
+				expect(output).not.toContain("### Conventions");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--full (legacy alias) maps to --format markdown", async () => {
+			await seed();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("### Conventions");
+				expect(output).toContain("Use bun");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("global --format wins over --full alias", async () => {
+			await seed();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--format", "xml", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("<expertise>");
+				expect(output).not.toContain("### Conventions");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+	});
 });

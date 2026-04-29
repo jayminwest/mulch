@@ -66,7 +66,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml delete <domain> [id]` | Delete records by ID, `--records <ids>`, or `--all-except <ids>` (`--dry-run`) |
 | `ml delete-domain <domain>` | Remove a domain from config and delete its expertise JSONL file (`--yes`, `--dry-run`) |
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
-| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--format`, `--export`) |
+| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--format`) |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
@@ -82,6 +82,18 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml upgrade` | Upgrade mulch to the latest version (`--check` for dry run) |
 | `ml learn` | Show changed files and suggest domains for recording learnings |
 | `ml completions <shell>` | Output shell completion script (bash, zsh, fish) |
+
+### Global Output Format
+
+All record-rendering commands (`ml prime`, `ml query`, `ml search`) accept a global `--format <markdown|compact|xml|plain>` flag that selects the output formatter. `xml` is Claude-optimized; `plain` is Codex-optimized; `compact` emits one-liner records (default for `ml prime`); `markdown` emits the full, sectioned layout. Per-command `--format` flags (e.g. `ml query --format ids`) take precedence over the global flag.
+
+```bash
+ml --format xml prime testing      # XML expertise tree (Claude-friendly)
+ml --format plain prime testing    # plain text (Codex-friendly)
+ml --format compact query testing  # compact one-liners
+ml prime --full                    # alias for --format markdown
+ml prime --compact                 # alias for --format compact
+```
 
 ## Architecture
 
