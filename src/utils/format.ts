@@ -1,5 +1,5 @@
 import { getRegistry } from "../registry/type-registry.ts";
-import type { ExpertiseRecord, RecordType } from "../schemas/record.ts";
+import type { BuiltinRecordType, ExpertiseRecord } from "../schemas/record.ts";
 import { formatLinks, formatTimeAgo, xmlAttrEscape, xmlEscape } from "./format-helpers.ts";
 
 export { formatTimeAgo };
@@ -509,7 +509,7 @@ export interface ManifestDomain {
 	domain: string;
 	count: number;
 	lastUpdated: Date | null;
-	typeCounts: Partial<Record<RecordType, number>>;
+	typeCounts: Record<string, number>;
 }
 
 export interface ManifestGovernance {
@@ -542,7 +542,7 @@ function manifestStatusSuffix(count: number, governance: ManifestGovernance): st
 	return "";
 }
 
-const TYPE_COUNT_ORDER: RecordType[] = [
+const TYPE_COUNT_ORDER: BuiltinRecordType[] = [
 	"pattern",
 	"convention",
 	"failure",
@@ -555,10 +555,17 @@ function pluralize(n: number, singular: string): string {
 	return n === 1 ? singular : `${singular}s`;
 }
 
-function formatTypeCounts(typeCounts: Partial<Record<RecordType, number>>): string {
+function formatTypeCounts(typeCounts: Record<string, number>): string {
 	const parts: string[] = [];
+	const seen = new Set<string>();
+	// Built-ins in canonical order first, then any custom-type counts (Phase 2).
 	for (const t of TYPE_COUNT_ORDER) {
 		const n = typeCounts[t];
+		if (n && n > 0) parts.push(`${n} ${pluralize(n, t)}`);
+		seen.add(t);
+	}
+	for (const [t, n] of Object.entries(typeCounts)) {
+		if (seen.has(t)) continue;
 		if (n && n > 0) parts.push(`${n} ${pluralize(n, t)}`);
 	}
 	return parts.join(", ");
@@ -689,7 +696,7 @@ export interface ManifestPayload {
 		domain: string;
 		count: number;
 		lastUpdated: string | null;
-		type_counts: Partial<Record<RecordType, number>>;
+		type_counts: Record<string, number>;
 		health: {
 			status: "ok" | "approaching_limit" | "over_warn_threshold" | "over_hard_limit";
 			max_entries: number;
@@ -731,8 +738,8 @@ export function buildManifestPayload(
 	};
 }
 
-export function computeTypeCounts(records: ExpertiseRecord[]): Partial<Record<RecordType, number>> {
-	const counts: Partial<Record<RecordType, number>> = {};
+export function computeTypeCounts(records: ExpertiseRecord[]): Record<string, number> {
+	const counts: Record<string, number> = {};
 	for (const r of records) {
 		counts[r.type] = (counts[r.type] ?? 0) + 1;
 	}

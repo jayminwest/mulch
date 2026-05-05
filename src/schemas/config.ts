@@ -2,6 +2,20 @@ export type PrimeMode = "manifest" | "full";
 
 export const DEFAULT_SEARCH_BOOST_FACTOR = 0.1;
 
+export type CustomCompactStrategy = "concat" | "merge_outcomes" | "keep_latest" | "manual";
+
+export interface CustomTypeConfig {
+	required: string[];
+	optional?: string[];
+	dedup_key: string;
+	id_key?: string;
+	summary: string;
+	extracts_files?: boolean;
+	files_field?: string;
+	compact?: CustomCompactStrategy;
+	section_title?: string;
+}
+
 export interface MulchConfig {
 	version: string;
 	domains: string[];
@@ -23,6 +37,7 @@ export interface MulchConfig {
 		// Multiplier applied to BM25 scores via applyConfirmationBoost. 0 disables.
 		boost_factor: number;
 	};
+	custom_types?: Record<string, CustomTypeConfig>;
 }
 
 export const DEFAULT_CONFIG: MulchConfig = {

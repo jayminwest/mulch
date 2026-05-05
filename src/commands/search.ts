@@ -1,4 +1,5 @@
 import { type Command, Option } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
 import { DEFAULT_SEARCH_BOOST_FACTOR } from "../schemas/config.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
@@ -25,16 +26,7 @@ export function registerSearchCommand(program: Command): void {
 		.argument("[query]", "search string (case-insensitive substring match)")
 		.description("Search expertise records across domains")
 		.option("--domain <domain>", "limit search to a specific domain")
-		.addOption(
-			new Option("--type <type>", "filter by record type").choices([
-				"convention",
-				"pattern",
-				"failure",
-				"decision",
-				"reference",
-				"guide",
-			]),
-		)
+		.addOption(new Option("--type <type>", "filter by record type").choices(getRegistry().names()))
 		.option("--tag <tag>", "filter by tag")
 		.addOption(
 			new Option("--classification <classification>", "filter by classification").choices([

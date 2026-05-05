@@ -1,4 +1,15 @@
-export type RecordType = "convention" | "pattern" | "failure" | "decision" | "reference" | "guide";
+export type BuiltinRecordType =
+	| "convention"
+	| "pattern"
+	| "failure"
+	| "decision"
+	| "reference"
+	| "guide";
+
+// Phase 2: widened to string so config-declared custom types are first-class.
+// Use `BuiltinRecordType` for narrowing back to the six known shapes (e.g.,
+// `registry.get(r.type)?.kind === "builtin"` then cast to a builtin record).
+export type RecordType = string;
 
 export type Classification = "foundational" | "tactical" | "observational";
 

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
 import { getExpertisePath, getMulchDir, readConfig } from "../utils/config.ts";
 import { readExpertiseFile } from "../utils/expertise.ts";
 import { getChangedFiles, isGitRepo } from "../utils/git.ts";
@@ -23,13 +24,17 @@ export async function matchFilesToDomains(
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath);
 
-		// Collect all file paths from pattern and reference records
+		// Collect all file paths from records whose type extracts files
+		// (built-in pattern/reference, plus any custom types with extracts_files: true).
+		const registry = getRegistry();
 		const domainFiles = new Set<string>();
 		for (const record of records) {
-			if ((record.type === "pattern" || record.type === "reference") && record.files) {
-				for (const f of record.files) {
-					domainFiles.add(f);
-				}
+			const def = registry.get(record.type);
+			if (!def?.extractsFiles) continue;
+			const files = (record as unknown as Record<string, unknown>)[def.filesField];
+			if (!Array.isArray(files)) continue;
+			for (const f of files) {
+				if (typeof f === "string") domainFiles.add(f);
 			}
 		}
 

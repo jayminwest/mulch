@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
 import chalk from "chalk";
 import type { Command } from "commander";
-import { getRegistry } from "../registry/type-registry.ts";
+import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
 import type { ExpertiseRecord, RecordType } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
@@ -25,6 +25,18 @@ interface CompactCandidate {
 	}>;
 }
 
+// For merge_outcomes types, finer grouping by idKey collapses true duplicates
+// (same statement / same canonical key, differing outcomes). Other strategies
+// group by type only — built-ins behave as before.
+function groupingKeyFor(record: ExpertiseRecord): string {
+	const def = getRegistry().get(record.type);
+	if (def?.compact === "merge_outcomes") {
+		const v = (record as unknown as Record<string, unknown>)[def.idKey];
+		return `${record.type}::${String(v ?? "")}`;
+	}
+	return record.type;
+}
+
 function findCandidates(
 	domain: string,
 	records: ExpertiseRecord[],
@@ -32,18 +44,21 @@ function findCandidates(
 	shelfLife: { tactical: number; observational: number },
 	minGroupSize = 3,
 ): CompactCandidate[] {
-	// Group records by type
-	const byType = new Map<RecordType, ExpertiseRecord[]>();
+	// Group records by type (or by type+idKey for merge_outcomes types)
+	const byKey = new Map<string, { type: RecordType; records: ExpertiseRecord[] }>();
 	for (const r of records) {
-		if (!byType.has(r.type)) {
-			byType.set(r.type, []);
+		const key = groupingKeyFor(r);
+		const slot = byKey.get(key);
+		if (slot) {
+			slot.records.push(r);
+		} else {
+			byKey.set(key, { type: r.type, records: [r] });
 		}
-		byType.get(r.type)?.push(r);
 	}
 
 	const candidates: CompactCandidate[] = [];
 
-	for (const [type, group] of byType) {
+	for (const { type, records: group } of byKey.values()) {
 		if (group.length < 2) continue;
 
 		// Include groups where at least one record is stale or the group is large enough
@@ -472,143 +487,128 @@ export function mergeRecords(records: ExpertiseRecord[]): ExpertiseRecord {
 	if (!first) {
 		throw new Error("Cannot merge empty record list");
 	}
-	const type = first.type;
-	const recordedAt = new Date().toISOString();
-	const supersedes = records.map((r) => r.id).filter(Boolean) as string[];
 
-	// Merge tags (unique union)
-	const allTags = records.flatMap((r) => r.tags ?? []);
-	const tags = allTags.length > 0 ? Array.from(new Set(allTags)) : undefined;
-
-	// Merge files (for pattern/reference types)
-	const allFiles = records.flatMap((r) => ("files" in r ? (r.files ?? []) : []));
-	const files = allFiles.length > 0 ? Array.from(new Set(allFiles)) : undefined;
+	const def = getRegistry().get(first.type);
+	if (!def) {
+		throw new Error(`Unknown record type: ${first.type}`);
+	}
 
 	let result: ExpertiseRecord;
-
-	switch (type) {
-		case "convention": {
-			const contents = records.map((r) => (r as { content: string }).content);
-			const content = contents.join("\n\n");
-			result = {
-				type: "convention",
-				content,
-				classification: "foundational",
-				recorded_at: recordedAt,
-				supersedes,
-			};
-			if (tags) result.tags = tags;
+	switch (def.compact) {
+		case "concat":
+			result = compactConcat(records, def);
 			break;
-		}
-
-		case "pattern": {
-			const patterns = records as Array<{ name: string; description: string }>;
-			const name = patterns.reduce(
-				(longest, p) => (p.name.length > longest.length ? p.name : longest),
-				patterns[0]?.name ?? "",
+		case "keep_latest":
+			result = compactKeepLatest(records, def);
+			break;
+		case "merge_outcomes":
+			result = compactMergeOutcomes(records, def);
+			break;
+		case "manual":
+			throw new Error(
+				`Type "${def.name}" has compact strategy "manual" — use \`mulch compact --apply\` to compact manually.`,
 			);
-			const description = patterns.map((p) => p.description).join("\n\n");
-			result = {
-				type: "pattern",
-				name,
-				description,
-				classification: "foundational",
-				recorded_at: recordedAt,
-				supersedes,
-			};
-			if (tags) result.tags = tags;
-			if (files) result.files = files;
-			break;
-		}
-
-		case "failure": {
-			const failures = records as Array<{
-				description: string;
-				resolution: string;
-			}>;
-			const description = failures.map((f) => f.description).join("\n\n");
-			const resolution = failures.map((f) => f.resolution).join("\n\n");
-			result = {
-				type: "failure",
-				description,
-				resolution,
-				classification: "foundational",
-				recorded_at: recordedAt,
-				supersedes,
-			};
-			if (tags) result.tags = tags;
-			break;
-		}
-
-		case "decision": {
-			const decisions = records as Array<{ title: string; rationale: string }>;
-			const title = decisions.reduce(
-				(longest, d) => (d.title.length > longest.length ? d.title : longest),
-				decisions[0]?.title ?? "",
-			);
-			const rationale = decisions.map((d) => d.rationale).join("\n\n");
-			result = {
-				type: "decision",
-				title,
-				rationale,
-				classification: "foundational",
-				recorded_at: recordedAt,
-				supersedes,
-			};
-			if (tags) result.tags = tags;
-			break;
-		}
-
-		case "reference": {
-			const references = records as Array<{
-				name: string;
-				description: string;
-			}>;
-			const name = references.reduce(
-				(longest, r) => (r.name.length > longest.length ? r.name : longest),
-				references[0]?.name ?? "",
-			);
-			const description = references.map((r) => r.description).join("\n\n");
-			result = {
-				type: "reference",
-				name,
-				description,
-				classification: "foundational",
-				recorded_at: recordedAt,
-				supersedes,
-			};
-			if (tags) result.tags = tags;
-			if (files) result.files = files;
-			break;
-		}
-
-		case "guide": {
-			const guides = records as Array<{ name: string; description: string }>;
-			const name = guides.reduce(
-				(longest, g) => (g.name.length > longest.length ? g.name : longest),
-				guides[0]?.name ?? "",
-			);
-			const description = guides.map((g) => g.description).join("\n\n");
-			result = {
-				type: "guide",
-				name,
-				description,
-				classification: "foundational",
-				recorded_at: recordedAt,
-				supersedes,
-			};
-			if (tags) result.tags = tags;
-			break;
-		}
-
-		default: {
-			throw new Error(`Unknown record type: ${type}`);
-		}
 	}
 
 	// Generate ID for the merged record
 	result.id = generateRecordId(result);
 	return result;
+}
+
+function commonMergeBase(
+	records: ExpertiseRecord[],
+	def: TypeDefinition,
+): {
+	supersedes: string[];
+	tags: string[] | undefined;
+	files: string[] | undefined;
+} {
+	const supersedes = records.map((r) => r.id).filter(Boolean) as string[];
+	const allTags = records.flatMap((r) => r.tags ?? []);
+	const tags = allTags.length > 0 ? Array.from(new Set(allTags)) : undefined;
+	let files: string[] | undefined;
+	if (def.extractsFiles) {
+		const all = records.flatMap((r) => {
+			const v = (r as unknown as Record<string, unknown>)[def.filesField];
+			return Array.isArray(v) ? (v as string[]) : [];
+		});
+		files = all.length > 0 ? Array.from(new Set(all)) : undefined;
+	}
+	return { supersedes, tags, files };
+}
+
+// "Label-like" required fields that take the longest value during concat
+// instead of being joined. Matches the historical built-in mergeRecords
+// behavior (pattern.name, decision.title, etc.). Custom types using these
+// field names get the same treatment, which is the expected ergonomic.
+const LONGEST_PICK_FIELDS = new Set(["name", "title"]);
+
+function compactConcat(records: ExpertiseRecord[], def: TypeDefinition): ExpertiseRecord {
+	const base = commonMergeBase(records, def);
+	const out: Record<string, unknown> = {
+		type: def.name,
+		classification: "foundational",
+		recorded_at: new Date().toISOString(),
+		supersedes: base.supersedes,
+	};
+	if (base.tags) out.tags = base.tags;
+	if (def.extractsFiles && base.files) out[def.filesField] = base.files;
+
+	for (const field of def.required) {
+		const values = records
+			.map((r) => (r as unknown as Record<string, unknown>)[field])
+			.filter((v): v is string => typeof v === "string");
+		if (LONGEST_PICK_FIELDS.has(field)) {
+			out[field] = values.reduce(
+				(longest, v) => (v.length > longest.length ? v : longest),
+				values[0] ?? "",
+			);
+		} else {
+			out[field] = values.join("\n\n");
+		}
+	}
+	return out as unknown as ExpertiseRecord;
+}
+
+function compactKeepLatest(records: ExpertiseRecord[], def: TypeDefinition): ExpertiseRecord {
+	const base = commonMergeBase(records, def);
+	const sorted = [...records].sort(
+		(a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime(),
+	);
+	const latest = sorted[0];
+	if (!latest) throw new Error("Cannot compact empty record list");
+	const merged: Record<string, unknown> = { ...(latest as unknown as Record<string, unknown>) };
+	merged.classification = "foundational";
+	merged.recorded_at = new Date().toISOString();
+	merged.supersedes = base.supersedes;
+	if (base.tags) merged.tags = base.tags;
+	else delete merged.tags;
+	if (def.extractsFiles && base.files) merged[def.filesField] = base.files;
+	delete merged.id;
+	return merged as unknown as ExpertiseRecord;
+}
+
+function compactMergeOutcomes(records: ExpertiseRecord[], def: TypeDefinition): ExpertiseRecord {
+	const base = commonMergeBase(records, def);
+	// Combine outcomes from every input record.
+	const allOutcomes = records.flatMap((r) => r.outcomes ?? []);
+
+	// Take the latest record as the canonical shape, then merge outcomes.
+	const sorted = [...records].sort(
+		(a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime(),
+	);
+	const latest = sorted[0];
+	if (!latest) throw new Error("Cannot compact empty record list");
+	const merged: Record<string, unknown> = { ...(latest as unknown as Record<string, unknown>) };
+	merged.classification = "foundational";
+	merged.recorded_at = new Date().toISOString();
+	merged.supersedes = base.supersedes;
+	if (base.tags) merged.tags = base.tags;
+	else delete merged.tags;
+	if (def.extractsFiles && base.files) merged[def.filesField] = base.files;
+	if (allOutcomes.length > 0) merged.outcomes = allOutcomes;
+	delete merged.id;
+	return merged as unknown as ExpertiseRecord;
 }
 
 async function handleApply(

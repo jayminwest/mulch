@@ -1,10 +1,11 @@
-import type { Classification, ExpertiseRecord, RecordType } from "../schemas/record.ts";
+import type { BuiltinRecordType, Classification, ExpertiseRecord } from "../schemas/record.ts";
 import { computeConfirmationScore, type ScoredRecord } from "./scoring.ts";
 
 export const DEFAULT_BUDGET = 4000;
 
-/** Priority order for record types (lower index = higher priority) */
-const TYPE_PRIORITY: RecordType[] = [
+// Priority order for built-in types only. Custom types (Phase 2) sort after
+// built-ins (indexOf returns -1, which sorts ahead — so use length when missing).
+const TYPE_PRIORITY: BuiltinRecordType[] = [
 	"convention",
 	"decision",
 	"pattern",
@@ -35,7 +36,9 @@ export interface BudgetResult {
  * (higher score = higher priority), then recency (newest first).
  */
 function recordSortKey(r: ScoredRecord): [number, number, number, number] {
-	const typeIdx = TYPE_PRIORITY.indexOf(r.type);
+	const builtinIdx = TYPE_PRIORITY.indexOf(r.type as BuiltinRecordType);
+	// Custom types (-1 from indexOf) sort after all built-ins.
+	const typeIdx = builtinIdx === -1 ? TYPE_PRIORITY.length : builtinIdx;
 	const classIdx = CLASSIFICATION_PRIORITY.indexOf(r.classification);
 	const confirmationScore = computeConfirmationScore(r);
 	const time = r.recorded_at ? new Date(r.recorded_at).getTime() : 0;

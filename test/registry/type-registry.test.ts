@@ -48,7 +48,7 @@ describe("TypeRegistry", () => {
 			required: ["content"],
 			dedupKey: "content",
 			idKey: "content",
-			compact: "keep_latest",
+			compact: "concat",
 			extractsFiles: false,
 		});
 		expect(reg.get("pattern")).toMatchObject({

@@ -1,6 +1,7 @@
 export type { MulchConfig } from "./config.ts";
 export { DEFAULT_CONFIG } from "./config.ts";
 export type {
+	BuiltinRecordType,
 	Classification,
 	ConventionRecord,
 	DecisionRecord,

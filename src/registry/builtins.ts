@@ -80,7 +80,7 @@ const conventionDef: TypeDefinition = {
 	summary: (r) => truncate((r as ConventionRecord).content, 60),
 	extractsFiles: false,
 	filesField: "files",
-	compact: "keep_latest",
+	compact: "concat",
 	sectionTitle: "Conventions",
 	ajvSchema: {
 		type: "object",
@@ -125,7 +125,7 @@ const patternDef: TypeDefinition = {
 	summary: (r) => (r as PatternRecord).name,
 	extractsFiles: true,
 	filesField: "files",
-	compact: "keep_latest",
+	compact: "concat",
 	sectionTitle: "Patterns",
 	ajvSchema: {
 		type: "object",
@@ -184,7 +184,7 @@ const failureDef: TypeDefinition = {
 	summary: (r) => truncate((r as FailureRecord).description, 60),
 	extractsFiles: false,
 	filesField: "files",
-	compact: "keep_latest",
+	compact: "concat",
 	sectionTitle: "Known Failures",
 	ajvSchema: {
 		type: "object",
@@ -234,7 +234,7 @@ const decisionDef: TypeDefinition = {
 	summary: (r) => (r as DecisionRecord).title,
 	extractsFiles: false,
 	filesField: "files",
-	compact: "keep_latest",
+	compact: "concat",
 	sectionTitle: "Decisions",
 	ajvSchema: {
 		type: "object",
@@ -284,7 +284,7 @@ const referenceDef: TypeDefinition = {
 	summary: (r) => (r as ReferenceRecord).name,
 	extractsFiles: true,
 	filesField: "files",
-	compact: "keep_latest",
+	compact: "concat",
 	sectionTitle: "References",
 	ajvSchema: {
 		type: "object",
@@ -344,7 +344,7 @@ const guideDef: TypeDefinition = {
 	summary: (r) => (r as GuideRecord).name,
 	extractsFiles: false,
 	filesField: "files",
-	compact: "keep_latest",
+	compact: "concat",
 	sectionTitle: "Guides",
 	ajvSchema: {
 		type: "object",
