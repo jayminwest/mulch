@@ -36,6 +36,26 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #   # rank higher. 0 disables (pure BM25). Default 0.1: a record with N successes
 #   # gets a (1 + 0.1*N) boost. Override per-call with \`ml search --no-boost\`.
 #   boost_factor: 0.1
+#
+# disabled_types:
+#   # Names of registered types (built-in or custom) that emit a deprecation
+#   # warning on write. Reads still succeed; the type stays in CLI choices so
+#   # peers in shared domains don't hard-fail. Use to retire a type gracefully.
+#   - failure
+#
+# custom_types:
+#   # Project-specific record types. Required + optional fields, dedup_key,
+#   # and a summary template. See README for the full schema.
+#   hypothesis:
+#     required: [statement, prediction]
+#     optional: [evidence_files]
+#     dedup_key: statement
+#     summary: "{{statement}}"
+#     # aliases: rename a field while still reading legacy on-disk records.
+#     # Map canonical (current) name → list of legacy names. At read time,
+#     # legacy fields are rewritten to canonical and dropped from the record.
+#     aliases:
+#       statement: [claim]
 `;
 
 export function buildInitialConfigYaml(): string {

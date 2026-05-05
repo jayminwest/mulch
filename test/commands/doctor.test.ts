@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,6 +13,8 @@ import {
 	writeConfig,
 } from "../../src/utils/config.ts";
 import { appendRecord, createExpertiseFile, readExpertiseFile } from "../../src/utils/expertise.ts";
+
+const cliPath = resolve(process.cwd(), "src/cli.ts");
 
 let tmpDir: string;
 
@@ -334,5 +337,100 @@ describe("file-anchors check", () => {
 		expect(evidenceFile).toBe("real-evidence.ts");
 		if (!evidenceFile) throw new Error("expected evidenceFile");
 		expect(existsSync(resolve(tmpDir, evidenceFile))).toBe(true);
+	});
+});
+
+describe("doctor — Phase 3 type registry + unknown-types checks", () => {
+	let phase3Dir: string;
+
+	beforeEach(async () => {
+		phase3Dir = await mkdtemp(join(tmpdir(), "mulch-doctor-p3-"));
+		await initMulchDir(phase3Dir);
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: ["cli"],
+				custom_types: {
+					hypothesis: {
+						required: ["statement"],
+						dedup_key: "statement",
+						summary: "{statement}",
+					},
+				},
+				disabled_types: ["failure"],
+			},
+			phase3Dir,
+		);
+
+		const filePath = getExpertisePath("cli", phase3Dir);
+		// Two convention records, one unknown-type record.
+		await writeFile(
+			filePath,
+			[
+				JSON.stringify({
+					type: "convention",
+					content: "a",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				}),
+				JSON.stringify({
+					type: "convention",
+					content: "b",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				}),
+				JSON.stringify({
+					type: "ghost",
+					id: "mx-ghost1",
+					content: "x",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				}),
+				"",
+			].join("\n"),
+			"utf-8",
+		);
+	});
+
+	afterEach(async () => {
+		await rm(phase3Dir, { recursive: true, force: true });
+	});
+
+	it("doctor --json reports the type-registry check with kind+count details", () => {
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: phase3Dir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const typeCheck = out.checks.find((c: { name: string }) => c.name === "type-registry") as {
+			status: string;
+			message: string;
+			details: string[];
+		};
+		expect(typeCheck).toBeDefined();
+		expect(typeCheck.status).toBe("pass");
+		expect(typeCheck.message).toMatch(/7 type\(s\) registered: 6 built-in, 1 custom, 1 disabled/);
+		expect(typeCheck.details).toContain("convention (built-in): 2 records");
+		expect(typeCheck.details).toContain("failure (built-in, disabled): 0 records");
+		expect(typeCheck.details).toContain("hypothesis (custom): 0 records");
+	});
+
+	it("doctor --json reports unknown-types as a failing check with offending id", () => {
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: phase3Dir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const unknown = out.checks.find((c: { name: string }) => c.name === "unknown-types") as {
+			status: string;
+			details: string[];
+		};
+		expect(unknown.status).toBe("fail");
+		expect(unknown.details.some((d) => d.includes("[mx-ghost1]") && d.includes('"ghost"'))).toBe(
+			true,
+		);
+		expect(out.summary.fail).toBeGreaterThanOrEqual(1);
 	});
 });

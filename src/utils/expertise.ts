@@ -1,11 +1,50 @@
 import { createHash, randomBytes } from "node:crypto";
 import { appendFile, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { getRegistry } from "../registry/type-registry.ts";
+import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
 import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
 import { DEFAULT_BM25_PARAMS, searchBM25 } from "./bm25.ts";
+import { isAllowUnknownTypes } from "./runtime-flags.ts";
 import { applyConfirmationBoost } from "./scoring.ts";
 
-export async function readExpertiseFile(filePath: string): Promise<ExpertiseRecord[]> {
+export interface ReadExpertiseFileOptions {
+	// When true, on-disk records whose type is not in the registry are passed
+	// through unchanged instead of throwing. Defaults to the process-wide
+	// runtime flag (set via --allow-unknown-types).
+	allowUnknownTypes?: boolean;
+}
+
+/**
+ * Rewrite legacy field names to their canonical names per a type's aliases map.
+ * Mutates and returns the input. Idempotent: re-running on a record without
+ * legacy fields is a no-op. If both canonical and legacy are present, the
+ * canonical wins and the legacy field is dropped.
+ */
+export function applyAliases(
+	raw: Record<string, unknown>,
+	aliases: Readonly<Record<string, readonly string[]>> | undefined,
+): Record<string, unknown> {
+	if (!aliases) return raw;
+	for (const [canonical, legacyNames] of Object.entries(aliases)) {
+		for (const legacy of legacyNames) {
+			if (!(legacy in raw)) continue;
+			if (
+				!(canonical in raw) ||
+				raw[canonical] === undefined ||
+				raw[canonical] === null ||
+				raw[canonical] === ""
+			) {
+				raw[canonical] = raw[legacy];
+			}
+			delete raw[legacy];
+		}
+	}
+	return raw;
+}
+
+export async function readExpertiseFile(
+	filePath: string,
+	opts?: ReadExpertiseFileOptions,
+): Promise<ExpertiseRecord[]> {
 	let content: string;
 	try {
 		content = await readFile(filePath, "utf-8");
@@ -13,9 +52,13 @@ export async function readExpertiseFile(filePath: string): Promise<ExpertiseReco
 		return [];
 	}
 
+	const allowUnknown = opts?.allowUnknownTypes ?? isAllowUnknownTypes();
+	const registry = getRegistry();
 	const records: ExpertiseRecord[] = [];
-	const lines = content.split("\n").filter((line) => line.trim().length > 0);
-	for (const line of lines) {
+	const allLines = content.split("\n");
+	for (let i = 0; i < allLines.length; i++) {
+		const line = allLines[i] ?? "";
+		if (line.trim().length === 0) continue;
 		const raw = JSON.parse(line) as Record<string, unknown>;
 		// Normalize legacy outcome (singular) to outcomes (array) for backward compat
 		if (
@@ -35,6 +78,20 @@ export async function readExpertiseFile(filePath: string): Promise<ExpertiseReco
 			];
 			raw.outcome = undefined;
 		}
+
+		const typeName = typeof raw.type === "string" ? raw.type : undefined;
+		let def: TypeDefinition | undefined;
+		if (typeName) def = registry.get(typeName);
+
+		if (typeName && !def && !allowUnknown) {
+			const idPart = typeof raw.id === "string" ? ` (id=${raw.id})` : "";
+			throw new Error(
+				`Unknown record type "${typeName}" at ${filePath}:${i + 1}${idPart}. Register it under custom_types in mulch.config.yaml, remove the record, or pass --allow-unknown-types to bypass.`,
+			);
+		}
+
+		if (def) applyAliases(raw, def.aliases);
+
 		records.push(raw as unknown as ExpertiseRecord);
 	}
 	return records;

@@ -24,9 +24,17 @@ Mulch is a passive CLI tool (`@os-eco/mulch-cli`) that manages structured expert
 
 ### Record Types & Classifications
 
-Six record types: `convention`, `pattern`, `failure`, `decision`, `reference`, `guide` — each with type-specific required fields defined in `src/schemas/record.ts`.
+Six built-in types: `convention`, `pattern`, `failure`, `decision`, `reference`, `guide` — each with type-specific required fields defined in `src/schemas/record.ts`. Projects can declare additional types under `custom_types:` in `mulch.config.yaml`; the registry layer (`src/registry/`) treats them identically (CLI flags, validation, dedup, formatters).
 
 Three classifications with shelf lives for pruning: `foundational` (permanent), `tactical` (14 days), `observational` (30 days).
+
+### Type Registry (Phase 3)
+
+- `disabled_types: [name]` in config — emits a deprecation warning on write but keeps reads/CLI choices working. Cross-project safe.
+- `aliases: { canonical: [legacy_names] }` per custom type — legacy field names on disk are rewritten to canonical at read time.
+- Unknown-type policy: `readExpertiseFile` throws a targeted error (`Unknown record type "X" at <file>:<line> (id=<id>)`) when a record's type isn't registered. Pass `{ allowUnknownTypes: true }` to opt out. The `--allow-unknown-types` global CLI flag wires the same opt-out via `src/utils/runtime-flags.ts`.
+- `ml sync` calls `initRegistryFromConfig(cwd)` before validating so worktree/CI lag (JSONL lands via `merge=union` before config does) reconciles automatically once config catches up — sync intentionally ignores `--allow-unknown-types`.
+- `ml doctor` adds a `type-registry` informational check (built-in vs custom, per-type counts, disabled marker) and an `unknown-types` failing check.
 
 ### Command Pattern
 

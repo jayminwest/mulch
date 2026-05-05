@@ -109,6 +109,49 @@ export function validateCustomTypeConfig(name: string, cfg: CustomTypeConfig): v
 			`Custom type "${name}" files_field "${cfg.files_field}" must be declared in required/optional when extracts_files: true.`,
 		);
 	}
+	if (cfg.aliases !== undefined) {
+		if (typeof cfg.aliases !== "object" || cfg.aliases === null || Array.isArray(cfg.aliases)) {
+			throw new Error(
+				`Custom type "${name}" aliases must be a map of canonical field name → legacy alias names.`,
+			);
+		}
+		const seenAliases = new Set<string>();
+		for (const [canonical, legacyNames] of Object.entries(cfg.aliases)) {
+			if (!seen.has(canonical)) {
+				throw new Error(
+					`Custom type "${name}" aliases key "${canonical}" must be declared in required/optional.`,
+				);
+			}
+			if (!Array.isArray(legacyNames) || legacyNames.length === 0) {
+				throw new Error(
+					`Custom type "${name}" aliases entry "${canonical}" must be a non-empty array of legacy field names.`,
+				);
+			}
+			for (const legacy of legacyNames) {
+				if (typeof legacy !== "string" || legacy.length === 0) {
+					throw new Error(
+						`Custom type "${name}" aliases entry "${canonical}" has an invalid legacy name: ${JSON.stringify(legacy)}.`,
+					);
+				}
+				if (BASE_FIELDS.has(legacy)) {
+					throw new Error(
+						`Custom type "${name}" aliases legacy name "${legacy}" collides with a base field.`,
+					);
+				}
+				if (seen.has(legacy)) {
+					throw new Error(
+						`Custom type "${name}" aliases legacy name "${legacy}" is already declared as a current field; aliases are for retired names only.`,
+					);
+				}
+				if (seenAliases.has(legacy)) {
+					throw new Error(
+						`Custom type "${name}" aliases legacy name "${legacy}" appears under multiple canonical fields; each alias maps to one canonical name.`,
+					);
+				}
+				seenAliases.add(legacy);
+			}
+		}
+	}
 }
 
 function defaultSectionTitle(name: string): string {
@@ -155,6 +198,10 @@ export function buildCustomTypeDefinition(name: string, cfg: CustomTypeConfig): 
 		additionalProperties: false,
 	};
 
+	const aliases = cfg.aliases
+		? Object.fromEntries(Object.entries(cfg.aliases).map(([k, v]) => [k, [...v]]))
+		: undefined;
+
 	return {
 		name,
 		kind: "custom",
@@ -168,6 +215,7 @@ export function buildCustomTypeDefinition(name: string, cfg: CustomTypeConfig): 
 		compact: compactStrategy,
 		sectionTitle,
 		ajvSchema,
+		...(aliases ? { aliases } : {}),
 		formatMarkdown: (records, full) => {
 			if (records.length === 0) return "";
 			const lines = [`### ${sectionTitle}`];

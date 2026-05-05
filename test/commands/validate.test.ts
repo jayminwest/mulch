@@ -1,6 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import Ajv from "ajv";
+import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import { recordSchema } from "../../src/schemas/record-schema.ts";
+import { getExpertisePath, initMulchDir, writeConfig } from "../../src/utils/config.ts";
 
 describe("validate command", () => {
 	const ajv = new Ajv();
@@ -225,5 +231,59 @@ describe("validate command", () => {
 			};
 			expect(validate(record)).toBe(false);
 		});
+	});
+});
+
+describe("validate CLI — unknown-type policy (Phase 3)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-validate-unknown-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+
+		// Plant one good record and one with an unregistered type.
+		const filePath = getExpertisePath("cli", tmpDir);
+		const good = {
+			type: "convention",
+			content: "ok",
+			classification: "tactical",
+			recorded_at: "2026-01-01T00:00:00.000Z",
+		};
+		const bad = {
+			type: "hypothesis",
+			id: "mx-bad999",
+			statement: "x",
+			classification: "tactical",
+			recorded_at: "2026-01-01T00:00:00.000Z",
+		};
+		await writeFile(filePath, `${JSON.stringify(good)}\n${JSON.stringify(bad)}\n`, "utf-8");
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("emits a targeted unknown-type error with the offending id", () => {
+		const r = spawnSync("bun", [cliPath, "validate"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 8000,
+		});
+		expect(r.status).toBe(1);
+		expect(r.stderr).toMatch(/Unknown record type "hypothesis".*id=mx-bad999/);
+		// The good record's "no oneOf matched" Ajv blob should NOT appear for it.
+		expect(r.stderr).not.toMatch(/oneOf/);
+	});
+
+	it("--allow-unknown-types skips the unknown-type error", () => {
+		const r = spawnSync("bun", [cliPath, "validate", "--allow-unknown-types"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 8000,
+		});
+		expect(r.status).toBe(0);
+		expect(r.stderr).not.toMatch(/Unknown record type/);
 	});
 });

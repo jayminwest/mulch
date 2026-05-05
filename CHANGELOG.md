@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Phase 3 Custom-Type Polish
+- **`disabled_types`** in `mulch.config.yaml`: list type names (built-in or custom) to mark as deprecated. Writes still succeed but emit a stderr warning (suppressed under `--quiet`); reads work as normal; the type stays in CLI choices so peers in shared domains aren't broken. Cross-project safe — overstory/greenhouse can retire a type without hard-failing partners.
+- **Unknown-type policy on read**: `readExpertiseFile` throws a targeted `Unknown record type "X" at <file>:<line> (id=<id>)` when a record's type isn't registered. Validate emits the same targeted error instead of Ajv's generic "no oneOf matched" blob.
+- **`--allow-unknown-types`** global flag: tolerates unregistered types in readers and validate. Escape hatch for the worktree/CI window where JSONL (`merge=union`) lands before `mulch.config.yaml` does. Sync intentionally ignores the flag — its job is to gatekeep commits.
+- **`ml sync` re-validates against on-disk config**: rebuilds the type registry from disk before validating, so once config catches up, sync reconciles without needing a process restart.
+- **Custom-type aliases**: `aliases: { canonical_field: [legacy_name, ...] }` in `custom_types` declares former field names. At read time, legacy fields are rewritten to the canonical name (canonical wins on conflict, legacy is dropped). Writes always use canonical. Schema-evolution support — rename a field without rewriting historic JSONL.
+- **`ml doctor` type registry listing**: new `type-registry` check enumerates registered types (built-in vs custom) with per-type counts and a `(disabled)` marker. New `unknown-types` check fails with file/line/id details for unregistered records.
+- **Init scaffold updated**: commented `disabled_types`, `custom_types`, and `aliases` examples in the generated `mulch.config.yaml` so users can discover the knobs.
+
 ## [0.7.0] - 2026-04-28
 
 ### Added

@@ -29,6 +29,7 @@ import { registerValidateCommand } from "./commands/validate.ts";
 import { initRegistryFromConfig } from "./registry/init.ts";
 import { outputJsonError } from "./utils/json-output.ts";
 import { brand, muted, setQuiet } from "./utils/palette.ts";
+import { setAllowUnknownTypes } from "./utils/runtime-flags.ts";
 
 // Initialize the type registry from config so any custom_types declared in
 // mulch.config.yaml are first-class. Falls back to built-ins-only when no
@@ -58,6 +59,12 @@ if (rawArgs.includes("--quiet") || rawArgs.includes("-q")) {
 	setQuiet(true);
 }
 
+// Apply --allow-unknown-types early so readers (which run before Commander
+// finishes parsing in some commands) consult the right runtime flag.
+if (rawArgs.includes("--allow-unknown-types")) {
+	setAllowUnknownTypes(true);
+}
+
 // Detect --timing early (before Commander) so we can measure from startup
 const hasTiming = rawArgs.includes("--timing");
 const startTime = Date.now();
@@ -75,6 +82,10 @@ program
 	.option("-q, --quiet", "Suppress non-error output")
 	.option("--verbose", "Show full details in output")
 	.option("--timing", "Print execution time to stderr")
+	.option(
+		"--allow-unknown-types",
+		"tolerate on-disk records of unregistered types (worktree/CI lag escape hatch)",
+	)
 	.addOption(
 		new Option(
 			"--format <format>",

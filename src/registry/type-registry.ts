@@ -18,6 +18,8 @@ export interface TypeDefinition {
 	formatMarkdown: (records: ExpertiseRecord[], full: boolean) => string;
 	formatCompactLine: (record: ExpertiseRecord) => string;
 	formatXml: (record: ExpertiseRecord) => string[];
+	// Phase 3: canonical field name → legacy aliases. Only set on custom types.
+	aliases?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface SharedDefinitions {
@@ -30,11 +32,17 @@ export class TypeRegistry {
 	readonly definitions: SharedDefinitions;
 	private readonly defs: ReadonlyMap<string, TypeDefinition>;
 	private readonly order: readonly string[];
+	private readonly disabledSet: ReadonlySet<string>;
 	readonly validator: ValidateFunction;
 
-	constructor(defs: TypeDefinition[], definitions: SharedDefinitions) {
+	constructor(
+		defs: TypeDefinition[],
+		definitions: SharedDefinitions,
+		disabled: Iterable<string> = [],
+	) {
 		this.defs = new Map(defs.map((d) => [d.name, d]));
 		this.order = defs.map((d) => d.name);
+		this.disabledSet = new Set(disabled);
 		this.definitions = definitions;
 		this.validator = compileValidator(defs, definitions);
 	}
@@ -49,6 +57,22 @@ export class TypeRegistry {
 
 	names(): string[] {
 		return [...this.order];
+	}
+
+	isDisabled(name: string): boolean {
+		return this.disabledSet.has(name);
+	}
+
+	disabledNames(): string[] {
+		return [...this.disabledSet];
+	}
+
+	builtinDefs(): TypeDefinition[] {
+		return this.enabled().filter((d) => d.kind === "builtin");
+	}
+
+	customDefs(): TypeDefinition[] {
+		return this.enabled().filter((d) => d.kind === "custom");
 	}
 }
 

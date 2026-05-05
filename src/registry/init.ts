@@ -12,12 +12,20 @@ import {
 // truth. We construct a temporary builtin registry just to read its definitions.
 function buildRegistryWithCustomTypes(config: MulchConfig | null): TypeRegistry {
 	const customDefs = config?.custom_types ? buildCustomTypeDefinitions(config.custom_types) : [];
-	if (customDefs.length === 0) {
-		return buildBuiltinRegistry();
+	const allDefs = customDefs.length === 0 ? [...BUILTIN_DEFS] : [...BUILTIN_DEFS, ...customDefs];
+	const knownNames = new Set(allDefs.map((d) => d.name));
+
+	const disabled = config?.disabled_types ?? [];
+	for (const name of disabled) {
+		if (!knownNames.has(name)) {
+			throw new Error(
+				`disabled_types references unregistered type "${name}". Declare it under custom_types or remove it from disabled_types.`,
+			);
+		}
 	}
-	// Reuse SHARED_DEFINITIONS from a builtin registry instance.
+
 	const builtinRegistry = buildBuiltinRegistry();
-	return new TypeRegistryCtor([...BUILTIN_DEFS, ...customDefs], builtinRegistry.definitions);
+	return new TypeRegistryCtor(allDefs, builtinRegistry.definitions, disabled);
 }
 
 // Called once at CLI startup. Falls back to built-ins-only if no config exists

@@ -14,6 +14,9 @@ export interface CustomTypeConfig {
 	files_field?: string;
 	compact?: CustomCompactStrategy;
 	section_title?: string;
+	// Map canonical (current) field name to legacy aliases. Records on disk that
+	// carry a legacy field are rewritten to the canonical name at read time.
+	aliases?: Record<string, string[]>;
 }
 
 export interface MulchConfig {
@@ -38,6 +41,9 @@ export interface MulchConfig {
 		boost_factor: number;
 	};
 	custom_types?: Record<string, CustomTypeConfig>;
+	// Names of registered types (built-in or custom) that emit a deprecation
+	// warning on write. Reads still succeed; the type stays in CLI choices.
+	disabled_types?: string[];
 }
 
 export const DEFAULT_CONFIG: MulchConfig = {

@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import Ajv from "ajv";
 import { processStdinRecords } from "../../src/commands/record.ts";
+import { initRegistryFromConfig } from "../../src/registry/init.ts";
+import { resetRegistry } from "../../src/registry/type-registry.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import { recordSchema } from "../../src/schemas/record-schema.ts";
@@ -1896,5 +1898,114 @@ describe("evidence schema: multi-tracker fields", () => {
 		} finally {
 			await rm(tmpDir2, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("disabled-type writes (Phase 3)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-disabled-write-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"], disabled_types: ["failure"] }, tmpDir);
+		await initRegistryFromConfig(tmpDir);
+	});
+
+	afterEach(async () => {
+		resetRegistry();
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("processStdinRecords emits one warning per disabled type seen", async () => {
+		const filePath = getExpertisePath("cli", tmpDir);
+		await createExpertiseFile(filePath);
+
+		const result = await processStdinRecords(
+			"cli",
+			false,
+			false,
+			false,
+			JSON.stringify([
+				{
+					type: "failure",
+					description: "d1",
+					resolution: "r1",
+					classification: "tactical",
+				},
+				{
+					type: "failure",
+					description: "d2",
+					resolution: "r2",
+					classification: "tactical",
+				},
+				{
+					type: "convention",
+					content: "ok",
+					classification: "tactical",
+				},
+			]),
+			tmpDir,
+		);
+
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]).toMatch(/type "failure" is disabled/);
+		expect(result.created).toBe(3);
+	});
+
+	it("CLI write of a disabled type emits stderr warning", () => {
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "cli", "--type", "failure", "--description", "d", "--resolution", "x"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stderr).toMatch(/Warning: type "failure" is disabled/);
+		expect(r.stdout).toMatch(/Recorded failure/);
+	});
+
+	it("--quiet suppresses the disabled-type warning but still writes", () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"failure",
+				"--description",
+				"d2",
+				"--resolution",
+				"x",
+				"-q",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stderr).not.toMatch(/Warning/);
+	});
+
+	it("JSON mode includes warnings array on disabled-type write", () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"failure",
+				"--description",
+				"d3",
+				"--resolution",
+				"x",
+				"--json",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		const out = JSON.parse(r.stdout);
+		expect(out.success).toBe(true);
+		expect(out.warnings).toBeDefined();
+		expect(out.warnings[0]).toMatch(/type "failure" is disabled/);
 	});
 });

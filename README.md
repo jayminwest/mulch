@@ -137,6 +137,58 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 
 All records support optional `--classification` (foundational / tactical / observational), evidence flags (`--evidence-commit`, `--evidence-issue`, `--evidence-file`, plus tracker-specific `--evidence-bead`, `--evidence-seeds`, `--evidence-gh`, `--evidence-linear`), `--tags`, `--relates-to`, `--supersedes` for linking, and `--outcome-status` (success/failure) for tracking application results. Cross-domain references use `domain:mx-hash` format (e.g., `--relates-to api:mx-abc123`). When `evidence.commit` or `files[]` are omitted, `ml record` auto-populates them from the current git context.
 
+### Custom Types
+
+Project-specific record types declared under `custom_types:` in `.mulch/mulch.config.yaml` get full registry treatment — CLI flags, validation, dedup, formatters. Each definition declares required + optional fields, a dedup key, and a summary template:
+
+```yaml
+custom_types:
+  hypothesis:
+    required: [statement, prediction]
+    optional: [evidence_files]
+    dedup_key: statement
+    summary: "{{statement}} → {{prediction}}"
+```
+
+`ml record research --type hypothesis --statement "..." --prediction "..."` then writes a first-class record indistinguishable from a built-in.
+
+### Disabled Types
+
+Mark a type as deprecated to retire it gracefully across shared domains:
+
+```yaml
+disabled_types: [failure]
+```
+
+Writes still succeed and the type stays in CLI choices (so peers in shared domains aren't broken), but each write emits a stderr warning. `--quiet` suppresses the warning. Reads ignore the disabled flag entirely.
+
+### Aliases (Schema Evolution)
+
+When you rename a field on a custom type, declare aliases to keep existing JSONL readable:
+
+```yaml
+custom_types:
+  hypothesis:
+    required: [statement, prediction]
+    dedup_key: statement
+    summary: "{{statement}}"
+    aliases:
+      statement: [claim, assertion]   # canonical → [legacy_names]
+```
+
+At read time, legacy field names are rewritten to canonical (canonical wins on conflict, legacy is dropped). Writes always use canonical. No migration script needed.
+
+### Unknown-Type Policy
+
+Readers refuse on-disk records whose type isn't registered, raising a targeted error with file, line, and ID. The `--allow-unknown-types` global flag is the escape hatch for the worktree/CI window where a JSONL record (which `merge=union` accepts) lands before `mulch.config.yaml` catches up:
+
+```bash
+ml validate --allow-unknown-types     # validate everything else; defer reconciliation
+ml sync                                # gatekeeps commits — ignores the flag
+```
+
+`ml sync` re-loads the registry from disk before validating, so once config is reconciled, sync passes without a restart. `ml doctor` lists registered types (built-in vs custom, per-type counts) and surfaces unknown-type records as a failing check.
+
 ## Example Output
 
 ```

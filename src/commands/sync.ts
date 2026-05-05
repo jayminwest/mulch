@@ -2,8 +2,10 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { initRegistryFromConfig } from "../registry/init.ts";
 import { getRegistry } from "../registry/type-registry.ts";
 import { getExpertisePath, isInsideWorktree, readConfig } from "../utils/config.ts";
+import { applyAliases } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 
@@ -51,10 +53,16 @@ interface ValidateResult {
 }
 
 async function validateExpertise(cwd?: string): Promise<ValidateResult> {
+	// Re-init registry from on-disk config so sync validates against the user's
+	// current types — important for worktree/CI lag where JSONL (merge=union)
+	// can land before mulch.config.yaml does. Once config catches up, sync
+	// reconciles correctly without needing a restart.
+	await initRegistryFromConfig(cwd);
 	const config = await readConfig(cwd);
 	const domains = config.domains;
 
-	const validate = getRegistry().validator;
+	const registry = getRegistry();
+	const validate = registry.validator;
 
 	let totalRecords = 0;
 	const errors: Array<{ domain: string; line: number; message: string }> = [];
@@ -86,6 +94,28 @@ async function validateExpertise(cwd?: string): Promise<ValidateResult> {
 				});
 				continue;
 			}
+
+			// Targeted unknown-type error + alias resolution before Ajv. Sync
+			// intentionally ignores --allow-unknown-types — its job is to
+			// gatekeep commits.
+			if (parsed && typeof parsed === "object" && "type" in parsed) {
+				const t = (parsed as { type: unknown }).type;
+				if (typeof t === "string") {
+					const def = registry.get(t);
+					if (!def) {
+						const id = (parsed as { id?: unknown }).id;
+						const idPart = typeof id === "string" ? ` (id=${id})` : "";
+						errors.push({
+							domain,
+							line: lineNumber,
+							message: `Unknown record type "${t}"${idPart}. Register it under custom_types in mulch.config.yaml or remove the record.`,
+						});
+						continue;
+					}
+					if (def.aliases) applyAliases(parsed as Record<string, unknown>, def.aliases);
+				}
+			}
+
 			if (!validate(parsed)) {
 				const schemaErrors = (validate.errors ?? [])
 					.map((err) => `${err.instancePath} ${err.message}`)

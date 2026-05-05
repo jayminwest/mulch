@@ -171,6 +171,7 @@ export async function processStdinRecords(
 	updated: number;
 	skipped: number;
 	errors: string[];
+	warnings: string[];
 }> {
 	const config = await readConfig(cwd);
 
@@ -230,8 +231,22 @@ export async function processStdinRecords(
 		validRecords.push(record as ExpertiseRecord);
 	}
 
+	// Emit one warning per disabled type seen across the batch, not per record.
+	const warnings: string[] = [];
+	const seenDisabledTypes = new Set<string>();
+	for (const r of validRecords) {
+		if (getRegistry().isDisabled(r.type) && !seenDisabledTypes.has(r.type)) {
+			seenDisabledTypes.add(r.type);
+			const msg = `type "${r.type}" is disabled (declared in disabled_types). Records will still be written; consider migrating off this type.`;
+			warnings.push(msg);
+			if (!isQuiet()) {
+				console.error(chalk.yellow(`Warning: ${msg}`));
+			}
+		}
+	}
+
 	if (validRecords.length === 0) {
-		return { created: 0, updated: 0, skipped: 0, errors };
+		return { created: 0, updated: 0, skipped: 0, errors, warnings };
 	}
 
 	// Process valid records with file locking (skip write in dry-run mode)
@@ -300,7 +315,7 @@ export async function processStdinRecords(
 		});
 	}
 
-	return { created, updated, skipped, errors };
+	return { created, updated, skipped, errors, warnings };
 }
 
 export function registerRecordCommand(program: Command): void {
@@ -435,6 +450,7 @@ Batch recording examples:
 							updated: result.updated,
 							skipped: result.skipped,
 							errors: result.errors,
+							warnings: result.warnings,
 						});
 					} else {
 						if (dryRun) {
@@ -524,6 +540,7 @@ Batch recording examples:
 							updated: result.updated,
 							skipped: result.skipped,
 							errors: result.errors,
+							warnings: result.warnings,
 						});
 					} else {
 						if (dryRun) {
@@ -687,6 +704,14 @@ Batch recording examples:
 				return;
 			}
 
+			// Phase 3: disabled types still write but emit a deprecation warning.
+			const disabledWarning = getRegistry().isDisabled(recordType)
+				? `type "${recordType}" is disabled (declared in disabled_types). Records will still be written; consider migrating off this type.`
+				: null;
+			if (disabledWarning && !isQuiet() && !jsonMode) {
+				console.error(chalk.yellow(`Warning: ${disabledWarning}`));
+			}
+
 			const built = buildRecordFromOptions(def, content, options, {
 				classification,
 				recorded_at: recordedAt,
@@ -758,6 +783,7 @@ Batch recording examples:
 						domain,
 						type: recordType,
 						record,
+						...(disabledWarning ? { warnings: [disabledWarning] } : {}),
 					});
 				} else {
 					if (action === "created") {
@@ -808,6 +834,7 @@ Batch recording examples:
 									type: recordType,
 									index: dup.index + 1,
 									record: upsertRecord,
+									...(disabledWarning ? { warnings: [disabledWarning] } : {}),
 								});
 							} else {
 								if (!isQuiet())
@@ -825,6 +852,7 @@ Batch recording examples:
 									domain,
 									type: recordType,
 									index: dup.index + 1,
+									...(disabledWarning ? { warnings: [disabledWarning] } : {}),
 								});
 							} else {
 								if (!isQuiet())
@@ -845,6 +873,7 @@ Batch recording examples:
 								domain,
 								type: recordType,
 								record,
+								...(disabledWarning ? { warnings: [disabledWarning] } : {}),
 							});
 						} else {
 							if (!isQuiet())

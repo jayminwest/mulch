@@ -3,7 +3,7 @@ import { writeFile as fsWriteFile, readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
-import { getRegistry } from "../registry/type-registry.ts";
+import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
 import type { MulchConfig } from "../schemas/config.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
 import {
@@ -14,6 +14,7 @@ import {
 	writeConfig,
 } from "../utils/config.ts";
 import {
+	applyAliases,
 	createExpertiseFile,
 	findDuplicate,
 	readExpertiseFile,
@@ -104,7 +105,8 @@ async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<D
 }
 
 async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
-	const validate = getRegistry().validator;
+	const registry = getRegistry();
+	const validate = registry.validator;
 	const details: string[] = [];
 
 	for (const domain of config.domains) {
@@ -124,6 +126,18 @@ async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise
 				parsed = JSON.parse(line);
 			} catch {
 				continue; // Already caught by integrity check
+			}
+			// Skip records of unregistered types — checkUnknownTypes flags those
+			// with a clearer message. Otherwise Ajv reports a noisy "no oneOf
+			// matched" for the same record. Apply aliases before Ajv so a
+			// record with a legacy field name (post-rename) validates cleanly.
+			if (parsed && typeof parsed === "object" && "type" in parsed) {
+				const t = (parsed as { type: unknown }).type;
+				if (typeof t === "string") {
+					const def = registry.get(t);
+					if (!def) continue;
+					if (def.aliases) applyAliases(parsed as Record<string, unknown>, def.aliases);
+				}
 			}
 			if (!validate(parsed)) {
 				const errors = (validate.errors ?? [])
@@ -159,7 +173,7 @@ async function checkStaleRecords(config: MulchConfig, cwd?: string): Promise<Doc
 
 	for (const domain of config.domains) {
 		const filePath = getExpertisePath(domain, cwd);
-		const records = await readExpertiseFile(filePath);
+		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		for (const record of records) {
 			if (isStale(record, now, shelfLife)) {
 				staleCount++;
@@ -181,6 +195,99 @@ async function checkStaleRecords(config: MulchConfig, cwd?: string): Promise<Doc
 		status: "pass",
 		message: "No stale records",
 		fixable: true,
+		details: [],
+	};
+}
+
+async function checkTypeRegistry(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+	const registry = getRegistry();
+	const builtinDefs = registry.builtinDefs();
+	const customDefs = registry.customDefs();
+	const disabledNames = new Set(registry.disabledNames());
+
+	// Bucket records by type across all domains.
+	const counts: Record<string, number> = {};
+	for (const def of registry.enabled()) counts[def.name] = 0;
+	for (const domain of config.domains) {
+		const filePath = getExpertisePath(domain, cwd);
+		// allowUnknownTypes here so this informational check never throws on
+		// pre-existing unknown types (checkUnknownTypes flags them separately).
+		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
+		for (const r of records) {
+			if (counts[r.type] !== undefined) counts[r.type] = (counts[r.type] ?? 0) + 1;
+		}
+	}
+
+	const fmt = (def: TypeDefinition): string => {
+		const labels: string[] = [def.kind === "builtin" ? "built-in" : "custom"];
+		if (disabledNames.has(def.name)) labels.push("disabled");
+		const count = counts[def.name] ?? 0;
+		return `${def.name} (${labels.join(", ")}): ${count} record${count === 1 ? "" : "s"}`;
+	};
+
+	const details = [...builtinDefs.map(fmt), ...customDefs.map(fmt)];
+	const total = builtinDefs.length + customDefs.length;
+	const disabledCount = disabledNames.size;
+	const message =
+		`${total} type(s) registered: ${builtinDefs.length} built-in, ${customDefs.length} custom` +
+		(disabledCount > 0 ? `, ${disabledCount} disabled` : "");
+
+	return {
+		name: "type-registry",
+		status: "pass",
+		message,
+		fixable: false,
+		details,
+	};
+}
+
+async function checkUnknownTypes(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+	const registry = getRegistry();
+	const details: string[] = [];
+
+	for (const domain of config.domains) {
+		const filePath = getExpertisePath(domain, cwd);
+		let content: string;
+		try {
+			content = await readFile(filePath, "utf-8");
+		} catch {
+			continue;
+		}
+		const lines = content.split("\n");
+		for (let i = 0; i < lines.length; i++) {
+			const line = (lines[i] ?? "").trim();
+			if (line.length === 0) continue;
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(line);
+			} catch {
+				continue; // covered by jsonl-integrity check
+			}
+			if (parsed && typeof parsed === "object" && "type" in parsed) {
+				const t = (parsed as { type: unknown }).type;
+				if (typeof t === "string" && !registry.get(t)) {
+					const id = (parsed as { id?: unknown }).id;
+					const idPart = typeof id === "string" ? ` [${id}]` : "";
+					details.push(`${domain}:${i + 1}${idPart} - unknown type "${t}"`);
+				}
+			}
+		}
+	}
+
+	if (details.length > 0) {
+		return {
+			name: "unknown-types",
+			status: "fail",
+			message: `${details.length} record(s) with unregistered types`,
+			fixable: false,
+			details,
+		};
+	}
+	return {
+		name: "unknown-types",
+		status: "pass",
+		message: "All record types are registered",
+		fixable: false,
 		details: [],
 	};
 }
@@ -236,7 +343,7 @@ async function checkDuplicates(config: MulchConfig, cwd?: string): Promise<Docto
 
 	for (const domain of config.domains) {
 		const filePath = getExpertisePath(domain, cwd);
-		const records = await readExpertiseFile(filePath);
+		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		for (let i = 1; i < records.length; i++) {
 			const rec = records[i];
 			if (!rec) continue;
@@ -325,7 +432,7 @@ async function checkFileAnchors(config: MulchConfig, cwd?: string): Promise<Doct
 
 	for (const domain of config.domains) {
 		const filePath = getExpertisePath(domain, cwd);
-		const records = await readExpertiseFile(filePath);
+		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		for (const record of records) {
 			const id = record.id ? `[${record.id}]` : "";
 			if ("files" in record && Array.isArray(record.files)) {
@@ -365,7 +472,7 @@ async function checkGovernance(config: MulchConfig, cwd?: string): Promise<Docto
 
 	for (const domain of config.domains) {
 		const filePath = getExpertisePath(domain, cwd);
-		const records = await readExpertiseFile(filePath);
+		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		const count = records.length;
 
 		if (count >= config.governance.hard_limit) {
@@ -487,12 +594,15 @@ async function applyFixes(
 			}
 
 			case "schema-validation": {
-				const validate = getRegistry().validator;
+				const registry = getRegistry();
+				const validate = registry.validator;
 				for (const domain of config.domains) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
-						const records = await readExpertiseFile(filePath);
-						const valid = records.filter((r) => validate(r));
+						const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
+						// Keep unknown-type records — they're flagged separately by
+						// checkUnknownTypes and shouldn't be silently deleted.
+						const valid = records.filter((r) => !registry.get(r.type) || validate(r));
 						const removed = records.length - valid.length;
 						if (removed > 0) {
 							await writeExpertiseFile(filePath, valid);
@@ -509,7 +619,7 @@ async function applyFixes(
 				for (const domain of config.domains) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
-						const records = await readExpertiseFile(filePath);
+						const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 						const kept = records.filter((r) => !isStale(r, now, shelfLife));
 						const pruned = records.length - kept.length;
 						if (pruned > 0) {
@@ -589,7 +699,7 @@ async function applyFixes(
 				for (const domain of config.domains) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
-						const records = await readExpertiseFile(filePath);
+						const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 						let removedCount = 0;
 						const updated: ExpertiseRecord[] = records.map((record) => {
 							let r: ExpertiseRecord = record;
@@ -682,6 +792,8 @@ export function registerDoctorCommand(program: Command): void {
 			checks.push(await checkJsonlIntegrity(config));
 			checks.push(await checkLegacyOutcome(config));
 			checks.push(await checkSchemaValidation(config));
+			checks.push(await checkUnknownTypes(config));
+			checks.push(await checkTypeRegistry(config));
 			checks.push(await checkStaleRecords(config));
 			checks.push(await checkOrphanedDomains(config));
 			checks.push(await checkDuplicates(config));
