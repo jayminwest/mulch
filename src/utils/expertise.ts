@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { appendFile, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import type { Classification, ExpertiseRecord, RecordType } from "../schemas/record.ts";
+import { getRegistry } from "../registry/type-registry.ts";
+import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
 import { DEFAULT_BM25_PARAMS, searchBM25 } from "./bm25.ts";
 import { applyConfirmationBoost } from "./scoring.ts";
 
@@ -40,27 +41,12 @@ export async function readExpertiseFile(filePath: string): Promise<ExpertiseReco
 }
 
 export function generateRecordId(record: ExpertiseRecord): string {
-	let key: string;
-	switch (record.type) {
-		case "convention":
-			key = `convention:${record.content}`;
-			break;
-		case "pattern":
-			key = `pattern:${record.name}`;
-			break;
-		case "failure":
-			key = `failure:${record.description}`;
-			break;
-		case "decision":
-			key = `decision:${record.title}`;
-			break;
-		case "reference":
-			key = `reference:${record.name}`;
-			break;
-		case "guide":
-			key = `guide:${record.name}`;
-			break;
+	const def = getRegistry().get(record.type);
+	if (!def) {
+		throw new Error(`Unknown record type: ${record.type}`);
 	}
+	const idValue = (record as unknown as Record<string, unknown>)[def.idKey];
+	const key = `${record.type}:${String(idValue ?? "")}`;
 	return `mx-${createHash("sha256").update(key).digest("hex").slice(0, 6)}`;
 }
 
@@ -139,40 +125,20 @@ export function findDuplicate(
 	existing: ExpertiseRecord[],
 	newRecord: ExpertiseRecord,
 ): { index: number; record: ExpertiseRecord } | null {
+	const registry = getRegistry();
+	const def = registry.get(newRecord.type);
+	if (!def) return null;
+	const dedupKey = def.dedupKey;
+	if (dedupKey === "content_hash") {
+		// Phase 2: content-hash dedup for custom types. No built-in uses this.
+		return null;
+	}
+	const newValue = (newRecord as unknown as Record<string, unknown>)[dedupKey];
 	for (const [i, record] of existing.entries()) {
 		if (record.type !== newRecord.type) continue;
-
-		switch (record.type) {
-			case "pattern":
-				if (newRecord.type === "pattern" && record.name === newRecord.name) {
-					return { index: i, record };
-				}
-				break;
-			case "decision":
-				if (newRecord.type === "decision" && record.title === newRecord.title) {
-					return { index: i, record };
-				}
-				break;
-			case "convention":
-				if (newRecord.type === "convention" && record.content === newRecord.content) {
-					return { index: i, record };
-				}
-				break;
-			case "failure":
-				if (newRecord.type === "failure" && record.description === newRecord.description) {
-					return { index: i, record };
-				}
-				break;
-			case "reference":
-				if (newRecord.type === "reference" && record.name === newRecord.name) {
-					return { index: i, record };
-				}
-				break;
-			case "guide":
-				if (newRecord.type === "guide" && record.name === newRecord.name) {
-					return { index: i, record };
-				}
-				break;
+		const value = (record as unknown as Record<string, unknown>)[dedupKey];
+		if (value === newValue) {
+			return { index: i, record };
 		}
 	}
 	return null;
@@ -257,7 +223,7 @@ export function searchRecords(
 export interface DomainHealth {
 	governance_utilization: number;
 	stale_count: number;
-	type_distribution: Record<RecordType, number>;
+	type_distribution: Record<string, number>;
 	classification_distribution: Record<Classification, number>;
 	oldest_timestamp: string | null;
 	newest_timestamp: string | null;
@@ -301,15 +267,12 @@ export function calculateDomainHealth(
 ): DomainHealth {
 	const now = new Date();
 
-	// Initialize distributions
-	const typeDistribution: Record<RecordType, number> = {
-		convention: 0,
-		pattern: 0,
-		failure: 0,
-		decision: 0,
-		reference: 0,
-		guide: 0,
-	};
+	// Initialize distributions seeded from registry-known type names so custom
+	// types (Phase 2+) appear with zero counts when absent.
+	const typeDistribution: Record<string, number> = {};
+	for (const name of getRegistry().names()) {
+		typeDistribution[name] = 0;
+	}
 
 	const classificationDistribution: Record<Classification, number> = {
 		foundational: 0,
@@ -323,8 +286,9 @@ export function calculateDomainHealth(
 
 	// Calculate metrics
 	for (const record of records) {
-		// Type distribution
-		typeDistribution[record.type]++;
+		// Type distribution — `??` guards against records of types not in the
+		// registry (e.g., Phase 2's --allow-unknown-types escape hatch).
+		typeDistribution[record.type] = (typeDistribution[record.type] ?? 0) + 1;
 
 		// Classification distribution
 		classificationDistribution[record.classification]++;

@@ -26,8 +26,15 @@ import { registerSyncCommand } from "./commands/sync.ts";
 import { registerUpdateCommand } from "./commands/update.ts";
 import { registerUpgradeCommand } from "./commands/upgrade.ts";
 import { registerValidateCommand } from "./commands/validate.ts";
+import { buildBuiltinRegistry } from "./registry/builtins.ts";
+import { setRegistry } from "./registry/type-registry.ts";
 import { outputJsonError } from "./utils/json-output.ts";
 import { brand, muted, setQuiet } from "./utils/palette.ts";
+
+// Initialize the type registry once at startup. Phase 2 will replace
+// buildBuiltinRegistry() with a config-driven builder that includes custom
+// types declared in mulch.config.yaml.
+setRegistry(buildBuiltinRegistry());
 
 export const VERSION = "0.7.0";
 

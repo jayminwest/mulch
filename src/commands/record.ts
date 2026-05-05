@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
-import Ajv from "ajv";
 import chalk from "chalk";
 import { type Command, Option } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
 import type {
 	Classification,
 	Evidence,
@@ -9,7 +9,6 @@ import type {
 	Outcome,
 	RecordType,
 } from "../schemas/record.ts";
-import { recordSchema } from "../schemas/record-schema.ts";
 import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
 import {
 	appendRecord,
@@ -107,9 +106,8 @@ export async function processStdinRecords(
 		);
 	}
 
-	// Validate each record against schema
-	const ajv = new Ajv();
-	const validate = ajv.compile(recordSchema);
+	// Validate each record against schema (cached on registry)
+	const validate = getRegistry().validator;
 
 	const errors: string[] = [];
 	const validRecords: ExpertiseRecord[] = [];
@@ -840,9 +838,8 @@ Batch recording examples:
 					}
 				}
 
-				// Validate against JSON schema
-				const ajv = new Ajv();
-				const validate = ajv.compile(recordSchema);
+				// Validate against JSON schema (cached on registry)
+				const validate = getRegistry().validator;
 				if (!validate(record)) {
 					const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
 					const typeHint = RECORD_TYPE_REQUIREMENTS[recordType]

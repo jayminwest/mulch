@@ -1,8 +1,7 @@
 import { readFile } from "node:fs/promises";
-import Ajv from "ajv";
 import chalk from "chalk";
 import type { Command } from "commander";
-import { recordSchema } from "../schemas/record-schema.ts";
+import { getRegistry } from "../registry/type-registry.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { outputJson } from "../utils/json-output.ts";
 
@@ -15,8 +14,7 @@ export function registerValidateCommand(program: Command): void {
 			const config = await readConfig();
 			const domains = config.domains;
 
-			const ajv = new Ajv();
-			const validate = ajv.compile(recordSchema);
+			const validate = getRegistry().validator;
 
 			let totalRecords = 0;
 			let totalErrors = 0;

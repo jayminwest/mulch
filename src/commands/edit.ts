@@ -1,8 +1,7 @@
-import Ajv from "ajv";
 import chalk from "chalk";
 import { type Command, Option } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
 import type { Classification, ExpertiseRecord, Outcome } from "../schemas/record.ts";
-import { recordSchema } from "../schemas/record-schema.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
@@ -170,9 +169,8 @@ export function registerEditCommand(program: Command): void {
 							break;
 					}
 
-					// Validate the updated record
-					const ajv = new Ajv();
-					const validate = ajv.compile(recordSchema);
+					// Validate the updated record (cached on registry)
+					const validate = getRegistry().validator;
 					if (!validate(record)) {
 						const errors = (validate.errors ?? []).map(
 							(err) => `${err.instancePath} ${err.message}`,

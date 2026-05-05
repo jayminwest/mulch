@@ -1,9 +1,8 @@
 import { createInterface } from "node:readline";
-import Ajv from "ajv";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
 import type { ExpertiseRecord, RecordType } from "../schemas/record.ts";
-import { recordSchema } from "../schemas/record-schema.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
 	generateRecordId,
@@ -834,9 +833,8 @@ async function handleApply(
 			replacement.supersedes = compactedFrom;
 		}
 
-		// Validate replacement
-		const ajv = new Ajv();
-		const validate = ajv.compile(recordSchema);
+		// Validate replacement (cached on registry)
+		const validate = getRegistry().validator;
 		replacement.id = generateRecordId(replacement);
 		if (!validate(replacement)) {
 			const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);

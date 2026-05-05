@@ -1,9 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import Ajv from "ajv";
 import chalk from "chalk";
 import type { Command } from "commander";
-import { recordSchema } from "../schemas/record-schema.ts";
+import { getRegistry } from "../registry/type-registry.ts";
 import { getExpertisePath, isInsideWorktree, readConfig } from "../utils/config.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
@@ -55,8 +54,7 @@ async function validateExpertise(cwd?: string): Promise<ValidateResult> {
 	const config = await readConfig(cwd);
 	const domains = config.domains;
 
-	const ajv = new Ajv();
-	const validate = ajv.compile(recordSchema);
+	const validate = getRegistry().validator;
 
 	let totalRecords = 0;
 	const errors: Array<{ domain: string; line: number; message: string }> = [];

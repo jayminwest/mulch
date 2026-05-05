@@ -1,12 +1,11 @@
 import { existsSync } from "node:fs";
 import { writeFile as fsWriteFile, readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import Ajv from "ajv";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
 import type { MulchConfig } from "../schemas/config.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
-import { recordSchema } from "../schemas/record-schema.ts";
 import {
 	getExpertiseDir,
 	getExpertisePath,
@@ -105,8 +104,7 @@ async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<D
 }
 
 async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
-	const ajv = new Ajv();
-	const validate = ajv.compile(recordSchema);
+	const validate = getRegistry().validator;
 	const details: string[] = [];
 
 	for (const domain of config.domains) {
@@ -489,8 +487,7 @@ async function applyFixes(
 			}
 
 			case "schema-validation": {
-				const ajv = new Ajv();
-				const validate = ajv.compile(recordSchema);
+				const validate = getRegistry().validator;
 				for (const domain of config.domains) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
