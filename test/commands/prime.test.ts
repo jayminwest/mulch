@@ -3,7 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
-import { registerPrimeCommand } from "../../src/commands/prime.ts";
+import { estimateRecordText, registerPrimeCommand } from "../../src/commands/prime.ts";
+import { initRegistryFromConfig } from "../../src/registry/init.ts";
+import { resetRegistry } from "../../src/registry/type-registry.ts";
+import type { CustomTypeConfig } from "../../src/schemas/config.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import type { DomainRecords } from "../../src/utils/budget.ts";
@@ -1723,6 +1726,62 @@ describe("prime command", () => {
 			expect(estimateTokens("a".repeat(100))).toBe(25);
 			expect(estimateTokens("a".repeat(101))).toBe(26); // ceil
 			expect(estimateTokens("")).toBe(0);
+		});
+
+		it("estimateRecordText handles built-in types", () => {
+			const text = estimateRecordText(makeRecord("convention", "foundational"));
+			expect(text).toContain("convention");
+			expect(text).toContain("A convention");
+			expect(text.length).toBeGreaterThan(0);
+		});
+
+		it("estimateRecordText handles custom types without crashing", async () => {
+			const ADR_CFG: CustomTypeConfig = {
+				required: ["description", "decision_status"],
+				dedup_key: "description",
+				summary: "{description}",
+			};
+			await writeConfig(
+				{ ...DEFAULT_CONFIG, domains: ["backend"], custom_types: { adr: ADR_CFG } },
+				tmpDir,
+			);
+			await initRegistryFromConfig(tmpDir);
+			try {
+				const record = {
+					type: "adr",
+					classification: "tactical",
+					recorded_at: new Date().toISOString(),
+					description: "use postgres",
+					decision_status: "accepted",
+					id: "mx-test01",
+				} as unknown as ExpertiseRecord;
+
+				const text = estimateRecordText(record);
+				expect(text).toBeString();
+				expect(text.length).toBeGreaterThan(0);
+				expect(text).toContain("adr");
+				expect(text).toContain("use postgres");
+
+				// Confirm the budget pipeline (the original crash site) survives.
+				const domains: DomainRecords[] = [{ domain: "backend", records: [record] }];
+				const result = applyBudget(domains, 10000, estimateRecordText);
+				expect(result.droppedCount).toBe(0);
+				expect(result.kept).toHaveLength(1);
+			} finally {
+				resetRegistry();
+			}
+		});
+
+		it("estimateRecordText handles unknown types when tolerated", () => {
+			const record = {
+				type: "runbook",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+				id: "mx-unk001",
+			} as unknown as ExpertiseRecord;
+			const text = estimateRecordText(record);
+			expect(text).toBeString();
+			expect(text.length).toBeGreaterThan(0);
 		});
 
 		it("applyBudget keeps all records when within budget", () => {

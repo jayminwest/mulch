@@ -1,5 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import type { Command } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
+import type { ExpertiseRecord } from "../schemas/record.ts";
 import type { DomainRecords } from "../utils/budget.ts";
 import { applyBudget, DEFAULT_BUDGET, formatBudgetSummary } from "../utils/budget.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
@@ -49,30 +51,13 @@ function resolvePrimeFormat(
 
 /**
  * Produce a rough text representation of a record for token estimation.
- * Uses a simple format similar to compact lines.
+ * Delegates to the type registry so custom types and unknown-but-tolerated
+ * types (via --allow-unknown-types) get a non-undefined estimate.
  */
-function estimateRecordText(record: import("../schemas/record.js").ExpertiseRecord): string {
-	switch (record.type) {
-		case "convention":
-			return `[convention] ${record.content}`;
-		case "pattern": {
-			const files = record.files && record.files.length > 0 ? ` (${record.files.join(", ")})` : "";
-			return `[pattern] ${record.name}: ${record.description}${files}`;
-		}
-		case "failure":
-			return `[failure] ${record.description} -> ${record.resolution}`;
-		case "decision":
-			return `[decision] ${record.title}: ${record.rationale}`;
-		case "reference": {
-			const refFiles =
-				record.files && record.files.length > 0
-					? `: ${record.files.join(", ")}`
-					: `: ${record.description}`;
-			return `[reference] ${record.name}${refFiles}`;
-		}
-		case "guide":
-			return `[guide] ${record.name}: ${record.description}`;
-	}
+export function estimateRecordText(record: ExpertiseRecord): string {
+	const def = getRegistry().get(record.type);
+	if (!def) return `[${record.type}]`;
+	return def.formatCompactLine(record);
 }
 
 export function registerPrimeCommand(program: Command): void {
