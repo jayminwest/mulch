@@ -285,6 +285,71 @@ The `--apply`, default (non-dry-run), and `--fix` variants acquire locks and are
 - **`ml sync`**: Uses git's own locking for commits. Multiple agents syncing on the same branch will contend on git's ref lock — coordinate sync timing or use per-agent branches.
 - **`prime --export`**: Multiple agents exporting to the same file path will race. Use unique filenames per agent.
 
+## Lifecycle Hooks
+
+Mulch invokes user-supplied shell scripts at key lifecycle events so org-specific behavior (secret scanning, owner enforcement, Slack notifications, team-scoped filtering) can land as config rather than a fork.
+
+### Events
+
+| Event | When it fires | Block on non-zero | Mutation via stdout |
+|---|---|---|---|
+| `pre-record` | Before each record is written | yes | yes |
+| `post-record` | After a successful create/update | warn only | no |
+| `pre-prime` | Before `ml prime` emits output | yes | yes |
+| `pre-prune` | Before `ml prune` removes records | yes | no |
+
+### Contract
+
+- Each script is invoked with the payload as JSON on **stdin**.
+- Exit `0` to continue; non-zero **blocks** for `pre-*` events and emits a **warning** for `post-*` events.
+- For mutable events (`pre-record`, `pre-prime`), the script may print a modified payload as JSON on **stdout** to rewrite it in place. The next script in the array (and the eventual write) sees the mutated payload.
+- Stderr is forwarded to the user; stdin is the only input channel.
+- Scripts are run via `sh -c`, with cwd set to the mulch project root and `MULCH_HOOK=1` in the environment.
+- Hooks **do not fire** in `--dry-run` mode (record, prune) — previews shouldn't trigger external side effects.
+
+### Configuration
+
+```yaml
+# .mulch/mulch.config.yaml
+hooks:
+  pre-record:    [./.mulch/hooks/scan-secrets.sh, ./.mulch/hooks/require-owner.sh]
+  post-record:   [./.mulch/hooks/post-to-slack.sh]
+  pre-prime:     [./.mulch/hooks/filter-by-team.sh]
+  pre-prune:     [./.mulch/hooks/digest-then-confirm.sh]
+
+hook_settings:
+  timeout_ms: 5000   # default; per-script SIGKILL after this
+```
+
+### Example: secret scanning at record time
+
+```sh
+#!/bin/sh
+# .mulch/hooks/scan-secrets.sh
+input=$(cat)
+if echo "$input" | grep -qE 'sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}'; then
+  echo "Refusing to record: payload contains an API key shape." >&2
+  exit 1
+fi
+```
+
+### Example: pre-record mutation (redacting tokens)
+
+```sh
+#!/bin/sh
+# .mulch/hooks/redact-tokens.sh
+input=$(cat)
+echo "$input" | bun -e "
+const { event, payload } = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+if (payload.record.content) {
+  payload.record.content = payload.record.content.replace(/sk-[A-Za-z0-9]+/g, '<REDACTED>');
+}
+console.log(JSON.stringify({ event, payload }));
+"
+```
+
+The hook returns either the full `{ event, payload }` envelope or just the inner payload object — both shapes are accepted. Multiple `pre-record` hooks compose in array order; output of script N becomes input of script N+1.
+
 ## Programmatic API
 
 Mulch exports both low-level utilities and a high-level programmatic API:

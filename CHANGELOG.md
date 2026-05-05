@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Lifecycle Hooks (R-02)
+- **`hooks` config block** in `mulch.config.yaml`: declare ordered shell scripts for `pre-record`, `post-record`, `pre-prime`, and `pre-prune`. Each script is invoked with the relevant payload as JSON on stdin (`MULCH_HOOK=1` set in the environment, cwd at the project root). Exit `0` to continue; non-zero **blocks** for `pre-*` events and **warns** for `post-*` events.
+- **Payload mutation** for `pre-record` and `pre-prime`: a script may print a modified JSON payload on stdout, which becomes input to the next script and the eventual write. Useful for redaction, owner injection, team-scoped filtering. Empty stdout leaves the payload untouched. Non-JSON stdout is ignored with a warning. Both `{ event, payload }` and bare-payload shapes are accepted on the way back.
+- **Composition**: multiple scripts per event run in declaration order. Pre-* short-circuit on the first non-zero exit; post-* runs all scripts and surfaces every failure as a separate warning.
+- **Per-hook timeout** via `hook_settings.timeout_ms` (default 5000). Bun SIGKILLs the subprocess on timeout; a timed-out `pre-*` hook is treated as blocking.
+- **Dry-run skips hooks** (record, prune): previews never fire side-effecting hooks like Slack posts or `digest-then-confirm` confirmations.
+- **Init scaffold** documents the `hooks` and `hook_settings` blocks under the optional-knobs section of the generated config.
+
 #### Phase 3 Custom-Type Polish
 - **`disabled_types`** in `mulch.config.yaml`: list type names (built-in or custom) to mark as deprecated. Writes still succeed but emit a stderr warning (suppressed under `--quiet`); reads work as normal; the type stays in CLI choices so peers in shared domains aren't broken. Cross-project safe — overstory/greenhouse can retire a type without hard-failing partners.
 - **Unknown-type policy on read**: `readExpertiseFile` throws a targeted `Unknown record type "X" at <file>:<line> (id=<id>)` when a record's type isn't registered. Validate emits the same targeted error instead of Ajv's generic "no oneOf matched" blob.

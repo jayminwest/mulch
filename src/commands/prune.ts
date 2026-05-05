@@ -3,7 +3,8 @@ import type { Command } from "commander";
 import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, writeExpertiseFile } from "../utils/expertise.ts";
-import { outputJson } from "../utils/json-output.ts";
+import { runHooks } from "../utils/hooks.ts";
+import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 
@@ -52,7 +53,45 @@ export function registerPruneCommand(program: Command): void {
 			const results: PruneResult[] = [];
 			let totalPruned = 0;
 
+			// Phase 1 — preview: gather candidates across all domains without
+			// locking. Locks are taken in phase 3 only for domains that actually
+			// have stale records, so a no-op prune doesn't block other writers.
+			const candidatesByDomain: Array<{ domain: string; records: ExpertiseRecord[] }> = [];
 			for (const domain of config.domains) {
+				const filePath = getExpertisePath(domain);
+				const records = await readExpertiseFile(filePath);
+				const stale = records.filter((r) => isStale(r, now, shelfLife));
+				if (stale.length > 0) {
+					candidatesByDomain.push({ domain, records: stale });
+				}
+			}
+
+			// Phase 2 — pre-prune hook. Skipped in dry-run since hooks like
+			// digest-then-confirm imply user interaction that shouldn't fire on a
+			// preview. Block-on-non-zero, no payload mutation per spec.
+			if (!options.dryRun && candidatesByDomain.length > 0) {
+				const hookRes = await runHooks("pre-prune", { candidates: candidatesByDomain });
+				if (hookRes.blocked) {
+					const reason = hookRes.blockReason ?? "pre-prune hook blocked";
+					if (jsonMode) {
+						outputJsonError("prune", reason);
+					} else {
+						console.error(chalk.red(`Error: ${reason}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+				for (const w of hookRes.warnings) {
+					if (!jsonMode) console.error(chalk.yellow(`Warning: ${w}`));
+				}
+			}
+
+			// Phase 3 — perform writes. Re-read under the lock to absorb any
+			// records added since phase 1, then drop stale ones. Domains with no
+			// stale candidates are not relocked.
+			const candidateDomains = new Set(candidatesByDomain.map((c) => c.domain));
+			for (const domain of config.domains) {
+				if (!candidateDomains.has(domain)) continue;
 				const filePath = getExpertisePath(domain);
 
 				const domainResult = await withFileLock(filePath, async () => {

@@ -11,6 +11,7 @@ import {
 	writeExpertiseFile,
 } from "../utils/expertise.ts";
 import { getContextFiles, getCurrentCommit } from "../utils/git-context.ts";
+import { runHooks } from "../utils/hooks.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
@@ -249,6 +250,48 @@ export async function processStdinRecords(
 		return { created: 0, updated: 0, skipped: 0, errors, warnings };
 	}
 
+	// Fire pre-record per record before locking. A blocked hook drops just that
+	// record (added to errors); the rest of the batch still writes. Skipped in
+	// dry-run since hooks shouldn't fire when previewing.
+	const recordsToWrite: ExpertiseRecord[] = [];
+	if (dryRun) {
+		recordsToWrite.push(...validRecords);
+	} else {
+		for (let i = 0; i < validRecords.length; i++) {
+			const r = validRecords[i];
+			if (!r) continue;
+			const preRes = await runHooks<{ domain: string; record: ExpertiseRecord }>(
+				"pre-record",
+				{ domain, record: r },
+				{ cwd },
+			);
+			warnings.push(...preRes.warnings);
+			if (preRes.blocked) {
+				errors.push(`Record ${i}: ${preRes.blockReason ?? "pre-record hook blocked the write"}`);
+				continue;
+			}
+			let final = r;
+			if (preRes.ranAny && preRes.payload?.record) {
+				const mutated = preRes.payload.record;
+				if (mutated !== r) {
+					if (!validate(mutated)) {
+						const errs = (validate.errors ?? [])
+							.map((e) => `${e.instancePath} ${e.message}`)
+							.join("; ");
+						errors.push(`Record ${i}: pre-record hook produced an invalid record: ${errs}`);
+						continue;
+					}
+					final = mutated;
+				}
+			}
+			recordsToWrite.push(final);
+		}
+	}
+
+	if (recordsToWrite.length === 0) {
+		return { created: 0, updated: 0, skipped: 0, errors, warnings };
+	}
+
 	// Process valid records with file locking (skip write in dry-run mode)
 	const filePath = getExpertisePath(domain, cwd);
 	let created = 0;
@@ -261,12 +304,20 @@ export async function processStdinRecords(
 		return def ? isNamedType(def) : false;
 	};
 
+	// Track records that were actually written so post-record can fire on each
+	// after the lock releases.
+	const writtenForPostHook: Array<{
+		domain: string;
+		record: ExpertiseRecord;
+		action: "created" | "updated";
+	}> = [];
+
 	if (dryRun) {
 		// Dry-run: check for duplicates without writing
 		const existing = await readExpertiseFile(filePath);
 		const currentRecords = [...existing];
 
-		for (const record of validRecords) {
+		for (const record of recordsToWrite) {
 			const dup = findDuplicate(currentRecords, record);
 
 			if (dup && !force) {
@@ -285,7 +336,7 @@ export async function processStdinRecords(
 			const existing = await readExpertiseFile(filePath);
 			const currentRecords = [...existing];
 
-			for (const record of validRecords) {
+			for (const record of recordsToWrite) {
 				const dup = findDuplicate(currentRecords, record);
 
 				if (dup && !force) {
@@ -294,8 +345,10 @@ export async function processStdinRecords(
 						const existingRecord = currentRecords[dup.index];
 						if (!existingRecord) continue;
 						const mergedOutcomes = [...(existingRecord.outcomes ?? []), ...(record.outcomes ?? [])];
-						currentRecords[dup.index] =
+						const upsertRecord =
 							mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
+						currentRecords[dup.index] = upsertRecord;
+						writtenForPostHook.push({ domain, record: upsertRecord, action: "updated" });
 						updated++;
 					} else {
 						// Exact match: skip
@@ -304,6 +357,7 @@ export async function processStdinRecords(
 				} else {
 					// New record: append
 					currentRecords.push(record);
+					writtenForPostHook.push({ domain, record, action: "created" });
 					created++;
 				}
 			}
@@ -313,6 +367,12 @@ export async function processStdinRecords(
 				await writeExpertiseFile(filePath, currentRecords);
 			}
 		});
+	}
+
+	// Fire post-record outside the lock for each actual write.
+	for (const written of writtenForPostHook) {
+		const postRes = await runHooks("post-record", written, { cwd });
+		warnings.push(...postRes.warnings);
 	}
 
 	return { created, updated, skipped, errors, warnings };
@@ -738,7 +798,7 @@ Batch recording examples:
 				return;
 			}
 
-			const record: ExpertiseRecord = built.record;
+			let record: ExpertiseRecord = built.record;
 
 			// Validate against JSON schema (cached on registry)
 			const validate = getRegistry().validator;
@@ -763,6 +823,46 @@ Batch recording examples:
 
 			const filePath = getExpertisePath(domain);
 			const dryRun = options.dryRun === true;
+
+			// Fire pre-record hook outside the file lock. Skipped in dry-run since
+			// dry-run shouldn't trigger external side effects (slack, scanners, etc).
+			let preRecordWarnings: string[] = [];
+			if (!dryRun) {
+				const preResult = await runHooks<{ domain: string; record: ExpertiseRecord }>(
+					"pre-record",
+					{ domain, record },
+				);
+				if (preResult.blocked) {
+					const reason = preResult.blockReason ?? "pre-record hook blocked the write";
+					if (jsonMode) {
+						outputJsonError("record", reason);
+					} else {
+						console.error(chalk.red(`Error: ${reason}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+				preRecordWarnings = preResult.warnings;
+				if (preResult.ranAny && preResult.payload?.record) {
+					const mutated = preResult.payload.record;
+					if (mutated !== record) {
+						if (!validate(mutated)) {
+							const errs = (validate.errors ?? [])
+								.map((e) => `${e.instancePath} ${e.message}`)
+								.join("; ");
+							const msg = `pre-record hook produced an invalid record: ${errs}`;
+							if (jsonMode) {
+								outputJsonError("record", msg);
+							} else {
+								console.error(chalk.red(`Error: ${msg}`));
+							}
+							process.exitCode = 1;
+							return;
+						}
+						record = mutated;
+					}
+				}
+			}
 
 			if (dryRun) {
 				// Dry-run: check for duplicates without writing
@@ -807,16 +907,22 @@ Batch recording examples:
 					if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
 				}
 			} else {
-				// Normal mode: write with file locking
-				await withFileLock(filePath, async () => {
+				// Normal mode: write with file locking, then fire post-record outside
+				// the lock so observation hooks (slack notifications, etc.) can't
+				// stall holders or risk re-entrant deadlock.
+				type WriteOutcome =
+					| { action: "created"; record: ExpertiseRecord }
+					| { action: "updated"; record: ExpertiseRecord; index: number }
+					| { action: "skipped"; index: number };
+
+				const outcome = await withFileLock<WriteOutcome | null>(filePath, async () => {
 					const existing = await readExpertiseFile(filePath);
 					const dup = findDuplicate(existing, record);
 
 					if (dup && !options.force) {
 						if (isNamedType(def)) {
-							// Upsert: replace in place, merging outcomes from existing
 							const existingRecord = existing[dup.index];
-							if (!existingRecord) return;
+							if (!existingRecord) return null;
 							const mergedOutcomes = [
 								...(existingRecord.outcomes ?? []),
 								...(record.outcomes ?? []),
@@ -825,62 +931,88 @@ Batch recording examples:
 								mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
 							existing[dup.index] = upsertRecord;
 							await writeExpertiseFile(filePath, existing);
-							if (jsonMode) {
-								outputJson({
-									success: true,
-									command: "record",
-									action: "updated",
-									domain,
-									type: recordType,
-									index: dup.index + 1,
-									record: upsertRecord,
-									...(disabledWarning ? { warnings: [disabledWarning] } : {}),
-								});
-							} else {
-								if (!isQuiet())
-									console.log(
-										`${brand("✓")} ${brand(`Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`)}`,
-									);
-							}
-						} else {
-							// Exact match: skip
-							if (jsonMode) {
-								outputJson({
-									success: true,
-									command: "record",
-									action: "skipped",
-									domain,
-									type: recordType,
-									index: dup.index + 1,
-									...(disabledWarning ? { warnings: [disabledWarning] } : {}),
-								});
-							} else {
-								if (!isQuiet())
-									console.log(
-										chalk.yellow(
-											`Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
-										),
-									);
-							}
+							return { action: "updated", record: upsertRecord, index: dup.index };
 						}
-					} else {
-						await appendRecord(filePath, record);
-						if (jsonMode) {
-							outputJson({
-								success: true,
-								command: "record",
-								action: "created",
-								domain,
-								type: recordType,
-								record,
-								...(disabledWarning ? { warnings: [disabledWarning] } : {}),
-							});
-						} else {
-							if (!isQuiet())
-								console.log(`${brand("✓")} ${brand(`Recorded ${recordType} in ${domain}`)}`);
-						}
+						return { action: "skipped", index: dup.index };
 					}
+					await appendRecord(filePath, record);
+					return { action: "created", record };
 				});
+
+				if (!outcome) return;
+
+				// Post-record only fires for actual writes (created/updated). Skipped
+				// duplicates are no-ops by design.
+				const postWarnings: string[] = [];
+				if (outcome.action === "created" || outcome.action === "updated") {
+					const postResult = await runHooks("post-record", {
+						domain,
+						record: outcome.record,
+						action: outcome.action,
+					});
+					postWarnings.push(...postResult.warnings);
+				}
+
+				const collectedWarnings = [
+					...(disabledWarning ? [disabledWarning] : []),
+					...preRecordWarnings,
+					...postWarnings,
+				];
+
+				if (jsonMode) {
+					if (outcome.action === "updated") {
+						outputJson({
+							success: true,
+							command: "record",
+							action: "updated",
+							domain,
+							type: recordType,
+							index: outcome.index + 1,
+							record: outcome.record,
+							...(collectedWarnings.length > 0 ? { warnings: collectedWarnings } : {}),
+						});
+					} else if (outcome.action === "skipped") {
+						outputJson({
+							success: true,
+							command: "record",
+							action: "skipped",
+							domain,
+							type: recordType,
+							index: outcome.index + 1,
+							...(collectedWarnings.length > 0 ? { warnings: collectedWarnings } : {}),
+						});
+					} else {
+						outputJson({
+							success: true,
+							command: "record",
+							action: "created",
+							domain,
+							type: recordType,
+							record: outcome.record,
+							...(collectedWarnings.length > 0 ? { warnings: collectedWarnings } : {}),
+						});
+					}
+				} else {
+					if (outcome.action === "updated") {
+						if (!isQuiet())
+							console.log(
+								`${brand("✓")} ${brand(`Updated existing ${recordType} in ${domain} (record #${outcome.index + 1})`)}`,
+							);
+					} else if (outcome.action === "skipped") {
+						if (!isQuiet())
+							console.log(
+								chalk.yellow(
+									`Duplicate ${recordType} already exists in ${domain} (record #${outcome.index + 1}). Use --force to add anyway.`,
+								),
+							);
+					} else {
+						if (!isQuiet())
+							console.log(`${brand("✓")} ${brand(`Recorded ${recordType} in ${domain}`)}`);
+					}
+					for (const w of [...preRecordWarnings, ...postWarnings]) {
+						console.error(chalk.yellow(`Warning: ${w}`));
+					}
+				}
 			}
 		},
 	);
