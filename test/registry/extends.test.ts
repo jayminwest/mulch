@@ -68,12 +68,27 @@ describe("validateCustomTypeConfig — extends", () => {
 	});
 
 	it("accepts aliases for inherited parent fields", () => {
+		// `legacy_title` is a non-conflicting legacy name (not declared on any
+		// other built-in). Using `name` here would now collide with pattern's
+		// required field — see the foreign-base-field collision check.
+		expect(() =>
+			validateCustomTypeConfig("adr", {
+				extends: "decision",
+				aliases: { title: ["legacy_title"] },
+			}),
+		).not.toThrow();
+	});
+
+	it("rejects aliases legacy that collides with another built-in's field (mulch-aeb2)", () => {
+		// `name` is required on pattern. Even though this type extends
+		// decision (so `name` is not its own field), declaring it as an alias
+		// legacy is rejected because the field belongs to a foreign type.
 		expect(() =>
 			validateCustomTypeConfig("adr", {
 				extends: "decision",
 				aliases: { title: ["name"] },
 			}),
-		).not.toThrow();
+		).toThrow(/collides with a built-in type's field/);
 	});
 
 	it("rejects aliases legacy collision with an inherited field", () => {

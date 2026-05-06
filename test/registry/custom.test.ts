@@ -34,7 +34,48 @@ describe("validateCustomTypeConfig", () => {
 				dedup_key: "x",
 				summary: "{x}",
 			}),
-		).toThrow(/must match/);
+		).toThrow(/must start with a lowercase letter/);
+	});
+
+	it("rejects hyphenated type names with a hyphen-specific message", () => {
+		expect(() =>
+			validateCustomTypeConfig("my-type", {
+				required: ["x"],
+				dedup_key: "x",
+				summary: "{x}",
+			}),
+		).toThrow(/contains a hyphen/);
+	});
+
+	it("rejects type names that start with a digit with a digit-specific message", () => {
+		expect(() =>
+			validateCustomTypeConfig("3things", {
+				required: ["x"],
+				dedup_key: "x",
+				summary: "{x}",
+			}),
+		).toThrow(/starts with a digit/);
+	});
+
+	it("rejects required field names that don't match the naming rule (mulch-aeb2)", () => {
+		expect(() =>
+			validateCustomTypeConfig("hypothesis", {
+				required: ["my-field"],
+				dedup_key: "my-field",
+				summary: "{my-field}",
+			}),
+		).toThrow(/required field "my-field" \(contains a hyphen\)/);
+	});
+
+	it("rejects optional field names that don't match the naming rule (mulch-aeb2)", () => {
+		expect(() =>
+			validateCustomTypeConfig("hypothesis", {
+				required: ["statement"],
+				optional: ["My-Optional"],
+				dedup_key: "statement",
+				summary: "{statement}",
+			}),
+		).toThrow(/optional field "My-Optional"/);
 	});
 
 	it("rejects required fields colliding with base record fields", () => {

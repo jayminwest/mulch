@@ -40,6 +40,26 @@ const BASE_FIELDS: ReadonlySet<string> = new Set([
 ]);
 
 const CUSTOM_NAME_RE = /^[a-z][a-z0-9_]*$/;
+const NAMING_RULE =
+	"lowercase letters, digits, and underscores; must start with a letter; no hyphens";
+
+// Required + optional fields owned by built-in types. Used to reject custom
+// type aliases whose legacy name collides with a foreign type's field — that
+// would silently swallow a field name another type relies on.
+const BUILTIN_FIELDS: ReadonlySet<string> = new Set(
+	BUILTIN_DEFS.flatMap((d) => [...d.required, ...d.optional]),
+);
+
+function describeNameViolation(value: string): string {
+	if (value.length === 0) return "must not be empty";
+	if (value.includes("-")) return "contains a hyphen";
+	if (/^\d/.test(value)) return "starts with a digit";
+	if (!/^[a-z]/.test(value)) return "must start with a lowercase letter";
+	if (/[A-Z]/.test(value)) return "contains uppercase letters";
+	if (/[^a-z0-9_]/.test(value)) return "contains a character outside [a-z0-9_]";
+	return "violates the naming rule";
+}
+
 const VALID_COMPACT_STRATEGIES = new Set(["concat", "merge_outcomes", "keep_latest", "manual"]);
 
 const linkArray = {
@@ -50,7 +70,7 @@ const linkArray = {
 export function validateCustomTypeConfig(name: string, cfg: CustomTypeConfig): void {
 	if (!CUSTOM_NAME_RE.test(name)) {
 		throw new Error(
-			`Invalid custom_types name "${name}": must match ${CUSTOM_NAME_RE} (lowercase, start with letter, alphanumeric/underscore).`,
+			`Invalid custom_types name "${name}" (${describeNameViolation(name)}). Allowed: ${NAMING_RULE}.`,
 		);
 	}
 	if (BUILTIN_TYPE_NAMES.has(name)) {
@@ -93,6 +113,11 @@ export function validateCustomTypeConfig(name: string, cfg: CustomTypeConfig): v
 		if (typeof f !== "string" || f.length === 0) {
 			throw new Error(`Custom type "${name}" has an invalid required field: ${JSON.stringify(f)}.`);
 		}
+		if (!CUSTOM_NAME_RE.test(f)) {
+			throw new Error(
+				`Custom type "${name}" required field "${f}" (${describeNameViolation(f)}). Allowed: ${NAMING_RULE}.`,
+			);
+		}
 		if (BASE_FIELDS.has(f)) {
 			throw new Error(
 				`Custom type "${name}" cannot declare base field "${f}" as required (base fields: ${[...BASE_FIELDS].join(", ")}).`,
@@ -107,6 +132,11 @@ export function validateCustomTypeConfig(name: string, cfg: CustomTypeConfig): v
 	for (const f of cfg.optional ?? []) {
 		if (typeof f !== "string" || f.length === 0) {
 			throw new Error(`Custom type "${name}" has an invalid optional field: ${JSON.stringify(f)}.`);
+		}
+		if (!CUSTOM_NAME_RE.test(f)) {
+			throw new Error(
+				`Custom type "${name}" optional field "${f}" (${describeNameViolation(f)}). Allowed: ${NAMING_RULE}.`,
+			);
 		}
 		if (BASE_FIELDS.has(f)) {
 			throw new Error(`Custom type "${name}" cannot declare base field "${f}" as optional.`);
@@ -189,9 +219,25 @@ export function validateCustomTypeConfig(name: string, cfg: CustomTypeConfig): v
 						`Custom type "${name}" aliases entry "${canonical}" has an invalid legacy name: ${JSON.stringify(legacy)}.`,
 					);
 				}
+				if (!CUSTOM_NAME_RE.test(legacy)) {
+					throw new Error(
+						`Custom type "${name}" aliases legacy name "${legacy}" (${describeNameViolation(legacy)}). Allowed: ${NAMING_RULE}.`,
+					);
+				}
 				if (BASE_FIELDS.has(legacy)) {
 					throw new Error(
 						`Custom type "${name}" aliases legacy name "${legacy}" collides with a base field.`,
+					);
+				}
+				// Reject aliases legacy name that names a built-in type's field.
+				// Aliases run at read time only on records of *this* type, so a
+				// foreign-field name on disk isn't actively confused — but
+				// declaring one signals a misunderstanding (the user thinks the
+				// field is theirs when it belongs to another type) and tends to
+				// surface as silent loss when records get reclassified.
+				if (BUILTIN_FIELDS.has(legacy) && !mergedSeen.has(legacy)) {
+					throw new Error(
+						`Custom type "${name}" aliases legacy name "${legacy}" collides with a built-in type's field. Use a name that isn't already owned by another type, or set it as required/optional on this type if the field really belongs here.`,
 					);
 				}
 				if (mergedSeen.has(legacy)) {
