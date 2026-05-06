@@ -40,9 +40,13 @@ field aliases for schema evolution, `ml doctor` `type-registry` + `unknown-types
 Per-domain rules also shipped (mulch-68ba → mulch-0b87 → mulch-4630 → mulch-3114): `domains`
 config reshaped to `Record<string, DomainConfig>`, `allowed_types` and `required_fields` gates
 on record writes, and `ml doctor` / `ml sync` re-validate on-disk records against domain rules.
-Open: `extends: <builtin>` inheritance (mulch-4d6d); `dir_anchors` field (mulch-476b).
+`dir_anchors[]` shipped as a built-in field on every record (mulch-476b): `--dir-anchor <path>`
+on `ml record`, auto-population from common parent of 3+ changed files, `ml prime --files`
+matches by directory membership in addition to file anchors, and `ml doctor` flags + `--fix`
+strips broken dir anchors.
+Open: `extends: <builtin>` inheritance (mulch-4d6d).
 Depends on: —
-Unlocks: R-05f (dir anchors), R-09 (schema portability across imports)
+Unlocks: R-05f (anchor decay weighting now that dir anchors exist), R-09 (schema portability across imports)
 
 **Problem.** The 6 hard-coded record types in `src/schemas/record.ts` were a fork-the-tool
 ceiling. Big orgs need types like `runbook`, `adr`, `slo-incident`, and per-domain required
@@ -68,7 +72,6 @@ fall back to the base type's semantics for unknown custom types so the corpus st
   `required_fields` works only when the field is declared on a `custom_types` entry — built-in
   types' AJV schemas reject unknown properties. Tracked in mulch-cc51 (and overlaps mulch-4d6d
   if `extends:` lets built-ins inherit + extend).
-- Ship `dir_anchors` as a built-in field here (not as a custom extension).
 
 ---
 
@@ -189,9 +192,10 @@ Archive below 0.3, delete below 0.05. `ml fitness <id>` shows per-axis breakdown
   load-bearing — without auto-emission, this punishes good-but-unmarked records.
 - **R-05e — Supersession decay.** When B has `supersedes: [A]`, A auto-demotes one tier.
   **Cheapest "smart" decay; ship early.**
-- **R-05f — Anchor-validity decay + dir anchors.** Records whose file anchors have been deleted
-  past a threshold auto-demote (rather than `ml doctor --fix` silently stripping). Add
-  `dir_anchors` so records can attach to a directory and stay valid as files within it shuffle.
+- **R-05f — Anchor-validity decay.** Records whose file anchors have been deleted past a
+  threshold auto-demote (rather than `ml doctor --fix` silently stripping). `dir_anchors[]`
+  shipped under R-01 (mulch-476b) so records can attach to a directory and stay valid as files
+  within it shuffle — this remaining piece is just the decay weighting.
 - **R-05g — Continuous fitness formula.** The unifying mechanism above. Weights in
   `mulch.config.yaml`, `ml fitness <id>` for transparency, `ml prune --explain` for debugging.
 
@@ -418,28 +422,32 @@ revisions know what's already off the punch list.
 - **R-01 — Custom record types (epic mulch-632e).** Phases 1-3 closed across v0.8.0
   (mulch-2e68, mulch-c7f3, mulch-365e). Type registry, custom types via config, disable list,
   unknown-type policy + `--allow-unknown-types`, field aliases, `ml doctor` registry checks.
-  Remaining R-01 open items: `extends:` inheritance (mulch-4d6d), `dir_anchors` (mulch-476b).
+- **R-01 — `dir_anchors[]` built-in field (mulch-476b, 2026-05-06).** Repeatable
+  `--dir-anchor <path>` on `ml record`, auto-population from common parent of 3+ changed files,
+  `ml prime --files` matches by directory membership, `ml doctor` flags broken dir anchors and
+  `--fix` strips them.
+  Remaining R-01 open items: `extends:` inheritance (mulch-4d6d).
 - **R-07 partial — Output knobs.** Global `--format` flag (v0.7.0); `prime --manifest` mode +
   `prime.default_mode: manifest` config default (v0.7.0). Provider-neutral adapters
   (json/text/slack) still open.
 
 Open seeds tracking remaining roadmap work: mulch-7876 (R-05a), mulch-4426 (R-05e),
-mulch-476b + mulch-4d6d (R-01 finish), mulch-1d5b (R-09).
+mulch-4d6d (R-01 `extends:` inheritance), mulch-1d5b (R-09).
 
 ## Suggested sequencing
 
 A first cut at order of attack — not committed:
 
 1. ~~**R-01** (custom record types)~~ — shipped via epic mulch-632e (v0.8.0). Per-domain
-   `allowed_types`/`required_fields` shipped (mulch-3114). Remaining: `extends:` inheritance
-   (mulch-4d6d) and `dir_anchors` (mulch-476b).
+   `allowed_types`/`required_fields` shipped (mulch-3114). `dir_anchors[]` shipped
+   (mulch-476b). Remaining: `extends:` inheritance (mulch-4d6d).
 2. ~~**R-02** (lifecycle hooks)~~ — shipped (mulch-55b1, 2026-05-05). The customization
    primitive everything else leans on.
 3. **R-05a + R-05e** (soft archive + supersession decay) — small, safe, ship together.
    Tracked in mulch-7876, mulch-4426. **Next.**
 4. **R-06** (ownership) — needed before R-12 can route resolution.
 5. **R-03** (Claude hook namespace + profiles) — leverages R-02; unlocks R-05c, R-11.
-6. **R-05f** (anchor + dir anchors) — small, fits with R-01's remaining schema work.
+6. **R-05f** (anchor-validity decay) — small follow-up now that `dir_anchors[]` has shipped.
 7. **R-04** (provider plugins) — pure refactor of `setup.ts`; can happen any time.
 8. **R-11 + R-05d** (auto-confirmations + confirmation decay) — paired; ship together.
 9. **R-05g** (fitness formula) — once R-05c/d/e/f are emitting signal, unify them.

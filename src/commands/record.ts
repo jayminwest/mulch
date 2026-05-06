@@ -4,6 +4,7 @@ import { type Command, Option } from "commander";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
 import type { Classification, Evidence, ExpertiseRecord, Outcome } from "../schemas/record.ts";
 import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
+import { inferDirAnchors, normalizeDirAnchor } from "../utils/dir-anchors.ts";
 import {
 	findMissingDomainFields,
 	getAllowedTypes,
@@ -54,6 +55,7 @@ interface BaseRecordParts {
 	relates_to?: string[];
 	supersedes?: string[];
 	outcomes?: Outcome[];
+	dir_anchors?: string[];
 }
 
 function buildRecordFromOptions(
@@ -73,6 +75,7 @@ function buildRecordFromOptions(
 	if (base.relates_to && base.relates_to.length > 0) r.relates_to = base.relates_to;
 	if (base.supersedes && base.supersedes.length > 0) r.supersedes = base.supersedes;
 	if (base.outcomes) r.outcomes = base.outcomes;
+	if (base.dir_anchors && base.dir_anchors.length > 0) r.dir_anchors = base.dir_anchors;
 
 	const missing: Array<{ flag: string; placeholder: string }> = [];
 
@@ -142,6 +145,11 @@ function buildRetryCommand(
 	if (options.title) parts.push(`--title ${JSON.stringify(options.title as string)}`);
 	if (options.rationale) parts.push(`--rationale ${JSON.stringify(options.rationale as string)}`);
 	if (options.files) parts.push(`--files ${JSON.stringify(options.files as string)}`);
+	if (Array.isArray(options.dirAnchor)) {
+		for (const dir of options.dirAnchor as string[]) {
+			parts.push(`--dir-anchor ${JSON.stringify(dir)}`);
+		}
+	}
 	if (options.tags) parts.push(`--tags ${JSON.stringify(options.tags as string)}`);
 	if (options.evidenceCommit) parts.push(`--evidence-commit ${options.evidenceCommit as string}`);
 	if (options.evidenceIssue)
@@ -428,6 +436,12 @@ export function registerRecordCommand(program: Command): void {
 		.option("--title <title>", "title for decision records")
 		.option("--rationale <rationale>", "rationale for decision records")
 		.option("--files <files>", "related files (comma-separated)")
+		.option(
+			"--dir-anchor <path>",
+			"repo-relative directory the record applies to (repeatable; auto-populated from changed files when omitted)",
+			(value: string, prev: string[] = []) => [...prev, value],
+			[] as string[],
+		)
 		.option("--tags <tags>", "comma-separated tags")
 		.option(
 			"--evidence-commit <commit>",
@@ -781,6 +795,22 @@ Batch recording examples:
 				outcomes = [o];
 			}
 
+			// dir_anchors: explicit --dir-anchor wins; otherwise infer from changed
+			// files (3+ files sharing a parent directory). Normalized to drop
+			// trailing slashes; "." / repo root collapses to nothing stored.
+			const explicitDirAnchors = Array.isArray(options.dirAnchor)
+				? (options.dirAnchor as string[])
+						.map((p) => normalizeDirAnchor(p))
+						.filter((p) => p.length > 0)
+				: [];
+			let dirAnchors: string[] | undefined;
+			if (explicitDirAnchors.length > 0) {
+				dirAnchors = [...new Set(explicitDirAnchors)].sort();
+			} else if (options.files === undefined) {
+				const inferred = inferDirAnchors(getContextFiles());
+				if (inferred.length > 0) dirAnchors = inferred;
+			}
+
 			const def = getRegistry().get(recordType);
 			if (!def) {
 				const msg = `Unknown record type "${recordType}". Available: ${typeChoices.join(", ")}.`;
@@ -837,6 +867,7 @@ Batch recording examples:
 				relates_to: relatesTo,
 				supersedes,
 				outcomes,
+				dir_anchors: dirAnchors,
 			});
 
 			if (!built.record) {

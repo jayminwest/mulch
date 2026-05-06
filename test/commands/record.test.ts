@@ -2440,3 +2440,155 @@ describe("--allow-domain-mismatch escape hatch (R-01d)", () => {
 		expect(r.stderr).toMatch(/type "pattern" is not allowed/);
 	});
 });
+
+describe("dir_anchors (R-01)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-dir-anchors-"));
+		// Real git repo so getContextFiles() can run; auto-population tests
+		// stage files into it to drive the heuristic.
+		execSync("git init -q", { cwd: tmpDir });
+		execSync("git config user.email t@t && git config user.name t", { cwd: tmpDir });
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
+		await createExpertiseFile(getExpertisePath("cli", tmpDir));
+	});
+
+	afterEach(async () => {
+		resetRegistry();
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("--dir-anchor flag round-trips through write/read (sorted, deduped)", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"pattern",
+				"--name",
+				"shared-dir",
+				"--description",
+				"applies to src/utils/",
+				"--dir-anchor",
+				"src/utils",
+				"--dir-anchor",
+				"src/commands/",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records).toHaveLength(1);
+		// Trailing slashes normalized away; sorted; deduped.
+		expect(records[0]?.dir_anchors).toEqual(["src/commands", "src/utils"]);
+	});
+
+	it("normalizes 'src/foo/' to 'src/foo' on write", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"convention",
+				"normalize test",
+				"--dir-anchor",
+				"src/foo/",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records[0]?.dir_anchors).toEqual(["src/foo"]);
+	});
+
+	it("auto-populates dir_anchors from common parent of 3+ changed files", async () => {
+		execSync("mkdir -p src/utils", { cwd: tmpDir });
+		await writeFile(join(tmpDir, "src/utils/a.ts"), "// a", "utf-8");
+		await writeFile(join(tmpDir, "src/utils/b.ts"), "// b", "utf-8");
+		await writeFile(join(tmpDir, "src/utils/c.ts"), "// c", "utf-8");
+		execSync("git add src/utils", { cwd: tmpDir });
+
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "cli", "--type", "convention", "auto-pop test"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records[0]?.dir_anchors).toEqual(["src/utils"]);
+	});
+
+	it("does NOT auto-populate when only 2 files share a parent dir", async () => {
+		execSync("mkdir -p src/utils", { cwd: tmpDir });
+		await writeFile(join(tmpDir, "src/utils/a.ts"), "// a", "utf-8");
+		await writeFile(join(tmpDir, "src/utils/b.ts"), "// b", "utf-8");
+		execSync("git add src/utils", { cwd: tmpDir });
+
+		const r = spawnSync("bun", [cliPath, "record", "cli", "--type", "convention", "no auto-pop"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 8000,
+		});
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records[0]?.dir_anchors).toBeUndefined();
+	});
+
+	it("explicit --dir-anchor wins over auto-population", async () => {
+		execSync("mkdir -p src/utils", { cwd: tmpDir });
+		await writeFile(join(tmpDir, "src/utils/a.ts"), "// a", "utf-8");
+		await writeFile(join(tmpDir, "src/utils/b.ts"), "// b", "utf-8");
+		await writeFile(join(tmpDir, "src/utils/c.ts"), "// c", "utf-8");
+		execSync("git add src/utils", { cwd: tmpDir });
+
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "cli", "--type", "convention", "explicit wins", "--dir-anchor", "docs"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records[0]?.dir_anchors).toEqual(["docs"]);
+	});
+
+	it("validates dir_anchors via stdin JSON path", async () => {
+		const result = await processStdinRecords(
+			"cli",
+			false,
+			false,
+			false,
+			JSON.stringify({
+				type: "pattern",
+				name: "stdin dir-anchor",
+				description: "test",
+				dir_anchors: ["src/foo", "src/bar"],
+				classification: "tactical",
+			}),
+			tmpDir,
+		);
+		expect(result.errors).toEqual([]);
+		expect(result.created).toBe(1);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records[0]?.dir_anchors).toEqual(["src/foo", "src/bar"]);
+	});
+
+	it("schema rejects non-array dir_anchors", () => {
+		const ajv = new Ajv({ allErrors: true });
+		const validate = ajv.compile(recordSchema);
+		const ok = validate({
+			type: "convention",
+			content: "x",
+			classification: "tactical",
+			recorded_at: new Date().toISOString(),
+			dir_anchors: "not-an-array",
+		});
+		expect(ok).toBe(false);
+	});
+});

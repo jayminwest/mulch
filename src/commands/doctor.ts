@@ -447,6 +447,13 @@ async function checkFileAnchors(config: MulchConfig, cwd?: string): Promise<Doct
 					}
 				}
 			}
+			if (Array.isArray(record.dir_anchors)) {
+				for (const d of record.dir_anchors) {
+					if (!existsSync(resolve(projectRoot, d))) {
+						details.push(`${domain}${id}: dir_anchors[] path not found: ${d}`);
+					}
+				}
+			}
 			if (record.evidence?.file && !existsSync(resolve(projectRoot, record.evidence.file))) {
 				details.push(`${domain}${id}: evidence.file not found: ${record.evidence.file}`);
 			}
@@ -847,6 +854,14 @@ async function applyFixes(
 								if (kept.length < before) {
 									removedCount += before - kept.length;
 									r = { ...r, files: kept.length > 0 ? kept : undefined } as ExpertiseRecord;
+								}
+							}
+							if (Array.isArray(r.dir_anchors)) {
+								const before = r.dir_anchors.length;
+								const kept = r.dir_anchors.filter((d) => existsSync(resolve(projectRoot, d)));
+								if (kept.length < before) {
+									removedCount += before - kept.length;
+									r = { ...r, dir_anchors: kept.length > 0 ? kept : undefined };
 								}
 							}
 							if (r.evidence?.file && !existsSync(resolve(projectRoot, r.evidence.file))) {

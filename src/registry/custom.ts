@@ -181,6 +181,7 @@ export function buildCustomTypeDefinition(name: string, cfg: CustomTypeConfig): 
 		relates_to: linkArray,
 		supersedes: linkArray,
 		outcomes: { type: "array", items: { $ref: "#/definitions/outcome" } },
+		dir_anchors: { type: "array", items: { type: "string" } },
 	};
 
 	for (const f of [...required, ...optional]) {

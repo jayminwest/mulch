@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
@@ -561,5 +561,97 @@ describe("doctor — domain conformance (R-01d)", () => {
 		).toBe(true);
 		// Domain violations don't expose --fix in v1 — they require human judgment.
 		expect(violations.fixable).toBe(false);
+	});
+});
+
+describe("doctor — dir_anchors (R-01)", () => {
+	it("flags broken dir_anchors[] paths in file-anchors check", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		const apiPath = getExpertisePath("api", tmpDir);
+		await createExpertiseFile(apiPath);
+
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "anchored to dirs",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			dir_anchors: ["src/missing-dir", "src/also-gone"],
+		});
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find((c: { name: string }) => c.name === "file-anchors") as {
+			status: string;
+			details: string[];
+			message: string;
+		};
+		expect(check.status).toBe("warn");
+		expect(
+			check.details.some((d) => d.includes("dir_anchors[] path not found: src/missing-dir")),
+		).toBe(true);
+		expect(
+			check.details.some((d) => d.includes("dir_anchors[] path not found: src/also-gone")),
+		).toBe(true);
+	});
+
+	it("doctor --fix strips broken dir_anchors[] entries while keeping live ones", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		const apiPath = getExpertisePath("api", tmpDir);
+		await createExpertiseFile(apiPath);
+
+		// Create a real "src/" dir so one anchor survives the fix.
+		await mkdir(join(tmpDir, "src"), { recursive: true });
+		await writeFile(join(tmpDir, "src", "keep.ts"), "", "utf-8");
+
+		await appendRecord(filePath, {
+			type: "pattern",
+			name: "anchored-pat",
+			description: "mixed live/dead anchors",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			dir_anchors: ["src", "src/missing", "still-gone"],
+		});
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--fix", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		expect(r.status).toBe(0);
+		const out = JSON.parse(r.stdout);
+		expect(out.fixed.some((f: string) => /broken file anchor/.test(f))).toBe(true);
+
+		const records = await readExpertiseFile(filePath);
+		expect(records[0]?.dir_anchors).toEqual(["src"]);
+	});
+
+	it("doctor --fix drops dir_anchors entirely when all entries are broken", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		const apiPath = getExpertisePath("api", tmpDir);
+		await createExpertiseFile(apiPath);
+
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "all dead",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+			dir_anchors: ["does-not-exist", "also-missing"],
+		});
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--fix", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(filePath);
+		expect(records[0]?.dir_anchors).toBeUndefined();
 	});
 });

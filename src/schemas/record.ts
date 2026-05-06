@@ -42,6 +42,7 @@ interface BaseRecord {
 	relates_to?: string[];
 	supersedes?: string[];
 	outcomes?: Outcome[];
+	dir_anchors?: string[];
 }
 
 export interface ConventionRecord extends BaseRecord {

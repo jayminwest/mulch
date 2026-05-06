@@ -1316,6 +1316,89 @@ describe("prime command", () => {
 			expect(records).toHaveLength(1);
 		});
 
+		it("filterByContext keeps records when changed file lives under dir_anchors", () => {
+			const records = filterByContext(
+				[
+					{
+						type: "convention",
+						content: "applies to utils dir",
+						classification: "foundational",
+						recorded_at: new Date().toISOString(),
+						dir_anchors: ["src/utils"],
+					},
+				],
+				["src/utils/foo.ts"],
+			);
+			expect(records).toHaveLength(1);
+		});
+
+		it("filterByContext excludes records whose dir_anchors don't cover any changed file", () => {
+			const records = filterByContext(
+				[
+					{
+						type: "convention",
+						content: "only applies to docs",
+						classification: "foundational",
+						recorded_at: new Date().toISOString(),
+						dir_anchors: ["docs"],
+					},
+				],
+				["src/utils/foo.ts"],
+			);
+			expect(records).toHaveLength(0);
+		});
+
+		it("filterByContext matches dir_anchors regardless of trailing slash on stored path", () => {
+			const records = filterByContext(
+				[
+					{
+						type: "convention",
+						content: "trailing slash tolerance",
+						classification: "foundational",
+						recorded_at: new Date().toISOString(),
+						dir_anchors: ["src/utils/"],
+					},
+				],
+				["src/utils/foo.ts"],
+			);
+			expect(records).toHaveLength(1);
+		});
+
+		it("filterByContext: dir_anchors prefix must be a directory boundary, not a substring", () => {
+			// "src/util" should NOT match "src/utils/foo.ts" — boundary check.
+			const records = filterByContext(
+				[
+					{
+						type: "convention",
+						content: "boundary check",
+						classification: "foundational",
+						recorded_at: new Date().toISOString(),
+						dir_anchors: ["src/util"],
+					},
+				],
+				["src/utils/foo.ts"],
+			);
+			expect(records).toHaveLength(0);
+		});
+
+		it("filterByContext keeps record matched by either files OR dir_anchors", () => {
+			const records = filterByContext(
+				[
+					{
+						type: "pattern",
+						name: "either-or",
+						description: "matches by dir even if files miss",
+						files: ["unrelated/path.ts"],
+						dir_anchors: ["src/utils"],
+						classification: "foundational",
+						recorded_at: new Date().toISOString(),
+					},
+				],
+				["src/utils/foo.ts"],
+			);
+			expect(records).toHaveLength(1);
+		});
+
 		it("filterByContext with mixed records filters correctly", () => {
 			const records = filterByContext(
 				[

@@ -137,6 +137,15 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 
 All records support optional `--classification` (foundational / tactical / observational), evidence flags (`--evidence-commit`, `--evidence-issue`, `--evidence-file`, plus tracker-specific `--evidence-bead`, `--evidence-seeds`, `--evidence-gh`, `--evidence-linear`), `--tags`, `--relates-to`, `--supersedes` for linking, and `--outcome-status` (success/failure) for tracking application results. Cross-domain references use `domain:mx-hash` format (e.g., `--relates-to api:mx-abc123`). When `evidence.commit` or `files[]` are omitted, `ml record` auto-populates them from the current git context.
 
+#### File and directory anchors
+
+Any record type can attach to specific files or directories so `ml prime --files <path>` and `ml prime --context` only surface the records relevant to what you're touching:
+
+- **`files[]`** (pattern + reference, plus any custom type with `extracts_files: true`) — list of repo-relative file paths. Use when the record is about specific files. Auto-populated from the current git context when `--files` is omitted. Invalidated by file rename/move.
+- **`dir_anchors[]`** (any record type) — list of repo-relative directory paths. Use when the record applies to a whole directory and should survive file churn within it. Set explicitly with `--dir-anchor <path>` (repeatable) or auto-populated when 3+ changed files share a parent directory. Trailing slashes are normalized away on write.
+
+A record matches `ml prime --files src/foo/bar.ts` when *either* `files[]` lists the path *or* any `dir_anchors[]` entry is an ancestor directory. Reach for `dir_anchors` when the wisdom belongs to a module/folder more than to any individual file; reach for `files[]` when the record cites specific lines or APIs that move with the file.
+
 ### Custom Types
 
 Project-specific record types declared under `custom_types:` in `.mulch/mulch.config.yaml` get full registry treatment — CLI flags, validation, dedup, formatters. Each definition declares required + optional fields, a dedup key, and a summary template:

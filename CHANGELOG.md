@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Directory Anchors (R-01, mulch-476b)
+- **`dir_anchors[]`** as a built-in field on every record type — repo-relative POSIX directory paths the record applies to. Survives file rename/move within the directory, where `files[]` (file anchors) get invalidated.
+- **`--dir-anchor <path>`** flag on `ml record` (repeatable). Trailing slashes are normalized away on write (`src/utils/` → `src/utils`); duplicates collapsed and entries stored sorted.
+- **Auto-population from git context**: when no `--dir-anchor` is supplied, `ml record` infers anchors from the immediate parent of changed files — any directory that is the parent of 3+ changed files becomes a dir anchor. Explicit `--dir-anchor` wins over the heuristic.
+- **`ml prime --files <path>` matches by directory membership**: a record matches when *either* `files[]` lists the path *or* any `dir_anchors[]` entry is an ancestor directory. Boundary-respecting prefix check (`src/util` does not match `src/utils/foo.ts`).
+- **`ml doctor` extension**: the existing `file-anchors` check now scans `dir_anchors[]` and flags entries pointing at deleted directories. `--fix` strips broken dir anchors the same way it strips broken file anchors; when every entry is broken, the field is removed entirely.
+
 #### Lifecycle Hooks (R-02)
 - **`hooks` config block** in `mulch.config.yaml`: declare ordered shell scripts for `pre-record`, `post-record`, `pre-prime`, and `pre-prune`. Each script is invoked with the relevant payload as JSON on stdin (`MULCH_HOOK=1` set in the environment, cwd at the project root). Exit `0` to continue; non-zero **blocks** for `pre-*` events and **warns** for `post-*` events.
 - **Payload mutation** for `pre-record` and `pre-prime`: a script may print a modified JSON payload on stdout, which becomes input to the next script and the eventual write. Useful for redaction, owner injection, team-scoped filtering. Empty stdout leaves the payload untouched. Non-JSON stdout is ignored with a warning. Both `{ event, payload }` and bare-payload shapes are accepted on the way back.
