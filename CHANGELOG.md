@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Supersession-Based Auto-Demotion (R-05e, mulch-4426)
+- **`ml prune` demotes superseded records by one tier per pass**: when record B has `supersedes: [A]`, A walks down the classification ladder (`foundational → tactical → observational → archived`). Each demotion stamps `supersession_demoted_at: <iso-date>` on A so the event is auditable. The signal was already in the schema — supersession is now a first-class decay axis.
+- **Cross-domain by design**: a record in domain X can supersede a record in domain Y. Supersession is content-relational, not domain-bound.
+- **Staleness wins on overlap**: a record that is both stale and superseded gets archived for staleness in one shot, no intermediate demotion stamp.
+- **`--aggressive`** flag on `ml prune`: collapses every superseded record straight to archived (or hard-deleted with `--hard`) in a single pass instead of walking the ladder.
+- **Self-supersession is a no-op**: a record listing its own id under `supersedes` is treated as a typo and ignored.
+- **JSON output adds `totalDemoted` and per-domain `demoted` counts** alongside the existing `totalPruned` / `pruned`. The pre-prune hook payload now carries both `stale` and `demote` arrays per candidate domain.
+
 #### Soft Archive on Prune (R-05a, mulch-7876)
 - **`ml prune` defaults to soft-archive**: stale records move to `.mulch/archive/<domain>.jsonl` (with `status: "archived"` and `archived_at: <iso-date>` fields) instead of being deleted. A single bad classification at record-time stops being destructive — recoverable with one command.
 - **`--hard`** opt-in for true deletion (legacy behavior).

@@ -48,6 +48,10 @@ interface BaseRecord {
 	// (and the AJV schemas reject them via additionalProperties: false).
 	status?: "archived";
 	archived_at?: string;
+	// Set by `ml prune` when supersession decay (R-05e) demotes a record one
+	// classification tier. Lives on the record across the demotion until
+	// archive; bumped each pass that re-demotes.
+	supersession_demoted_at?: string;
 }
 
 export interface ConventionRecord extends BaseRecord {

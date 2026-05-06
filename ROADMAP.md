@@ -78,6 +78,12 @@ fall back to the base type's semantics for unknown custom types so the corpus st
 - Removal syntax for `extends:` (e.g. `removed_fields: [date]`) deferred until a real use case
   surfaces; v1 only supports additive merges.
 
+**Known follow-up bugs.**
+- mulch-cc51 — built-in types reject unknown CLI fields (per above).
+- mulch-7ac8 — `ml doctor` domain-rule check counts violations as records (cosmetic miscount).
+- mulch-2da1 — custom-type `summary` template: init-config example uses Mustache `{{}}` but
+  engine only supports `{}`, and unknown-field tokens render as literal `{}` silently.
+
 ---
 
 ## R-02 — Mulch lifecycle hooks
@@ -139,7 +145,7 @@ no hijacking of Claude's memory writes in v1.
 ---
 
 ## R-04 — Provider plugin registry
-Status: [proposed]
+Status: [proposed] — seeded as mulch-6deb
 Depends on: R-02 (recipe = structured post-init hook)
 Unlocks: org-internal IDE / bot integrations without forking
 
@@ -195,12 +201,16 @@ Archive below 0.3, delete below 0.05. `ml fitness <id>` shows per-axis breakdown
 - **R-05d — Confirmation-based decay.** Records with positive outcomes survive; silence
   demotes. Already half-built in `scoring.ts`. Defer until R-11 makes confirmations
   load-bearing — without auto-emission, this punishes good-but-unmarked records.
-- **R-05e — Supersession decay.** When B has `supersedes: [A]`, A auto-demotes one tier.
-  **Cheapest "smart" decay; ship early.**
-- **R-05f — Anchor-validity decay.** Records whose file anchors have been deleted past a
-  threshold auto-demote (rather than `ml doctor --fix` silently stripping). `dir_anchors[]`
-  shipped under R-01 (mulch-476b) so records can attach to a directory and stay valid as files
-  within it shuffle — this remaining piece is just the decay weighting.
+- **R-05e — Supersession decay.** ✅ Shipped (mulch-4426). When live record B carries
+  `supersedes: [A]`, `ml prune` walks A one tier down the ladder
+  (`foundational → tactical → observational → archived`) and stamps
+  `supersession_demoted_at`. Cross-domain supersession honored. `--aggressive` collapses
+  straight to archived in one pass; `--hard` hard-deletes the bottomed-out record.
+  Staleness still wins over supersession when both apply.
+- **R-05f — Anchor-validity decay.** Seeded as mulch-2551. Records whose file anchors have
+  been deleted past a threshold auto-demote (rather than `ml doctor --fix` silently stripping).
+  `dir_anchors[]` shipped under R-01 (mulch-476b) so records can attach to a directory and
+  stay valid as files within it shuffle — this remaining piece is just the decay weighting.
 - **R-05g — Continuous fitness formula.** The unifying mechanism above. Weights in
   `mulch.config.yaml`, `ml fitness <id>` for transparency, `ml prune --explain` for debugging.
 
@@ -312,7 +322,7 @@ Resolution rules:
 ---
 
 ## R-10 — Secret / PII scanning at record time
-Status: [proposed]
+Status: [proposed] — seeded as mulch-8e40
 Depends on: R-02 (lands as a `pre-record` hook)
 Unlocks: low-priority — guardrail, not a core feature
 
@@ -439,9 +449,24 @@ revisions know what's already off the punch list.
 - **R-07 partial — Output knobs.** Global `--format` flag (v0.7.0); `prime --manifest` mode +
   `prime.default_mode: manifest` config default (v0.7.0). Provider-neutral adapters
   (json/text/slack) still open.
+- **R-05a — Soft archive on prune (mulch-7876, 2026-05-06).** `ml prune` defaults to moving
+  stale records into `.mulch/archive/<domain>.jsonl` with `status: "archived"` +
+  `archived_at`; `--hard` opts back into deletion. `ml restore <id>` round-trips. Search
+  excludes archives unless `--archived` is passed.
+- **R-05e — Supersession-based auto-demotion (mulch-4426, 2026-05-06).** `ml prune` walks
+  any record whose id appears in another live record's `supersedes` array down the
+  classification ladder, one tier per pass, stamping `supersession_demoted_at`. Bottomed-out
+  records archive (or hard-delete with `--hard`). `--aggressive` collapses fully in one
+  pass. Cross-domain by design.
 
-Open seeds tracking remaining roadmap work: mulch-7876 (R-05a), mulch-4426 (R-05e),
-mulch-1d5b (R-09).
+Open seeds tracking remaining roadmap work:
+- mulch-2551 (R-05f — anchor-validity decay)
+- mulch-6deb (R-04 — provider plugin registry)
+- mulch-8e40 (R-10 — secret-scanning recipe)
+- mulch-1d5b (R-09 — multi-repo federation)
+- mulch-cc51 (R-01 follow-up — built-in types reject unknown CLI fields)
+- mulch-7ac8 (R-01 follow-up — doctor counts violations as records)
+- mulch-2da1 (R-01 follow-up — custom-type summary template render bug)
 
 ## Suggested sequencing
 
@@ -452,9 +477,9 @@ A first cut at order of attack — not committed:
    (mulch-476b). `extends: <builtin>` inheritance shipped (mulch-4d6d). R-01 fully closed.
 2. ~~**R-02** (lifecycle hooks)~~ — shipped (mulch-55b1, 2026-05-05). The customization
    primitive everything else leans on.
-3. **R-05a + R-05e** (soft archive + supersession decay) — small, safe, ship together.
-   Tracked in mulch-7876, mulch-4426. **Next.**
-4. **R-06** (ownership) — needed before R-12 can route resolution.
+3. ~~**R-05a + R-05e** (soft archive + supersession decay)~~ — both shipped (mulch-7876,
+   mulch-4426; 2026-05-06).
+4. **R-06** (ownership) — needed before R-12 can route resolution. **Next.**
 5. **R-03** (Claude hook namespace + profiles) — leverages R-02; unlocks R-05c, R-11.
 6. **R-05f** (anchor-validity decay) — small follow-up now that `dir_anchors[]` has shipped.
 7. **R-04** (provider plugins) — pure refactor of `setup.ts`; can happen any time.

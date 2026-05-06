@@ -75,7 +75,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
 | `ml setup [provider]` | Install provider-specific hooks (claude, cursor, codex, gemini, windsurf, aider) |
 | `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
-| `ml prune` | Soft-archive stale tactical/observational records to `.mulch/archive/` (`--hard` for true delete, `--dry-run`) |
+| `ml prune` | Soft-archive stale tactical/observational records to `.mulch/archive/`, plus tier-demote records superseded by another live record (`--hard` for true delete, `--aggressive` to collapse superseded records straight to archive, `--dry-run`) |
 | `ml restore <id>` | Restore a soft-archived record back to live expertise |
 | `ml ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
 | `ml sync` | Validate, stage, and commit `.mulch/` changes |
