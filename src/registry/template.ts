@@ -1,9 +1,19 @@
 import type { ExpertiseRecord } from "../schemas/record.ts";
 
-// `{field}` interpolation only — no conditionals, fallbacks, or transforms in
-// v1 (per epic mulch-632e locked design). Lands in Phase 1 so the registry
-// shape is final before Phase 2 wires this into custom-type summaries.
-const TOKEN_RE = /\{([a-z_][a-z0-9_]*)\}/gi;
+// Interpolation only — no conditionals, fallbacks, or transforms in v1 (per
+// epic mulch-632e locked design). Both `{field}` and `{{field}}` are accepted
+// because Mustache-style is muscle memory; the double-brace branch is matched
+// first so it's preferred over the single-brace fallback.
+const TOKEN_RE = /\{\{([a-z_][a-z0-9_]*)\}\}|\{([a-z_][a-z0-9_]*)\}/gi;
+
+export function extractTemplateTokens(template: string): string[] {
+	const tokens: string[] = [];
+	for (const match of template.matchAll(TOKEN_RE)) {
+		const token = match[1] ?? match[2];
+		if (token) tokens.push(token);
+	}
+	return tokens;
+}
 
 export function compileSummaryTemplate(template: string): (record: ExpertiseRecord) => string {
 	const tokens: string[] = [];
@@ -12,7 +22,7 @@ export function compileSummaryTemplate(template: string): (record: ExpertiseReco
 	for (const match of template.matchAll(TOKEN_RE)) {
 		const start = match.index ?? 0;
 		literals.push(template.slice(lastIndex, start));
-		tokens.push(match[1] ?? "");
+		tokens.push(match[1] ?? match[2] ?? "");
 		lastIndex = start + match[0].length;
 	}
 	literals.push(template.slice(lastIndex));

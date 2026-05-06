@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+#### Custom-type summary templates: brace-style + register-time validation (mulch-2da1)
+- **Mustache-style `{{field}}` now resolves identically to `{field}`** in `compileSummaryTemplate`, so the prior init-wizard examples (and any user templates copied from Mustache-style docs) render correctly instead of leaking literal braces around the value.
+- **Unknown-token validation at registry load**: `validateCustomTypeConfig` now rejects summary templates whose tokens aren't declared on the type (or inherited via `extends`, or a base record field). The error names the bad token and lists every legal one, replacing the previous silent empty-string render at `ml prime` time.
+- **Init-wizard examples** (`src/utils/config.ts`) and the README's `Custom Types` / `Aliases (Schema Evolution)` snippets are now single-brace `{field}` for consistency. The README also calls out that both styles are accepted and tokens are validated.
+
 ### Added
 
 #### Supersession-Based Auto-Demotion (R-05e, mulch-4426)

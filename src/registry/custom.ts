@@ -9,7 +9,7 @@ import {
 	xmlEscape,
 } from "../utils/format-helpers.ts";
 import { BUILTIN_DEFS } from "./builtins.ts";
-import { compileSummaryTemplate } from "./template.ts";
+import { compileSummaryTemplate, extractTemplateTokens } from "./template.ts";
 import type { TypeDefinition } from "./type-registry.ts";
 
 const BUILTIN_DEFS_BY_NAME: ReadonlyMap<string, TypeDefinition> = new Map(
@@ -139,6 +139,21 @@ export function validateCustomTypeConfig(name: string, cfg: CustomTypeConfig): v
 	}
 	if (cfg.summary !== undefined && (typeof cfg.summary !== "string" || cfg.summary.length === 0)) {
 		throw new Error(`Custom type "${name}" "summary" must be a non-empty string.`);
+	}
+	if (typeof cfg.summary === "string") {
+		// Reject `{tok}` references that won't resolve at render time. Without
+		// this, a typo (e.g. {description} on a type whose required field is
+		// `content`) renders as empty string in `ml prime` output, silently
+		// degrading every record of that type.
+		const validTokens = new Set<string>([...BASE_FIELDS, ...mergedSeen]);
+		for (const token of extractTemplateTokens(cfg.summary)) {
+			if (!validTokens.has(token)) {
+				const known = [...validTokens].sort().join(", ");
+				throw new Error(
+					`Custom type "${name}" summary references unknown field "{${token}}". Declared fields: ${known}.`,
+				);
+			}
+		}
 	}
 	if (cfg.compact !== undefined && !VALID_COMPACT_STRATEGIES.has(cfg.compact)) {
 		throw new Error(

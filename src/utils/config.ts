@@ -50,7 +50,7 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #     required: [statement, prediction]
 #     optional: [evidence_files]
 #     dedup_key: statement
-#     summary: "{{statement}}"
+#     summary: "{statement}"   # tokens use single braces; {{statement}} also accepted
 #     # aliases: rename a field while still reading legacy on-disk records.
 #     # Map canonical (current) name → list of legacy names. At read time,
 #     # legacy fields are rewritten to canonical and dropped from the record.
@@ -63,7 +63,7 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #   adr:
 #     extends: decision
 #     required: [decision_status, deciders]   # added on top of decision's [title, rationale]
-#     summary: "{{decision_status}}: {{title}}"
+#     summary: "{decision_status}: {title}"   # tokens must be declared fields (parent's included)
 #
 # hooks:
 #   # Lifecycle hook scripts. Each event maps to an ordered list of shell

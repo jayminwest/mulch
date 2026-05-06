@@ -157,10 +157,10 @@ custom_types:
     required: [statement, prediction]
     optional: [evidence_files]
     dedup_key: statement
-    summary: "{{statement}} → {{prediction}}"
+    summary: "{statement} → {prediction}"
 ```
 
-`ml record research --type hypothesis --statement "..." --prediction "..."` then writes a first-class record indistinguishable from a built-in.
+`ml record research --type hypothesis --statement "..." --prediction "..."` then writes a first-class record indistinguishable from a built-in. Summary templates accept either `{field}` or `{{field}}`; tokens must be declared fields on the type (or inherited via `extends`) — unknown tokens are rejected at registry load.
 
 #### Inheriting from a built-in
 
@@ -248,7 +248,7 @@ custom_types:
   hypothesis:
     required: [statement, prediction]
     dedup_key: statement
-    summary: "{{statement}}"
+    summary: "{statement}"
     aliases:
       statement: [claim, assertion]   # canonical → [legacy_names]
 ```

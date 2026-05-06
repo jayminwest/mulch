@@ -98,6 +98,48 @@ describe("validateCustomTypeConfig", () => {
 			}),
 		).toThrow(/invalid/);
 	});
+
+	it("rejects summary templates referencing undeclared fields", () => {
+		expect(() =>
+			validateCustomTypeConfig("note", {
+				required: ["body"],
+				dedup_key: "body",
+				summary: "{body}: {missing}",
+			}),
+		).toThrow(/summary references unknown field "{missing}"/);
+	});
+
+	it("accepts summary templates referencing inherited (extends) fields", () => {
+		// `extends: convention` brings `content` from the parent — referencing it
+		// in the child's summary must validate.
+		expect(() =>
+			validateCustomTypeConfig("note", {
+				extends: "convention",
+				required: ["body"],
+				summary: "{content} / {body}",
+			}),
+		).not.toThrow();
+	});
+
+	it("accepts summary templates referencing base record fields like {id}", () => {
+		expect(() =>
+			validateCustomTypeConfig("note", {
+				required: ["body"],
+				dedup_key: "body",
+				summary: "[{id}] {body}",
+			}),
+		).not.toThrow();
+	});
+
+	it("validates {{field}} mustache-style tokens the same as {field}", () => {
+		expect(() =>
+			validateCustomTypeConfig("note", {
+				required: ["body"],
+				dedup_key: "body",
+				summary: "{{nope}}: {{body}}",
+			}),
+		).toThrow(/summary references unknown field "{nope}"/);
+	});
 });
 
 describe("buildCustomTypeDefinition", () => {

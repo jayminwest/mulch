@@ -248,4 +248,32 @@ describe("compileSummaryTemplate", () => {
 			}),
 		).toBe("");
 	});
+
+	it("interpolates `{{field}}` mustache-style tokens identically to `{field}`", () => {
+		const fn = compileSummaryTemplate("{{name}} -> {{description}}");
+		expect(
+			fn({
+				type: "pattern",
+				name: "atomic-writes",
+				description: "temp + rename",
+				classification: "foundational",
+				recorded_at: "2026-01-01T00:00:00Z",
+			}),
+		).toBe("atomic-writes -> temp + rename");
+	});
+
+	it("accepts mixed `{field}` and `{{field}}` in the same template", () => {
+		const fn = compileSummaryTemplate("{{decision_status}}: {title}");
+		expect(
+			fn({
+				type: "decision",
+				title: "use WAL",
+				rationale: "concurrent reads",
+				classification: "foundational",
+				recorded_at: "2026-01-01T00:00:00Z",
+				// extra field exercises the mustache branch
+				decision_status: "accepted",
+			} as unknown as Parameters<typeof fn>[0]),
+		).toBe("accepted: use WAL");
+	});
 });
