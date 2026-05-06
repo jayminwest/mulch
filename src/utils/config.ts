@@ -212,6 +212,27 @@ function normalizeDomains(raw: unknown): Record<string, DomainConfig> {
 	return {};
 }
 
+// Backfill required-by-type top-level sections that a hand-written minimal
+// config may omit. Schema marks `governance` and `classification_defaults` as
+// required, but consumers (doctor, prune, status, compact, prime) destructure
+// them directly and would otherwise crash with a TypeError on a config that
+// only declares `domains:`. Shallow-merge so partial user overrides
+// (e.g. `governance: { max_entries: 50 }`) keep the other defaults.
+function applyConfigDefaults(parsed: MulchConfig): MulchConfig {
+	const userGov = (parsed.governance ?? {}) as Partial<MulchConfig["governance"]>;
+	const userCD = (parsed.classification_defaults ?? {}) as Partial<
+		MulchConfig["classification_defaults"]
+	>;
+	const userShelf = (userCD.shelf_life ?? {}) as Partial<
+		MulchConfig["classification_defaults"]["shelf_life"]
+	>;
+	parsed.governance = { ...DEFAULT_CONFIG.governance, ...userGov };
+	parsed.classification_defaults = {
+		shelf_life: { ...DEFAULT_CONFIG.classification_defaults.shelf_life, ...userShelf },
+	};
+	return parsed;
+}
+
 export async function readConfig(cwd: string = process.cwd()): Promise<MulchConfig> {
 	const configPath = getConfigPath(cwd);
 	let content: string;
@@ -223,9 +244,20 @@ export async function readConfig(cwd: string = process.cwd()): Promise<MulchConf
 		}
 		throw err;
 	}
-	const parsed = yaml.load(content) as MulchConfig;
+	let parsed: MulchConfig;
+	try {
+		parsed = (yaml.load(content) ?? {}) as MulchConfig;
+	} catch (err) {
+		throw new Error(
+			`Failed to parse mulch.config.yaml: ${(err as Error).message}. Check the YAML syntax.`,
+		);
+	}
+	if (!parsed || typeof parsed !== "object") {
+		// Empty file or scalar at top level — treat as empty object so defaults apply.
+		parsed = {} as MulchConfig;
+	}
 	parsed.domains = normalizeDomains(parsed.domains);
-	return parsed;
+	return applyConfigDefaults(parsed);
 }
 
 export async function addDomain(domain: string, cwd: string = process.cwd()): Promise<void> {

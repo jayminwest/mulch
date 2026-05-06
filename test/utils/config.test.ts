@@ -87,6 +87,46 @@ describe("config utils", () => {
 		it("throws when config file does not exist", async () => {
 			await expect(readConfig(tmpDir)).rejects.toThrow();
 		});
+
+		it("backfills missing governance and classification_defaults on a minimal config", async () => {
+			// Hand-written minimal config that omits the schema's required
+			// top-level sections. Consumers (doctor, prune, status, compact, prime)
+			// destructure these directly, so readConfig must apply defaults
+			// instead of crashing downstream with TypeError.
+			await initMulchDir(tmpDir);
+			const minimalYaml = `domains:
+  cli: {}
+`;
+			await writeFile(getConfigPath(tmpDir), minimalYaml, "utf-8");
+
+			const config = await readConfig(tmpDir);
+			expect(config.governance).toEqual(DEFAULT_CONFIG.governance);
+			expect(config.classification_defaults).toEqual(DEFAULT_CONFIG.classification_defaults);
+			expect(config.domains).toEqual({ cli: {} });
+		});
+
+		it("preserves partial governance overrides while filling missing keys", async () => {
+			await initMulchDir(tmpDir);
+			const partialYaml = `domains:
+  cli: {}
+governance:
+  max_entries: 42
+`;
+			await writeFile(getConfigPath(tmpDir), partialYaml, "utf-8");
+
+			const config = await readConfig(tmpDir);
+			expect(config.governance.max_entries).toBe(42);
+			expect(config.governance.warn_entries).toBe(DEFAULT_CONFIG.governance.warn_entries);
+			expect(config.governance.hard_limit).toBe(DEFAULT_CONFIG.governance.hard_limit);
+		});
+
+		it("formats YAML parse errors with a friendly message", async () => {
+			await initMulchDir(tmpDir);
+			// Invalid YAML — unclosed bracket
+			await writeFile(getConfigPath(tmpDir), "domains: {cli: {", "utf-8");
+
+			await expect(readConfig(tmpDir)).rejects.toThrow(/Failed to parse mulch.config.yaml/);
+		});
 	});
 
 	describe("validateDomainName", () => {

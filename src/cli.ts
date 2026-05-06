@@ -35,8 +35,25 @@ import { setAllowDomainMismatch, setAllowUnknownTypes } from "./utils/runtime-fl
 
 // Initialize the type registry from config so any custom_types declared in
 // mulch.config.yaml are first-class. Falls back to built-ins-only when no
-// .mulch/ directory exists yet (e.g., before `ml init`).
-await initRegistryFromConfig();
+// .mulch/ directory exists yet (e.g., before `ml init`). Wrap any thrown
+// registry-init errors (bad custom_types config, disabled_types referencing
+// unknown types, etc.) so users see a formatted message instead of a Bun stack
+// trace from a top-level await failure.
+try {
+	await initRegistryFromConfig();
+} catch (err) {
+	const wantsJson = process.argv.includes("--json");
+	const message = (err as Error).message;
+	if (wantsJson) {
+		outputJsonError("init", `Config error: ${message}`);
+	} else {
+		process.stderr.write(`${chalk.red("Config error:")} ${message}\n`);
+		process.stderr.write(
+			chalk.dim("Edit .mulch/mulch.config.yaml to resolve, or run `mulch doctor` for details.\n"),
+		);
+	}
+	process.exit(1);
+}
 
 export const VERSION = "0.8.0";
 
