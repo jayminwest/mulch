@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Provider Recipe Discovery (R-04, mulch-6deb)
+- **`ml setup <name>` now resolves recipes via discovery instead of a closed list.** Resolution order: filesystem (`.mulch/recipes/<name>.ts` or `.sh`) → npm (`mulch-recipe-<name>`) → built-in. Filesystem wins so orgs can override built-ins. Adding a 7th provider no longer requires patching core.
+- **TypeScript recipes** are loaded directly by Bun (no build step). The default export must implement the existing `ProviderRecipe` shape (`install` / `check` / `remove` returning `{ success, message }`). Shape is validated at load time; bad exports throw with a pointer to the offending file.
+- **Shell recipes** are invoked as `<script> install|check|remove` with cwd set to the project root and `MULCH_RECIPE_NAME` / `MULCH_RECIPE_ACTION` in the environment. Stdout becomes the success message; non-zero exit signals failure (stderr surfaced).
+- **npm recipes** resolve via `require.resolve('mulch-recipe-<name>')` from the project root, so normal `package.json` `dependencies` resolution applies.
+- **`ml setup --list`** (and `--list --json`) surfaces every discovered provider with its source, plus shadow flags on built-ins overridden by a filesystem recipe of the same name.
+- **Unknown-provider hint** now points at `--list`, `.mulch/recipes/<name>.{ts,sh}`, and `mulch-recipe-<name>` instead of repeating the hard-coded built-in list.
+- **Examples** under `examples/recipes/` cover both a TypeScript and a shell recipe.
+
 #### Anchor-Validity Decay (R-05f, mulch-2551)
 - **`ml prune --check-anchors`**: opt-in flag that demotes a record one classification tier when its file/dir anchors stop resolving. For each record we count valid vs. broken anchors across `files[]` (PatternRecord/ReferenceRecord), `dir_anchors[]`, and `evidence.file`; if the resulting `valid_fraction` is below the configured threshold AND the record was recorded more than `grace_days` ago, the record walks `foundational → tactical → observational → archived` (or is hard-deleted with `--hard`). Each demotion stamps `anchor_decay_demoted_at: <iso-date>` so the signal is auditable across passes.
 - **Records with zero anchors are exempt** — the absence of anchors means "applies globally," not "100% broken."

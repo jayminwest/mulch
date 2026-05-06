@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { getMulchDir } from "../utils/config.ts";
@@ -11,21 +11,14 @@ import {
 	MARKER_START,
 	removeMarkerSection,
 } from "../utils/markers.ts";
-
-/** Supported provider names. */
-const SUPPORTED_PROVIDERS = ["claude", "cursor", "codex", "gemini", "windsurf", "aider"] as const;
-
-type Provider = (typeof SUPPORTED_PROVIDERS)[number];
-
-function isProvider(value: string): value is Provider {
-	return (SUPPORTED_PROVIDERS as readonly string[]).includes(value);
-}
-
-/** Result of a provider recipe operation. */
-interface RecipeResult {
-	success: boolean;
-	message: string;
-}
+import {
+	listFilesystemRecipes,
+	NPM_RECIPE_PREFIX,
+	type ProviderRecipe,
+	type RecipeResult,
+	type RecipeWithSource,
+	resolveRecipe,
+} from "../utils/recipe-discovery.ts";
 
 // ────────────────────────────────────────────────────────────
 // Git hook helpers
@@ -139,17 +132,8 @@ async function removeGitHook(cwd: string): Promise<RecipeResult> {
 }
 
 // ────────────────────────────────────────────────────────────
-// Provider recipes
+// Built-in provider recipes
 // ────────────────────────────────────────────────────────────
-
-interface ProviderRecipe {
-	/** Install the integration (idempotent). */
-	install(cwd: string): Promise<RecipeResult>;
-	/** Check whether the integration is installed. */
-	check(cwd: string): Promise<RecipeResult>;
-	/** Remove the integration. */
-	remove(cwd: string): Promise<RecipeResult>;
-}
 
 // ── Claude ──────────────────────────────────────────────────
 
@@ -618,20 +602,31 @@ const aiderRecipe = createMarkdownRecipe({
 
 // ── Recipe registry ─────────────────────────────────────────
 
-const recipes: Record<Provider, ProviderRecipe> = {
+/**
+ * Built-in recipes shipped with mulch. Filesystem (`.mulch/recipes/<name>.{ts,sh}`)
+ * and npm (`mulch-recipe-<name>`) discovery is handled by `resolveRecipe` in
+ * `utils/recipe-discovery.ts` and takes precedence over these in that order.
+ */
+const BUILTIN_RECIPES = {
 	claude: claudeRecipe,
 	cursor: cursorRecipe,
 	codex: codexRecipe,
 	gemini: geminiRecipe,
 	windsurf: windsurfRecipe,
 	aider: aiderRecipe,
-};
+} as const satisfies Record<string, ProviderRecipe>;
+
+/** @deprecated kept as alias for `BUILTIN_RECIPES` — used by tests. */
+const recipes = BUILTIN_RECIPES;
+
+const BUILTIN_PROVIDER_NAMES = Object.keys(BUILTIN_RECIPES).sort();
 
 // ── Exported helpers for testing ────────────────────────────
 
 export {
+	BUILTIN_RECIPES,
 	recipes,
-	SUPPORTED_PROVIDERS,
+	BUILTIN_PROVIDER_NAMES,
 	CURSOR_RULE_CONTENT,
 	CODEX_SECTION,
 	CLAUDE_HOOK_COMMAND,
@@ -641,22 +636,31 @@ export {
 	removeGitHook,
 };
 
-export type { Provider, ProviderRecipe };
+export type { ProviderRecipe };
 
 // ── Command registration ────────────────────────────────────
 
 export function registerSetupCommand(program: Command): void {
 	program
 		.command("setup")
-		.argument("[provider]", `agent provider (${SUPPORTED_PROVIDERS.join(", ")})`)
+		.argument(
+			"[provider]",
+			`agent provider (built-in: ${BUILTIN_PROVIDER_NAMES.join(", ")}; or any name resolvable from .mulch/recipes/ or ${NPM_RECIPE_PREFIX}*)`,
+		)
 		.description("Set up mulch integration for a specific agent provider")
 		.option("--check", "verify provider integration is installed")
 		.option("--remove", "remove provider integration")
 		.option("--hooks", "install a pre-commit git hook running mulch validate")
+		.option("--list", "list discovered providers (built-in, .mulch/recipes/, mulch-recipe-* npm)")
 		.action(
 			async (
 				provider: string | undefined,
-				options: { check?: boolean; remove?: boolean; hooks?: boolean },
+				options: {
+					check?: boolean;
+					remove?: boolean;
+					hooks?: boolean;
+					list?: boolean;
+				},
 			) => {
 				const jsonMode = program.opts().json === true;
 
@@ -672,11 +676,17 @@ export function registerSetupCommand(program: Command): void {
 					return;
 				}
 
+				// Handle --list (no provider needed)
+				if (options.list) {
+					await runList(process.cwd(), jsonMode);
+					return;
+				}
+
 				if (!provider && !options.hooks) {
 					if (jsonMode) {
-						outputJsonError("setup", "Specify a provider or use --hooks.");
+						outputJsonError("setup", "Specify a provider, use --hooks, or use --list.");
 					} else {
-						console.error(chalk.red("Error: specify a provider or use --hooks."));
+						console.error(chalk.red("Error: specify a provider, use --hooks, or use --list."));
 					}
 					process.exitCode = 1;
 					return;
@@ -720,55 +730,144 @@ export function registerSetupCommand(program: Command): void {
 				// Handle provider
 				if (!provider) return;
 
-				if (!isProvider(provider)) {
+				const cwd = process.cwd();
+				let resolved: RecipeWithSource | null;
+				try {
+					resolved = await resolveRecipe(provider, cwd, BUILTIN_RECIPES);
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
 					if (jsonMode) {
-						outputJsonError(
-							"setup",
-							`Unknown provider "${provider}". Supported providers: ${SUPPORTED_PROVIDERS.join(", ")}`,
-						);
+						outputJsonError("setup", msg);
 					} else {
-						console.error(chalk.red(`Error: unknown provider "${provider}".`));
-						console.error(chalk.red(`Supported providers: ${SUPPORTED_PROVIDERS.join(", ")}`));
+						console.error(chalk.red(`Error: ${msg}`));
 					}
 					process.exitCode = 1;
 					return;
 				}
 
-				{
-					const recipe = recipes[provider];
-					const action = options.check ? "check" : options.remove ? "remove" : "install";
-					let result: RecipeResult;
-
-					if (options.check) {
-						result = await recipe.check(process.cwd());
-					} else if (options.remove) {
-						result = await recipe.remove(process.cwd());
-					} else {
-						result = await recipe.install(process.cwd());
-					}
-
+				if (!resolved) {
+					const hint = `Unknown provider "${provider}". Run \`ml setup --list\` to see discovered providers, or add a recipe at .mulch/recipes/${provider}.{ts,sh} or install ${NPM_RECIPE_PREFIX}${provider}.`;
 					if (jsonMode) {
-						outputJson({
-							success: result.success,
-							command: "setup",
-							provider,
-							action,
-							message: result.message,
-						});
-					} else if (result.success) {
-						console.log(chalk.green(`\u2714 ${result.message}`));
+						outputJsonError("setup", hint);
 					} else {
-						if (options.check) {
-							console.log(chalk.yellow(`\u2716 ${result.message}`));
-						} else {
-							console.error(chalk.red(`Error: ${result.message}`));
-						}
+						console.error(chalk.red(`Error: ${hint}`));
 					}
+					process.exitCode = 1;
+					return;
+				}
 
-					if (!result.success) {
-						process.exitCode = 1;
-					}
+				const action = options.check ? "check" : options.remove ? "remove" : "install";
+				let result: RecipeResult;
+
+				if (options.check) {
+					result = await resolved.recipe.check(cwd);
+				} else if (options.remove) {
+					result = await resolved.recipe.remove(cwd);
+				} else {
+					result = await resolved.recipe.install(cwd);
+				}
+
+				if (jsonMode) {
+					outputJson({
+						success: result.success,
+						command: "setup",
+						provider,
+						source: resolved.source,
+						...(resolved.path ? { path: resolved.path } : {}),
+						action,
+						message: result.message,
+					});
+				} else if (result.success) {
+					console.log(chalk.green(`\u2714 ${result.message}`));
+				} else if (options.check) {
+					console.log(chalk.yellow(`\u2716 ${result.message}`));
+				} else {
+					console.error(chalk.red(`Error: ${result.message}`));
+				}
+
+				if (!result.success) {
+					process.exitCode = 1;
 				}
 			},
 		);
+}
+
+interface ProviderListing {
+	name: string;
+	source: "builtin" | "filesystem-ts" | "filesystem-sh" | "npm";
+	path?: string;
+	shadowedBy?: "filesystem-ts" | "filesystem-sh";
+}
+
+async function gatherProviderListings(cwd: string): Promise<ProviderListing[]> {
+	const fsRecipes = await listFilesystemRecipes(cwd);
+
+	const listings: ProviderListing[] = [];
+
+	for (const name of BUILTIN_PROVIDER_NAMES) {
+		const shadow = fsRecipes.find((r) => r.name === name);
+		listings.push({
+			name,
+			source: "builtin",
+			...(shadow ? { shadowedBy: shadow.source } : {}),
+		});
+	}
+
+	for (const fs of fsRecipes) {
+		listings.push({ name: fs.name, source: fs.source, path: fs.path });
+	}
+
+	listings.sort((a, b) => {
+		if (a.name !== b.name) return a.name.localeCompare(b.name);
+		// Filesystem before builtin so the active recipe sorts first.
+		const order = { "filesystem-ts": 0, "filesystem-sh": 1, npm: 2, builtin: 3 } as const;
+		return order[a.source] - order[b.source];
+	});
+
+	// Note: we do not enumerate npm packages \u2014 they are resolved on demand.
+	// Their presence is reflected when a user runs `setup <name>` and resolution
+	// succeeds via npm.
+	return listings;
+}
+
+async function runList(cwd: string, jsonMode: boolean): Promise<void> {
+	const listings = await gatherProviderListings(cwd);
+
+	if (jsonMode) {
+		outputJson({
+			success: true,
+			command: "setup",
+			action: "list",
+			providers: listings.map((l) => ({
+				name: l.name,
+				source: l.source,
+				...(l.path ? { path: relative(cwd, l.path) } : {}),
+				...(l.shadowedBy ? { shadowed_by: l.shadowedBy } : {}),
+			})),
+		});
+		return;
+	}
+
+	console.log(chalk.bold("Available providers:"));
+	const labelWidth = Math.max(...listings.map((l) => l.name.length), 6);
+	for (const l of listings) {
+		const sourceLabel =
+			l.source === "builtin"
+				? l.shadowedBy
+					? chalk.dim(`built-in (shadowed by ${l.shadowedBy})`)
+					: "built-in"
+				: l.source === "filesystem-ts"
+					? `filesystem-ts: ${relative(cwd, l.path ?? "")}`
+					: l.source === "filesystem-sh"
+						? `filesystem-sh: ${relative(cwd, l.path ?? "")}`
+						: `npm: ${NPM_RECIPE_PREFIX}${l.name}`;
+		const marker = l.shadowedBy ? chalk.dim("\u00b7") : chalk.green("\u2713");
+		console.log(`  ${marker} ${l.name.padEnd(labelWidth)}  ${sourceLabel}`);
+	}
+	console.log("");
+	console.log(
+		chalk.dim(
+			`Resolution order: filesystem (.mulch/recipes/<name>.{ts,sh}) \u2192 npm (${NPM_RECIPE_PREFIX}<name>) \u2192 built-in.`,
+		),
+	);
 }
