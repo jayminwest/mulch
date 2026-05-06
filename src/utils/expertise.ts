@@ -58,7 +58,10 @@ export async function readExpertiseFile(
 	const allLines = content.split("\n");
 	for (let i = 0; i < allLines.length; i++) {
 		const line = allLines[i] ?? "";
-		if (line.trim().length === 0) continue;
+		const trimmed = line.trim();
+		if (trimmed.length === 0) continue;
+		// Skip comment lines (used by archive-file banners).
+		if (trimmed.startsWith("#")) continue;
 		const raw = JSON.parse(line) as Record<string, unknown>;
 		// Normalize legacy outcome (singular) to outcomes (array) for backward compat
 		if (

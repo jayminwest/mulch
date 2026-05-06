@@ -1,6 +1,8 @@
 import { type Command, Option } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
 import { DEFAULT_SEARCH_BOOST_FACTOR } from "../schemas/config.ts";
+import type { ExpertiseRecord } from "../schemas/record.ts";
+import { getArchivePath, readArchiveFile } from "../utils/archive.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
 	filterByClassification,
@@ -15,10 +17,47 @@ import {
 	formatDomainExpertiseCompact,
 	formatDomainExpertisePlain,
 	formatDomainExpertiseXml,
+	getRecordSummary,
 	type PrimeFormat,
 } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { type ScoredRecord, sortByConfirmationScore } from "../utils/scoring.ts";
+
+function formatArchivedSection(domain: string, records: ExpertiseRecord[]): string {
+	const lines = [
+		`## ${domain} (archived, ${records.length} record${records.length === 1 ? "" : "s"})`,
+	];
+	for (const r of records) {
+		const date = (r.archived_at ?? "").slice(0, 10) || "unknown";
+		const id = r.id ? `${r.id} ` : "";
+		lines.push(`- [ARCHIVED ${date}] ${id}[${r.type}] ${getRecordSummary(r)}`);
+	}
+	return lines.join("\n");
+}
+
+function applyFilters(
+	records: ExpertiseRecord[],
+	options: {
+		type?: string;
+		tag?: string;
+		classification?: string;
+		file?: string;
+		outcomeStatus?: string;
+	},
+): ExpertiseRecord[] {
+	let out = records;
+	if (options.type) out = filterByType(out, options.type);
+	if (options.tag) {
+		const tagLower = options.tag.toLowerCase();
+		out = out.filter((r) => r.tags?.some((t) => t.toLowerCase() === tagLower));
+	}
+	if (options.classification) out = filterByClassification(out, options.classification);
+	if (options.file) out = filterByFile(out, options.file);
+	if (options.outcomeStatus) {
+		out = out.filter((r) => r.outcomes?.some((o) => o.status === options.outcomeStatus));
+	}
+	return out;
+}
 
 export function registerSearchCommand(program: Command): void {
 	program
@@ -45,6 +84,10 @@ export function registerSearchCommand(program: Command): void {
 		)
 		.option("--sort-by-score", "sort results by confirmation-frequency score (highest first)")
 		.option("--no-boost", "disable confirmation-frequency boost on BM25 ranking (pure BM25)")
+		.option(
+			"--archived",
+			"include soft-archived records from .mulch/archive/ (excluded by default)",
+		)
 		.addOption(
 			new Option("--format <format>", "output format for records").choices([
 				"markdown",
@@ -67,6 +110,7 @@ export function registerSearchCommand(program: Command): void {
 					sortByScore?: boolean;
 					boost?: boolean;
 					format?: string;
+					archived?: boolean;
 				},
 			) => {
 				const jsonMode = program.opts().json === true;
@@ -128,35 +172,39 @@ export function registerSearchCommand(program: Command): void {
 					let totalMatches = 0;
 
 					if (jsonMode) {
-						const result: Array<{ domain: string; matches: unknown[] }> = [];
+						const result: Array<{
+							domain: string;
+							matches: unknown[];
+							archived?: unknown[];
+						}> = [];
 						for (const domain of domainsToSearch) {
 							const filePath = getExpertisePath(domain);
-							let records = await readExpertiseFile(filePath);
-							if (options.type) {
-								records = filterByType(records, options.type);
-							}
-							if (options.tag) {
-								const tagLower = options.tag.toLowerCase();
-								records = records.filter((r) => r.tags?.some((t) => t.toLowerCase() === tagLower));
-							}
-							if (options.classification) {
-								records = filterByClassification(records, options.classification);
-							}
-							if (options.file) {
-								records = filterByFile(records, options.file);
-							}
-							if (options.outcomeStatus) {
-								records = records.filter((r) =>
-									r.outcomes?.some((o) => o.status === options.outcomeStatus),
-								);
-							}
+							const records = applyFilters(await readExpertiseFile(filePath), options);
 							let matches = query ? searchRecords(records, query, { boostFactor }) : records;
 							if (options.sortByScore) {
 								matches = sortByConfirmationScore(matches as ScoredRecord[]);
 							}
-							if (matches.length > 0) {
-								totalMatches += matches.length;
-								result.push({ domain, matches });
+							let archivedMatches: ExpertiseRecord[] = [];
+							if (options.archived) {
+								const archiveRecords = applyFilters(
+									await readArchiveFile(getArchivePath(domain)),
+									options,
+								);
+								archivedMatches = query
+									? searchRecords(archiveRecords, query, { boostFactor })
+									: archiveRecords;
+								if (options.sortByScore) {
+									archivedMatches = sortByConfirmationScore(archivedMatches as ScoredRecord[]);
+								}
+							}
+							if (matches.length > 0 || archivedMatches.length > 0) {
+								totalMatches += matches.length + archivedMatches.length;
+								const entry: { domain: string; matches: unknown[]; archived?: unknown[] } = {
+									domain,
+									matches,
+								};
+								if (options.archived) entry.archived = archivedMatches;
+								result.push(entry);
 							}
 						}
 						outputJson({
@@ -175,33 +223,28 @@ export function registerSearchCommand(program: Command): void {
 							const ids: string[] = [];
 							for (const domain of domainsToSearch) {
 								const filePath = getExpertisePath(domain);
-								let records = await readExpertiseFile(filePath);
-								if (options.type) {
-									records = filterByType(records, options.type);
-								}
-								if (options.tag) {
-									const tagLower = options.tag.toLowerCase();
-									records = records.filter((r) =>
-										r.tags?.some((t) => t.toLowerCase() === tagLower),
-									);
-								}
-								if (options.classification) {
-									records = filterByClassification(records, options.classification);
-								}
-								if (options.file) {
-									records = filterByFile(records, options.file);
-								}
-								if (options.outcomeStatus) {
-									records = records.filter((r) =>
-										r.outcomes?.some((o) => o.status === options.outcomeStatus),
-									);
-								}
+								const records = applyFilters(await readExpertiseFile(filePath), options);
 								let matches = query ? searchRecords(records, query, { boostFactor }) : records;
 								if (options.sortByScore) {
 									matches = sortByConfirmationScore(matches as ScoredRecord[]);
 								}
 								for (const r of matches) {
 									if (r.id) ids.push(r.id);
+								}
+								if (options.archived) {
+									const archiveRecords = applyFilters(
+										await readArchiveFile(getArchivePath(domain)),
+										options,
+									);
+									let archivedMatches = query
+										? searchRecords(archiveRecords, query, { boostFactor })
+										: archiveRecords;
+									if (options.sortByScore) {
+										archivedMatches = sortByConfirmationScore(archivedMatches as ScoredRecord[]);
+									}
+									for (const r of archivedMatches) {
+										if (r.id) ids.push(r.id);
+									}
 								}
 							}
 							if (ids.length === 0) {
@@ -213,28 +256,8 @@ export function registerSearchCommand(program: Command): void {
 							const sections: string[] = [];
 							for (const domain of domainsToSearch) {
 								const filePath = getExpertisePath(domain);
-								let records = await readExpertiseFile(filePath);
+								const records = applyFilters(await readExpertiseFile(filePath), options);
 								const lastUpdated = await getFileModTime(filePath);
-								if (options.type) {
-									records = filterByType(records, options.type);
-								}
-								if (options.tag) {
-									const tagLower = options.tag.toLowerCase();
-									records = records.filter((r) =>
-										r.tags?.some((t) => t.toLowerCase() === tagLower),
-									);
-								}
-								if (options.classification) {
-									records = filterByClassification(records, options.classification);
-								}
-								if (options.file) {
-									records = filterByFile(records, options.file);
-								}
-								if (options.outcomeStatus) {
-									records = records.filter((r) =>
-										r.outcomes?.some((o) => o.status === options.outcomeStatus),
-									);
-								}
 								let matches = query ? searchRecords(records, query, { boostFactor }) : records;
 								if (options.sortByScore) {
 									matches = sortByConfirmationScore(matches as ScoredRecord[]);
@@ -254,6 +277,22 @@ export function registerSearchCommand(program: Command): void {
 										default:
 											sections.push(formatDomainExpertise(domain, matches, lastUpdated));
 											break;
+									}
+								}
+								if (options.archived) {
+									const archiveRecords = applyFilters(
+										await readArchiveFile(getArchivePath(domain)),
+										options,
+									);
+									let archivedMatches = query
+										? searchRecords(archiveRecords, query, { boostFactor })
+										: archiveRecords;
+									if (options.sortByScore) {
+										archivedMatches = sortByConfirmationScore(archivedMatches as ScoredRecord[]);
+									}
+									if (archivedMatches.length > 0) {
+										totalMatches += archivedMatches.length;
+										sections.push(formatArchivedSection(domain, archivedMatches));
 									}
 								}
 							}

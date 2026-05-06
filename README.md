@@ -75,7 +75,8 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
 | `ml setup [provider]` | Install provider-specific hooks (claude, cursor, codex, gemini, windsurf, aider) |
 | `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
-| `ml prune` | Remove stale tactical/observational entries |
+| `ml prune` | Soft-archive stale tactical/observational records to `.mulch/archive/` (`--hard` for true delete, `--dry-run`) |
+| `ml restore <id>` | Restore a soft-archived record back to live expertise |
 | `ml ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
 | `ml sync` | Validate, stage, and commit `.mulch/` changes |
 | `ml outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
@@ -307,7 +308,7 @@ Mulch is designed for multi-agent workflows where several agents record expertis
 | Safety level | Commands | Notes |
 |---|---|---|
 | **Fully safe** (read-only) | `prime`, `query`, `search`, `status`, `validate`, `learn`, `ready` | No file writes. Any number of agents, any time. |
-| **Safe** (locked writes) | `record`, `edit`, `delete`, `delete-domain`, `compact`, `prune`, `doctor` | Acquire per-file lock before writing. Multiple agents can target the same domain — the lock serializes access automatically. |
+| **Safe** (locked writes) | `record`, `edit`, `delete`, `delete-domain`, `compact`, `prune`, `restore`, `doctor` | Acquire per-file lock before writing. Multiple agents can target the same domain — the lock serializes access automatically. |
 | **Serialize** (setup ops) | `init`, `add`, `onboard`, `setup` | Modify config or external files (CLAUDE.md, git hooks). Run once during project setup, not during parallel agent work. |
 
 ### Swarm patterns

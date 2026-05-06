@@ -43,6 +43,11 @@ interface BaseRecord {
 	supersedes?: string[];
 	outcomes?: Outcome[];
 	dir_anchors?: string[];
+	// Soft-archive lifecycle fields. Only set on records that live under
+	// .mulch/archive/<domain>.jsonl; live expertise records never carry these
+	// (and the AJV schemas reject them via additionalProperties: false).
+	status?: "archived";
+	archived_at?: string;
 }
 
 export interface ConventionRecord extends BaseRecord {

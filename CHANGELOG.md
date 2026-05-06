@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Soft Archive on Prune (R-05a, mulch-7876)
+- **`ml prune` defaults to soft-archive**: stale records move to `.mulch/archive/<domain>.jsonl` (with `status: "archived"` and `archived_at: <iso-date>` fields) instead of being deleted. A single bad classification at record-time stops being destructive — recoverable with one command.
+- **`--hard`** opt-in for true deletion (legacy behavior).
+- **Archive file format**: each `.jsonl` starts with a banner comment line (`# ARCHIVED — not for active use. Run \`ml restore <id>\` to revive.`). `readExpertiseFile` now skips `#`-prefixed lines so banners don't break reads.
+- **`ml restore <id>`**: new command. Searches archives across all domains, removes the record from the archive, strips lifecycle fields, and appends back to the live expertise file. Errors on cross-domain ambiguity.
+- **`ml search --archived`**: opt-in flag includes archived records in search output, rendered in a dedicated `## <domain> (archived, N records)` section with `[ARCHIVED <date>] mx-id [type] summary` lines per record. Excluded by default. JSON mode adds an `archived` array per domain.
+- **`ml prime` and default `ml search` never read `.mulch/archive/`** — they only walk `.mulch/expertise/`. Agents told via the onboard snippet not to grep the archive directly.
+- **Onboard snippet** bumped to v4 with archive guidance.
+
 #### Custom-Type Inheritance (R-01, mulch-4d6d)
 - **`extends: <builtin>`** on `custom_types` entries: inherit `required` / `optional` / `dedup_key` / `id_key` / `summary` / `compact` / `section_title` / `extracts_files` / `files_field` from one of the six built-in types. Override only what differs; arrays merge as a union. Listing a parent's `optional` field under the child's `required` promotes it (and removes it from `optional`). Closes the last open R-01 sub-item — corpora stay portable because agents reading an unknown child type fall back to the parent's semantics under `--allow-unknown-types`.
 - **Validation**: `extends` must reference a built-in (custom-from-custom is not supported in v1) and must not be on the `disabled_types` list (hard error at registry init).

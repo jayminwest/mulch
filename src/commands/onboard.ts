@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/markers.ts";
 
-export const ONBOARD_VERSION = 3;
+export const ONBOARD_VERSION = 4;
 export const VERSION_MARKER = `<!-- mulch-onboard-v:${String(ONBOARD_VERSION)} -->`;
 
 const SNIPPET_DEFAULT = `## Project Expertise (Mulch)
@@ -43,6 +43,11 @@ Run \`ml status\` for domain health, \`ml doctor\` to check record integrity (ad
 broken file anchors), \`ml --help\` for the full command list. Write commands use file locking and
 atomic writes, so multiple agents can record concurrently. Expertise survives \`git worktree\`
 cleanup — \`.mulch/\` resolves to the main repo.
+
+\`ml prune\` soft-archives stale records to \`.mulch/archive/\` instead of deleting them; pass
+\`--hard\` for true deletion. Restore an archived record with \`ml restore <id>\`. Do not read
+\`.mulch/archive/\` directly — those records are stale by definition. If you need historical
+context, run \`ml search --archived <query>\`.
 
 ### Before You Finish
 

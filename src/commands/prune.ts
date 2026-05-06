@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
+import { archiveRecords } from "../utils/archive.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, writeExpertiseFile } from "../utils/expertise.ts";
 import { runHooks } from "../utils/hooks.ts";
@@ -43,9 +44,14 @@ export function isStale(
 export function registerPruneCommand(program: Command): void {
 	program
 		.command("prune")
-		.description("Remove outdated or low-value expertise records")
+		.description("Soft-archive (default) or hard-delete outdated expertise records")
 		.option("--dry-run", "Show what would be pruned without removing", false)
-		.action(async (options: { dryRun: boolean }) => {
+		.option(
+			"--hard",
+			"Permanently delete stale records instead of moving them to .mulch/archive/",
+			false,
+		)
+		.action(async (options: { dryRun: boolean; hard: boolean }) => {
 			const jsonMode = program.opts().json === true;
 			const config = await readConfig();
 			const now = new Date();
@@ -94,6 +100,7 @@ export function registerPruneCommand(program: Command): void {
 				if (!candidateDomains.has(domain)) continue;
 				const filePath = getExpertisePath(domain);
 
+				const archived: ExpertiseRecord[] = [];
 				const domainResult = await withFileLock(filePath, async () => {
 					const records = await readExpertiseFile(filePath);
 
@@ -107,6 +114,7 @@ export function registerPruneCommand(program: Command): void {
 					for (const record of records) {
 						if (isStale(record, now, shelfLife)) {
 							pruned++;
+							archived.push(record);
 						} else {
 							kept.push(record);
 						}
@@ -127,6 +135,9 @@ export function registerPruneCommand(program: Command): void {
 				});
 
 				if (domainResult) {
+					if (!options.dryRun && !options.hard && archived.length > 0) {
+						await archiveRecords(domain, archived, now);
+					}
 					results.push(domainResult);
 					totalPruned += domainResult.pruned;
 				}
@@ -137,6 +148,7 @@ export function registerPruneCommand(program: Command): void {
 					success: true,
 					command: "prune",
 					dryRun: options.dryRun,
+					hard: options.hard,
 					totalPruned,
 					results,
 				});
@@ -148,7 +160,9 @@ export function registerPruneCommand(program: Command): void {
 				return;
 			}
 
-			const label = options.dryRun ? "Would prune" : "Pruned";
+			const action = options.hard ? "Deleted" : "Archived";
+			const wouldAction = options.hard ? "Would delete" : "Would archive";
+			const label = options.dryRun ? wouldAction : action;
 			const prefix = options.dryRun ? chalk.yellow("[DRY RUN] ") : "";
 
 			for (const result of results) {
@@ -158,9 +172,17 @@ export function registerPruneCommand(program: Command): void {
 					);
 			}
 
-			if (!isQuiet())
+			if (!isQuiet()) {
 				console.log(
 					`\n${prefix}${chalk.bold(`Total: ${label.toLowerCase()} ${totalPruned} stale ${totalPruned === 1 ? "record" : "records"}.`)}`,
 				);
+				if (!options.hard && !options.dryRun) {
+					console.log(
+						chalk.dim(
+							"Records moved to .mulch/archive/. Restore with `ml restore <id>` or use `--hard` next time to permanently delete.",
+						),
+					);
+				}
+			}
 		});
 }

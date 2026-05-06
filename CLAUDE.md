@@ -38,13 +38,13 @@ Three classifications with shelf lives for pruning: `foundational` (permanent), 
 
 ### Command Pattern
 
-Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 24 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
+Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 25 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
 
 ### Concurrency Safety
 
 - **Advisory file locking**: `withFileLock(filePath, fn)` in `src/utils/lock.ts` — uses `O_CREAT|O_EXCL` lock files with 50ms retry, 5s timeout, and 30s stale lock detection
 - **Atomic writes**: `writeExpertiseFile()` in `src/utils/expertise.ts` writes to a temp file then renames, preventing partial/corrupt JSONL
-- **Write commands** (record, edit, delete, delete-domain, compact, prune, doctor --fix) use both mechanisms
+- **Write commands** (record, edit, delete, delete-domain, compact, prune, restore, doctor --fix) use both mechanisms
 - **Read-only commands** (prime, query, search, status, validate) need no locking
 
 ### Worktree-Aware Storage
@@ -71,7 +71,7 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 <!-- mulch:start -->
 ## Project Expertise (Mulch)
-<!-- mulch-onboard-v:3 -->
+<!-- mulch-onboard-v:4 -->
 
 This project uses [Mulch](https://github.com/jayminwest/mulch) for structured expertise management.
 
@@ -105,6 +105,11 @@ Run `ml status` for domain health, `ml doctor` to check record integrity (add `-
 broken file anchors), `ml --help` for the full command list. Write commands use file locking and
 atomic writes, so multiple agents can record concurrently. Expertise survives `git worktree`
 cleanup — `.mulch/` resolves to the main repo.
+
+`ml prune` soft-archives stale records to `.mulch/archive/` instead of deleting them; pass
+`--hard` for true deletion. Restore an archived record with `ml restore <id>`. Do not read
+`.mulch/archive/` directly — those records are stale by definition. If you need historical
+context, run `ml search --archived <query>`.
 
 ### Before You Finish
 
