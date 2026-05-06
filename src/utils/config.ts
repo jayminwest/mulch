@@ -56,6 +56,14 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #     # legacy fields are rewritten to canonical and dropped from the record.
 #     aliases:
 #       statement: [claim]
+#   # Inherit from a built-in type with extends:. Required/optional arrays
+#   # merge with the parent's (union); dedup_key, summary, compact, section_title,
+#   # extracts_files, and files_field override only when set, otherwise inherit.
+#   # Custom-from-custom is not supported in v1.
+#   adr:
+#     extends: decision
+#     required: [decision_status, deciders]   # added on top of decision's [title, rationale]
+#     summary: "{{decision_status}}: {{title}}"
 #
 # hooks:
 #   # Lifecycle hook scripts. Each event maps to an ordered list of shell

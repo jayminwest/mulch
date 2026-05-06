@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Custom-Type Inheritance (R-01, mulch-4d6d)
+- **`extends: <builtin>`** on `custom_types` entries: inherit `required` / `optional` / `dedup_key` / `id_key` / `summary` / `compact` / `section_title` / `extracts_files` / `files_field` from one of the six built-in types. Override only what differs; arrays merge as a union. Listing a parent's `optional` field under the child's `required` promotes it (and removes it from `optional`). Closes the last open R-01 sub-item — corpora stay portable because agents reading an unknown child type fall back to the parent's semantics under `--allow-unknown-types`.
+- **Validation**: `extends` must reference a built-in (custom-from-custom is not supported in v1) and must not be on the `disabled_types` list (hard error at registry init).
+- **AJV schema layering**: the merged schema lists the union of parent + child required fields and unions their `properties`; `additionalProperties: false` is preserved, and the child's `type` const overrides the parent's.
+
 #### Directory Anchors (R-01, mulch-476b)
 - **`dir_anchors[]`** as a built-in field on every record type — repo-relative POSIX directory paths the record applies to. Survives file rename/move within the directory, where `files[]` (file anchors) get invalidated.
 - **`--dir-anchor <path>`** flag on `ml record` (repeatable). Trailing slashes are normalized away on write (`src/utils/` → `src/utils`); duplicates collapsed and entries stored sorted.

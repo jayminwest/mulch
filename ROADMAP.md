@@ -32,7 +32,7 @@ New items follow this shape so the format doesn't drift:
 ---
 
 ## R-01 — Custom record types & per-domain schemas
-Status: [partially shipped]
+Status: [shipped]
 Shipped: custom types via `custom_types:` in config (epic mulch-632e, phases mulch-2e68 →
 mulch-c7f3 → mulch-365e). Type registry behind `TypeDefinition`, generic AJV factory, disable
 list with deprecation warning, unknown-type policy with `--allow-unknown-types` escape hatch,
@@ -43,8 +43,10 @@ on record writes, and `ml doctor` / `ml sync` re-validate on-disk records agains
 `dir_anchors[]` shipped as a built-in field on every record (mulch-476b): `--dir-anchor <path>`
 on `ml record`, auto-population from common parent of 3+ changed files, `ml prime --files`
 matches by directory membership in addition to file anchors, and `ml doctor` flags + `--fix`
-strips broken dir anchors.
-Open: `extends: <builtin>` inheritance (mulch-4d6d).
+strips broken dir anchors. Type inheritance shipped (mulch-4d6d): custom types may declare
+`extends: <builtin>` to inherit required/optional/dedup_key/id_key/summary/compact/section_title/
+extracts_files/files_field; child overrides only what differs and arrays merge as a union;
+custom-from-custom and `extends`-ing a disabled type are hard errors.
 Depends on: —
 Unlocks: R-05f (anchor decay weighting now that dir anchors exist), R-09 (schema portability across imports)
 
@@ -70,8 +72,11 @@ fall back to the base type's semantics for unknown custom types so the corpus st
 **Open questions.**
 - Extra-field serialization landed inline (no `extra: {}` envelope). Per-domain
   `required_fields` works only when the field is declared on a `custom_types` entry — built-in
-  types' AJV schemas reject unknown properties. Tracked in mulch-cc51 (and overlaps mulch-4d6d
-  if `extends:` lets built-ins inherit + extend).
+  types' AJV schemas reject unknown properties. Tracked in mulch-cc51. With `extends:` shipped
+  (mulch-4d6d), the workaround is to declare `extends: <builtin>` plus the additional required
+  fields — the merged AJV schema then accepts both the parent's and the child's properties.
+- Removal syntax for `extends:` (e.g. `removed_fields: [date]`) deferred until a real use case
+  surfaces; v1 only supports additive merges.
 
 ---
 
@@ -426,13 +431,17 @@ revisions know what's already off the punch list.
   `--dir-anchor <path>` on `ml record`, auto-population from common parent of 3+ changed files,
   `ml prime --files` matches by directory membership, `ml doctor` flags broken dir anchors and
   `--fix` strips them.
-  Remaining R-01 open items: `extends:` inheritance (mulch-4d6d).
+- **R-01 — `extends: <builtin>` inheritance (mulch-4d6d, 2026-05-06).** Closes R-01. Custom
+  types may declare `extends: <builtin>` to inherit required/optional/dedup_key/id_key/summary/
+  compact/section_title/extracts_files/files_field; child overrides only what differs and
+  arrays merge as a union. Custom-from-custom and `extends`-ing a disabled type are hard
+  errors.
 - **R-07 partial — Output knobs.** Global `--format` flag (v0.7.0); `prime --manifest` mode +
   `prime.default_mode: manifest` config default (v0.7.0). Provider-neutral adapters
   (json/text/slack) still open.
 
 Open seeds tracking remaining roadmap work: mulch-7876 (R-05a), mulch-4426 (R-05e),
-mulch-4d6d (R-01 `extends:` inheritance), mulch-1d5b (R-09).
+mulch-1d5b (R-09).
 
 ## Suggested sequencing
 
@@ -440,7 +449,7 @@ A first cut at order of attack — not committed:
 
 1. ~~**R-01** (custom record types)~~ — shipped via epic mulch-632e (v0.8.0). Per-domain
    `allowed_types`/`required_fields` shipped (mulch-3114). `dir_anchors[]` shipped
-   (mulch-476b). Remaining: `extends:` inheritance (mulch-4d6d).
+   (mulch-476b). `extends: <builtin>` inheritance shipped (mulch-4d6d). R-01 fully closed.
 2. ~~**R-02** (lifecycle hooks)~~ — shipped (mulch-55b1, 2026-05-05). The customization
    primitive everything else leans on.
 3. **R-05a + R-05e** (soft archive + supersession decay) — small, safe, ship together.

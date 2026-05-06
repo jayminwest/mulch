@@ -23,11 +23,16 @@ export type HooksConfig = Partial<Record<HookEvent, string[]>>;
 export type CustomCompactStrategy = "concat" | "merge_outcomes" | "keep_latest" | "manual";
 
 export interface CustomTypeConfig {
-	required: string[];
+	// Inherit required/optional/dedup_key/id_key/summary/compact/section_title/
+	// extracts_files/files_field from a built-in type. Custom-from-custom is not
+	// supported in v1. When set, all other fields override only what differs;
+	// arrays merge as a union.
+	extends?: string;
+	required?: string[];
 	optional?: string[];
-	dedup_key: string;
+	dedup_key?: string;
 	id_key?: string;
-	summary: string;
+	summary?: string;
 	extracts_files?: boolean;
 	files_field?: string;
 	compact?: CustomCompactStrategy;

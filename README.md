@@ -161,6 +161,20 @@ custom_types:
 
 `ml record research --type hypothesis --statement "..." --prediction "..."` then writes a first-class record indistinguishable from a built-in.
 
+#### Inheriting from a built-in
+
+Set `extends: <builtin>` to inherit `required` / `optional` / `dedup_key` / `id_key` / `summary` / `compact` / `section_title` / `extracts_files` / `files_field` from one of the six built-in types. Override only what differs; arrays merge as a union.
+
+```yaml
+custom_types:
+  adr:
+    extends: decision
+    required: [decision_status, deciders]   # adds on top of decision's [title, rationale]
+    summary: "{decision_status}: {title}"   # overrides decision's default summary
+```
+
+Inheritance keeps corpora portable: an agent reading an `adr` record from a repo whose registry doesn't know `adr` falls back to `decision` semantics under `--allow-unknown-types`. Custom-from-custom is not supported in v1; `extends` must reference a built-in. Listing a parent's optional field under the child's `required` promotes it (and removes it from the optional list). `extends`-ing a type that's also in `disabled_types` is a hard error.
+
 ### Per-Domain Allowed Types
 
 Gate which record types may be written into a domain by listing them under that domain's `allowed_types`:
