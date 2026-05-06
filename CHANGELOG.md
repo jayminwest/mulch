@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`ml onboard` snippet now surfaces the package version** (mulch-391b): the snippet injected into AGENTS.md / CLAUDE.md previously identified itself only with an opaque schema integer (`<!-- mulch-onboard-v:4 -->`), so consumers had no way to correlate the installed snippet with a Mulch release. The schema integer is preserved for change detection (renamed to `<!-- mulch-onboard-schema:5 -->`) and a separate informational marker `<!-- mulch-onboard:v<package.version> -->` plus `Mulch v<package.version>` in body text now identify the rendering Mulch release. Patch-level bumps don't mark existing installs as outdated — only schema-version bumps do — so consumers see the actual version without `ml onboard` becoming noisy on every release. Schema bumped to 5 so existing `mulch-onboard-v:N` installs are picked up as outdated and migrated on the next run.
+
 ### Fixed
 
 - **v0.8.0 polish batch** (mulch-04ca): five small bugs surfaced by the v0.8.0 stress test, bundled into one pass.

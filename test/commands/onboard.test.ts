@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runOnboard, VERSION_MARKER } from "../../src/commands/onboard.ts";
+import { runOnboard, SCHEMA_MARKER } from "../../src/commands/onboard.ts";
 import { MARKER_END, MARKER_START } from "../../src/utils/markers.ts";
+
+const PKG_VERSION = (
+	JSON.parse(readFileSync(join(import.meta.dir, "..", "..", "package.json"), "utf-8")) as {
+		version: string;
+	}
+).version;
+const VERSION_MARKER = `<!-- mulch-onboard:v${PKG_VERSION} -->`;
 
 describe("onboard command", () => {
 	let tmpDir: string;
@@ -265,34 +272,47 @@ describe("onboard command", () => {
 		});
 	});
 
-	// ── Version marker ──────────────────────────────────────
+	// ── Version markers ─────────────────────────────────────
 
-	describe("version marker", () => {
-		it("includes version marker in created file", async () => {
+	describe("version markers", () => {
+		it("includes schema marker in created file", async () => {
 			const consoleSpy = spyOn(console, "log").mockImplementation(() => {});
 			try {
 				await runOnboard({ cwd: tmpDir });
 
 				const content = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
-				expect(content).toContain(VERSION_MARKER);
+				expect(content).toContain(SCHEMA_MARKER);
 			} finally {
 				consoleSpy.mockRestore();
 			}
 		});
 
-		it("includes version marker in stdout output", async () => {
+		it("includes schema marker in stdout output", async () => {
 			const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
 			try {
 				await runOnboard({ stdout: true, cwd: tmpDir });
 
 				const output = stdoutSpy.mock.calls[0]?.[0];
-				expect(output).toContain(VERSION_MARKER);
+				expect(output).toContain(SCHEMA_MARKER);
 			} finally {
 				stdoutSpy.mockRestore();
 			}
 		});
 
-		it("updates outdated section when version changes", async () => {
+		it("renders package version in body text and informational marker", async () => {
+			const stdoutSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
+			try {
+				await runOnboard({ stdout: true, cwd: tmpDir });
+
+				const output = stdoutSpy.mock.calls[0]?.[0] as string;
+				expect(output).toContain(VERSION_MARKER);
+				expect(output).toContain(`v${PKG_VERSION} for structured expertise management`);
+			} finally {
+				stdoutSpy.mockRestore();
+			}
+		});
+
+		it("updates outdated section when legacy schema marker is present", async () => {
 			const oldContent = `# Project\n\n${MARKER_START}\n## Project Expertise (Mulch)\n<!-- mulch-onboard-v:0 -->\nold content\n${MARKER_END}\n`;
 			await writeFile(join(tmpDir, "CLAUDE.md"), oldContent, "utf-8");
 
@@ -302,6 +322,7 @@ describe("onboard command", () => {
 
 				const content = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
 				expect(content).toContain("# Project");
+				expect(content).toContain(SCHEMA_MARKER);
 				expect(content).toContain(VERSION_MARKER);
 				expect(content).not.toContain("mulch-onboard-v:0");
 				expect(content).not.toContain("old content");
@@ -310,7 +331,7 @@ describe("onboard command", () => {
 			}
 		});
 
-		it("--check reports outdated for old version marker", async () => {
+		it("--check reports outdated for legacy schema marker", async () => {
 			const oldContent = `${MARKER_START}\n## Project Expertise (Mulch)\n<!-- mulch-onboard-v:0 -->\nold\n${MARKER_END}`;
 			await writeFile(join(tmpDir, "AGENTS.md"), oldContent, "utf-8");
 

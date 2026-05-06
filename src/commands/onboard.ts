@@ -5,14 +5,22 @@ import type { Command } from "commander";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/markers.ts";
 import { isQuiet } from "../utils/palette.ts";
+import { getCurrentVersion } from "../utils/version.ts";
 
-export const ONBOARD_VERSION = 4;
-export const VERSION_MARKER = `<!-- mulch-onboard-v:${String(ONBOARD_VERSION)} -->`;
+// Schema version drives outdated-snippet detection. Bump when the snippet body
+// changes in a way that should invalidate existing installs. Independent of
+// package.version, which is rendered for display only.
+export const ONBOARD_SCHEMA_VERSION = 5;
+export const SCHEMA_MARKER = `<!-- mulch-onboard-schema:${String(ONBOARD_SCHEMA_VERSION)} -->`;
 
-const SNIPPET_DEFAULT = `## Project Expertise (Mulch)
-${VERSION_MARKER}
+function buildSnippet(): string {
+	const pkgVersion = getCurrentVersion();
+	const versionMarker = `<!-- mulch-onboard:v${pkgVersion} -->`;
+	return `## Project Expertise (Mulch)
+${SCHEMA_MARKER}
+${versionMarker}
 
-This project uses [Mulch](https://github.com/jayminwest/mulch) for structured expertise management.
+This project uses [Mulch](https://github.com/jayminwest/mulch) v${pkgVersion} for structured expertise management.
 
 **At the start of every session**, run:
 \`\`\`bash
@@ -65,16 +73,14 @@ context, run \`ml search --archived <query>\`.
    ml sync
    \`\`\`
 `;
+}
 
 const LEGACY_HEADER = "## Project Expertise (Mulch)";
 const LEGACY_TAIL = 'mulch validate && git add .mulch/ && git commit -m "mulch: record learnings"';
 
-function getSnippet(provider: string | undefined): string {
-	if (!provider || provider === "default") {
-		return SNIPPET_DEFAULT;
-	}
-	// All providers use the same standardized snippet
-	return SNIPPET_DEFAULT;
+function getSnippet(_provider: string | undefined): string {
+	// All providers use the same standardized snippet.
+	return buildSnippet();
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -128,7 +134,7 @@ function replaceLegacySnippet(content: string, newSection: string): string {
 
 function isSnippetCurrent(content: string): boolean {
 	if (!hasMarkerSection(content)) return false;
-	return content.includes(VERSION_MARKER);
+	return content.includes(SCHEMA_MARKER);
 }
 
 async function findSnippetLocations(cwd: string): Promise<OnboardTarget[]> {
