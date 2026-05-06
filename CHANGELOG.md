@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### `ml rank` — top records by confirmation score (mulch-cky)
+- **New read-only command**: `ml rank [domain]` returns records sorted by confirmation-frequency score (highest first). Unlike `ml search --sort-by-score`, no text query is required and output is a flat cross-domain ranking instead of per-domain groups, so context-constrained consumers can grab the top-N battle-tested records directly.
+- **Filters**: `--type <type>` to scope to a single record type, `--limit <n>` (default 10) to cap the result set, `--min-score <n>` (default 0) to exclude records below a confirmation threshold (e.g. `--min-score 1` keeps only records with at least one confirmed application).
+- **`--json`** emits `{ success, command, count, records[] }` with `domain`, `id`, `type`, `score`, `summary`, and the full `record` per entry, sorted by score desc.
+- Joins the `prime`, `query`, `search`, `status`, `validate`, `learn`, `ready` tier of fully-safe (read-only) commands.
+
 #### Provider Recipe Discovery (R-04, mulch-6deb)
 - **`ml setup <name>` now resolves recipes via discovery instead of a closed list.** Resolution order: filesystem (`.mulch/recipes/<name>.ts` or `.sh`) → npm (`mulch-recipe-<name>`) → built-in. Filesystem wins so orgs can override built-ins. Adding a 7th provider no longer requires patching core.
 - **TypeScript recipes** are loaded directly by Bun (no build step). The default export must implement the existing `ProviderRecipe` shape (`install` / `check` / `remove` returning `{ success, message }`). Shape is validated at load time; bad exports throw with a pointer to the offending file.

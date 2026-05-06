@@ -68,6 +68,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
 | `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--no-boost`, `--format`) |
+| `ml rank [domain]` | Rank records by confirmation-frequency score, highest first (`--type`, `--limit`, `--min-score`, `--json`) — pure score ranking with no text query, useful for context-constrained consumers |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
 | `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
@@ -307,7 +308,7 @@ Mulch is designed for multi-agent workflows where several agents record expertis
 
 | Safety level | Commands | Notes |
 |---|---|---|
-| **Fully safe** (read-only) | `prime`, `query`, `search`, `status`, `validate`, `learn`, `ready` | No file writes. Any number of agents, any time. |
+| **Fully safe** (read-only) | `prime`, `query`, `search`, `rank`, `status`, `validate`, `learn`, `ready` | No file writes. Any number of agents, any time. |
 | **Safe** (locked writes) | `record`, `edit`, `delete`, `delete-domain`, `compact`, `prune`, `restore`, `doctor` | Acquire per-file lock before writing. Multiple agents can target the same domain — the lock serializes access automatically. |
 | **Serialize** (setup ops) | `init`, `add`, `onboard`, `setup` | Modify config or external files (CLAUDE.md, git hooks). Run once during project setup, not during parallel agent work. |
 
