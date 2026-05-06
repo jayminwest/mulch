@@ -147,12 +147,31 @@ describe("loadFilesystemRecipe", () => {
 		expect(result?.source).toBe("filesystem-ts");
 	});
 
-	it("throws when a TS recipe does not export a valid ProviderRecipe", async () => {
+	it("throws when a TS recipe default export is not a valid ProviderRecipe", async () => {
 		const tsPath = join(tmpDir, ".mulch", "recipes", "bad.ts");
 		await writeFile(tsPath, "export default { install: 'not a function' };\n", "utf-8");
 
 		await expect(loadFilesystemRecipe("bad", tmpDir)).rejects.toThrow(
-			/does not export a valid ProviderRecipe/,
+			/default export is not a valid ProviderRecipe/,
+		);
+	});
+
+	it("rejects a TS recipe with no default export, only named install/check/remove", async () => {
+		// Regression for mulch-828d: the prior loader did `mod.default ?? mod`
+		// so a module with named exports but no default validated under the
+		// namespace fallback. Spec is "default export only," so this must throw.
+		const tsPath = join(tmpDir, ".mulch", "recipes", "named-only.ts");
+		await writeFile(
+			tsPath,
+			`export const install = async () => ({ success: true, message: "" });
+export const check = async () => ({ success: true, message: "" });
+export const remove = async () => ({ success: true, message: "" });
+`,
+			"utf-8",
+		);
+
+		await expect(loadFilesystemRecipe("named-only", tmpDir)).rejects.toThrow(
+			/has no default export/,
 		);
 	});
 });
@@ -230,7 +249,7 @@ export default recipe;
 		expect(install?.message).toBe("npm install ok");
 	});
 
-	it("throws when the npm package does not export a valid ProviderRecipe", async () => {
+	it("throws when the npm package default export is not a valid ProviderRecipe", async () => {
 		const pkgDir = join(tmpDir, "node_modules", `${NPM_RECIPE_PREFIX}badpkg`);
 		await mkdir(pkgDir, { recursive: true });
 		await writeFile(
@@ -241,8 +260,28 @@ export default recipe;
 		await writeFile(join(pkgDir, "index.ts"), "export default { hello: 'world' };\n", "utf-8");
 
 		await expect(loadNpmRecipe("badpkg", tmpDir)).rejects.toThrow(
-			/does not export a valid ProviderRecipe/,
+			/default export is not a valid ProviderRecipe/,
 		);
+	});
+
+	it("rejects an npm package with no default export, only named install/check/remove", async () => {
+		const pkgDir = join(tmpDir, "node_modules", `${NPM_RECIPE_PREFIX}namedonly`);
+		await mkdir(pkgDir, { recursive: true });
+		await writeFile(
+			join(pkgDir, "package.json"),
+			JSON.stringify({ name: `${NPM_RECIPE_PREFIX}namedonly`, main: "index.ts" }),
+			"utf-8",
+		);
+		await writeFile(
+			join(pkgDir, "index.ts"),
+			`export const install = async () => ({ success: true, message: "" });
+export const check = async () => ({ success: true, message: "" });
+export const remove = async () => ({ success: true, message: "" });
+`,
+			"utf-8",
+		);
+
+		await expect(loadNpmRecipe("namedonly", tmpDir)).rejects.toThrow(/has no default export/);
 	});
 });
 

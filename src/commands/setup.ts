@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
@@ -758,13 +759,26 @@ export function registerSetupCommand(program: Command): void {
 
 				const action = options.check ? "check" : options.remove ? "remove" : "install";
 				let result: RecipeResult;
-
-				if (options.check) {
-					result = await resolved.recipe.check(cwd);
-				} else if (options.remove) {
-					result = await resolved.recipe.remove(cwd);
-				} else {
-					result = await resolved.recipe.install(cwd);
+				try {
+					if (options.check) {
+						result = await resolved.recipe.check(cwd);
+					} else if (options.remove) {
+						result = await resolved.recipe.remove(cwd);
+					} else {
+						result = await resolved.recipe.install(cwd);
+					}
+				} catch (err) {
+					// A recipe that throws (instead of returning a RecipeResult) would
+					// otherwise surface as a raw Bun stack trace from a top-level
+					// awaited action. Convert to the same shape as a returned failure
+					// so users see a one-line, formatted error.
+					const msg = err instanceof Error ? err.message : String(err);
+					const sourceLabel =
+						resolved.source === "builtin" ? "built-in" : (resolved.path ?? resolved.source);
+					result = {
+						success: false,
+						message: `recipe "${provider}" ${action} threw (${sourceLabel}): ${msg}`,
+					};
 				}
 
 				if (jsonMode) {
@@ -796,7 +810,22 @@ interface ProviderListing {
 	name: string;
 	source: "builtin" | "filesystem-ts" | "filesystem-sh" | "npm";
 	path?: string;
-	shadowedBy?: "filesystem-ts" | "filesystem-sh";
+	shadowedBy?: "filesystem-ts" | "filesystem-sh" | "npm";
+}
+
+function npmShadowExists(name: string, cwd: string): boolean {
+	// resolveRecipe prefers filesystem \u2192 npm \u2192 built-in, so an installed
+	// `mulch-recipe-<name>` package shadows the built-in (and is itself shadowed
+	// by a filesystem recipe of the same name). Probe per-builtin rather than
+	// enumerating node_modules \u2014 fast, and avoids rummaging through unrelated
+	// packages.
+	try {
+		const requireFn = createRequire(import.meta.url);
+		requireFn.resolve(`${NPM_RECIPE_PREFIX}${name}`, { paths: [cwd] });
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 async function gatherProviderListings(cwd: string): Promise<ProviderListing[]> {
@@ -805,11 +834,19 @@ async function gatherProviderListings(cwd: string): Promise<ProviderListing[]> {
 	const listings: ProviderListing[] = [];
 
 	for (const name of BUILTIN_PROVIDER_NAMES) {
-		const shadow = fsRecipes.find((r) => r.name === name);
+		// Resolution order is filesystem \u2192 npm \u2192 built-in, so a filesystem
+		// shadow wins over npm. Report the actual winner so the marker isn't a
+		// lie about what `ml setup <name>` would run.
+		const fsShadow = fsRecipes.find((r) => r.name === name);
+		const shadowedBy: ProviderListing["shadowedBy"] | undefined = fsShadow
+			? fsShadow.source
+			: npmShadowExists(name, cwd)
+				? "npm"
+				: undefined;
 		listings.push({
 			name,
 			source: "builtin",
-			...(shadow ? { shadowedBy: shadow.source } : {}),
+			...(shadowedBy ? { shadowedBy } : {}),
 		});
 	}
 
@@ -824,9 +861,6 @@ async function gatherProviderListings(cwd: string): Promise<ProviderListing[]> {
 		return order[a.source] - order[b.source];
 	});
 
-	// Note: we do not enumerate npm packages \u2014 they are resolved on demand.
-	// Their presence is reflected when a user runs `setup <name>` and resolution
-	// succeeds via npm.
 	return listings;
 }
 

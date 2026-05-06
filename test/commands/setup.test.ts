@@ -571,5 +571,75 @@ exit 1
 			const err = JSON.parse(result.stderr.toString());
 			expect(err.error).toContain("--list");
 		});
+
+		it("setup <name> formats a recipe install() throw instead of crashing", async () => {
+			// Regression for mulch-828d: a recipe whose install/check/remove
+			// throws (e.g. fs error mid-way, network failure) used to surface
+			// as a raw Bun stack trace because the action handler awaited the
+			// call without try/catch.
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(
+				join(recipesDir, "boom.ts"),
+				`export default {
+  async install() { throw new Error("intentional install failure"); },
+  async check() { return { success: true, message: "" }; },
+  async remove() { return { success: true, message: "" }; },
+};
+`,
+				"utf-8",
+			);
+
+			const result = runCli(["--json", "setup", "boom"], tmpDir);
+			expect(result.exitCode).toBe(1);
+			const out = JSON.parse(result.stdout.toString());
+			expect(out.success).toBe(false);
+			expect(out.message).toContain("intentional install failure");
+			expect(out.message).toContain("threw");
+			// No raw Bun stack trace in stderr.
+			expect(result.stderr.toString()).not.toContain("at install");
+			expect(result.stderr.toString()).not.toContain("Bun v");
+		});
+
+		it("setup <name> with named-only TS recipe fails with default-export error", async () => {
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(
+				join(recipesDir, "named.ts"),
+				`export const install = async () => ({ success: true, message: "" });
+export const check = async () => ({ success: true, message: "" });
+export const remove = async () => ({ success: true, message: "" });
+`,
+				"utf-8",
+			);
+
+			const result = runCli(["--json", "setup", "named"], tmpDir);
+			expect(result.exitCode).toBe(1);
+			const err = JSON.parse(result.stderr.toString());
+			expect(err.success).toBe(false);
+			expect(err.error).toContain("no default export");
+		});
+
+		it("--list flags built-ins shadowed by an installed npm recipe package", async () => {
+			// Stage a fake mulch-recipe-claude package in node_modules so the
+			// per-builtin npm probe finds it. We don't need to load it — only
+			// require.resolve must succeed.
+			const pkgDir = join(tmpDir, "node_modules", "mulch-recipe-claude");
+			await mkdir(pkgDir, { recursive: true });
+			await writeFile(
+				join(pkgDir, "package.json"),
+				JSON.stringify({ name: "mulch-recipe-claude", main: "index.js" }),
+				"utf-8",
+			);
+			await writeFile(join(pkgDir, "index.js"), "module.exports = {};\n", "utf-8");
+
+			const result = runCli(["--json", "setup", "--list"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			const out = JSON.parse(result.stdout.toString());
+			const claudeBuiltin = out.providers.find(
+				(p: { name: string; source: string }) => p.name === "claude" && p.source === "builtin",
+			);
+			expect(claudeBuiltin.shadowed_by).toBe("npm");
+		});
 	});
 });

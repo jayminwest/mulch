@@ -99,14 +99,22 @@ export async function loadFilesystemRecipe(
 	const shPath = join(dir, `${name}.sh`);
 
 	if (existsSync(tsPath)) {
-		const mod = (await import(tsPath)) as { default?: unknown } & Record<string, unknown>;
-		const recipe = mod.default ?? mod;
-		if (!validateRecipeShape(recipe)) {
+		const mod = (await import(tsPath)) as { default?: unknown };
+		// Spec is `export default { install, check, remove }`. Reject named-only
+		// exports — accepting them silently let users ship recipes that resolved
+		// in development (where they remembered the right named imports) but
+		// surprised the next consumer who imported them as a default.
+		if (mod.default === undefined) {
 			throw new Error(
-				`Recipe "${name}" at ${tsPath} does not export a valid ProviderRecipe (must export async install/check/remove functions, e.g. via 'export default'). See examples/recipes/ for a template.`,
+				`Recipe "${name}" at ${tsPath} has no default export. ProviderRecipes must be exposed via \`export default { install, check, remove }\`; named exports alone are not accepted. See examples/recipes/internal-ide.ts for a template.`,
 			);
 		}
-		return { name, source: "filesystem-ts", recipe, path: tsPath };
+		if (!validateRecipeShape(mod.default)) {
+			throw new Error(
+				`Recipe "${name}" at ${tsPath} default export is not a valid ProviderRecipe (must have async install/check/remove functions). See examples/recipes/internal-ide.ts for a template.`,
+			);
+		}
+		return { name, source: "filesystem-ts", recipe: mod.default, path: tsPath };
 	}
 
 	if (existsSync(shPath)) {
@@ -130,14 +138,18 @@ export async function loadNpmRecipe(name: string, cwd: string): Promise<RecipeWi
 	} catch {
 		return null;
 	}
-	const mod = (await import(resolved)) as { default?: unknown } & Record<string, unknown>;
-	const recipe = mod.default ?? mod;
-	if (!validateRecipeShape(recipe)) {
+	const mod = (await import(resolved)) as { default?: unknown };
+	if (mod.default === undefined) {
 		throw new Error(
-			`Recipe package "${pkgName}" does not export a valid ProviderRecipe (must export async install/check/remove functions as the default export).`,
+			`Recipe package "${pkgName}" has no default export. ProviderRecipes must be exposed via \`export default { install, check, remove }\`; named exports alone are not accepted.`,
 		);
 	}
-	return { name, source: "npm", recipe, path: resolved };
+	if (!validateRecipeShape(mod.default)) {
+		throw new Error(
+			`Recipe package "${pkgName}" default export is not a valid ProviderRecipe (must have async install/check/remove functions).`,
+		);
+	}
+	return { name, source: "npm", recipe: mod.default, path: resolved };
 }
 
 export async function listFilesystemRecipes(cwd: string): Promise<FilesystemRecipeListing[]> {
