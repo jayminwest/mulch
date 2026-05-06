@@ -152,6 +152,23 @@ custom_types:
 
 `ml record research --type hypothesis --statement "..." --prediction "..."` then writes a first-class record indistinguishable from a built-in.
 
+### Per-Domain Allowed Types
+
+Gate which record types may be written into a domain by listing them under that domain's `allowed_types`:
+
+```yaml
+domains:
+  backend:
+    allowed_types: [convention, pattern, decision]
+  frontend:
+    allowed_types: [convention, pattern]
+  notes: {}   # empty/missing allowed_types ⇒ all registered types allowed
+```
+
+`ml record` rejects any write whose `--type` isn't in the list and prints a copy-paste retry hint with the first allowed type filled in. Empty or missing `allowed_types` preserves back-compat behavior (any registered type is accepted).
+
+`disabled_types` wins on overlap — if a domain allows `failure` but `disabled_types: [failure]` is also set, the write still succeeds with the disabled-type deprecation warning, so peer agents in shared domains don't hard-fail when a type is being retired.
+
 ### Disabled Types
 
 Mark a type as deprecated to retire it gracefully across shared domains:

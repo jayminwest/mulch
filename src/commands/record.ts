@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import chalk from "chalk";
 import { type Command, Option } from "commander";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
+import type { MulchConfig } from "../schemas/config.ts";
 import type { Classification, Evidence, ExpertiseRecord, Outcome } from "../schemas/record.ts";
 import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
 import {
@@ -22,6 +23,15 @@ function buildTypeRequirements(): Record<string, string> {
 		out[def.name] = `${def.name} records require: ${def.required.join(", ")}`;
 	}
 	return out;
+}
+
+// Resolve a domain's allowed_types. Empty/missing means all registered types
+// allowed (back-compat). Returns the configured list when set so callers can
+// surface it in error messages.
+function getAllowedTypes(config: MulchConfig, domain: string): string[] | null {
+	const list = config.domains[domain]?.allowed_types;
+	if (!list || list.length === 0) return null;
+	return list;
 }
 
 // snake_case field name → camelCase Commander option key (e.g. "test_results" → "testResults").
@@ -195,6 +205,7 @@ export async function processStdinRecords(
 
 	// Validate each record against schema (cached on registry)
 	const validate = getRegistry().validator;
+	const allowedTypes = getAllowedTypes(config, domain);
 
 	const errors: string[] = [];
 	const validRecords: ExpertiseRecord[] = [];
@@ -227,6 +238,16 @@ export async function processStdinRecords(
 					: "";
 			errors.push(`Record ${i}: ${validationErrors}${typeHint}`);
 			continue;
+		}
+
+		if (allowedTypes) {
+			const recordType = (record as Record<string, unknown>).type;
+			if (typeof recordType === "string" && !allowedTypes.includes(recordType)) {
+				errors.push(
+					`Record ${i}: type "${recordType}" is not allowed in domain "${domain}". Allowed types: ${allowedTypes.join(", ")}.`,
+				);
+				continue;
+			}
 		}
 
 		validRecords.push(record as ExpertiseRecord);
@@ -759,6 +780,32 @@ Batch recording examples:
 					outputJsonError("record", msg);
 				} else {
 					console.error(chalk.red(`Error: ${msg}`));
+				}
+				process.exitCode = 1;
+				return;
+			}
+
+			// Per-domain allowed_types gate. Empty/missing means all registered
+			// types allowed (back-compat). disabled_types is independent — a type
+			// in allowed_types still writes (with deprecation warning) even when
+			// also disabled; cross-project peers in shared domains shouldn't
+			// hard-fail on an upstream config change.
+			const allowedTypes = getAllowedTypes(config, domain);
+			if (allowedTypes && !allowedTypes.includes(recordType)) {
+				const allowedList = allowedTypes.join(", ");
+				const msg = `type "${recordType}" is not allowed in domain "${domain}". Allowed types: ${allowedList}.`;
+				if (jsonMode) {
+					outputJsonError("record", msg);
+				} else {
+					console.error(chalk.red(`Error: ${msg}`));
+					const suggestedType = allowedTypes[0] ?? recordType;
+					const retryCmd = buildRetryCommand(
+						domain,
+						content,
+						{ ...options, type: suggestedType },
+						[],
+					);
+					console.error(chalk.dim(`  Retry: ${retryCmd}`));
 				}
 				process.exitCode = 1;
 				return;

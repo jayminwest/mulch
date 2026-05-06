@@ -37,11 +37,12 @@ export interface CustomTypeConfig {
 	aliases?: Record<string, string[]>;
 }
 
-// Per-domain configuration. Empty for now; fields land in mulch-64dc-b
-// (allowed_types) and mulch-64dc-c (required_fields). Use a unique-symbol brand
-// so the type is structurally distinct from {} without yet declaring real fields.
-declare const domainConfigBrand: unique symbol;
-export type DomainConfig = { [domainConfigBrand]?: never };
+// Per-domain configuration. `allowed_types` gates which registered record
+// types may be written into the domain — empty/missing means all registered
+// types are allowed (back-compat).
+export interface DomainConfig {
+	allowed_types?: string[];
+}
 
 export interface MulchConfig {
 	version: string;

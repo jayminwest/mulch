@@ -2012,3 +2012,136 @@ describe("disabled-type writes (Phase 3)", () => {
 		expect(out.warnings[0]).toMatch(/type "failure" is disabled/);
 	});
 });
+
+describe("per-domain allowed_types (R-01b)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-allowed-types-"));
+		await initMulchDir(tmpDir);
+	});
+
+	afterEach(async () => {
+		resetRegistry();
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("allows a record whose type is in domain allowed_types", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { allowed_types: ["convention"] } },
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "backend", "ok content", "--type", "convention"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded convention/);
+	});
+
+	it("rejects a record whose type is not in domain allowed_types and prints retry hint", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { allowed_types: ["convention"] } },
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "backend", "--type", "pattern", "--name", "x", "--description", "y"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toMatch(/type "pattern" is not allowed in domain "backend"/);
+		expect(r.stderr).toMatch(/Allowed types: convention/);
+		expect(r.stderr).toMatch(/Retry: ml record backend/);
+		expect(r.stderr).toMatch(/--type convention/);
+	});
+
+	it("empty/missing allowed_types preserves back-compat for all registered types", () => {
+		// Default config has empty domains map; auto-create produces {} (no allowed_types).
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "anywhere", "--type", "decision", "--title", "t", "--rationale", "r"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded decision/);
+	});
+
+	it("disabled_types wins when an allowed type is also disabled (writes with warning)", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { allowed_types: ["convention", "failure"] } },
+				disabled_types: ["failure"],
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"backend",
+				"--type",
+				"failure",
+				"--description",
+				"d",
+				"--resolution",
+				"r",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stderr).toMatch(/Warning: type "failure" is disabled/);
+		expect(r.stdout).toMatch(/Recorded failure/);
+	});
+
+	it("processStdinRecords rejects per-record when type not in allowed_types", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { allowed_types: ["convention"] } },
+			},
+			tmpDir,
+		);
+		await initRegistryFromConfig(tmpDir);
+		const filePath = getExpertisePath("backend", tmpDir);
+		await createExpertiseFile(filePath);
+
+		const result = await processStdinRecords(
+			"backend",
+			false,
+			false,
+			false,
+			JSON.stringify([
+				{ type: "convention", content: "ok", classification: "tactical" },
+				{
+					type: "pattern",
+					name: "p1",
+					description: "d",
+					classification: "tactical",
+				},
+			]),
+			tmpDir,
+		);
+
+		expect(result.created).toBe(1);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]).toMatch(/type "pattern" is not allowed in domain "backend"/);
+		expect(result.errors[0]).toMatch(/Allowed types: convention/);
+	});
+});
