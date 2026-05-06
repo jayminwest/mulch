@@ -2145,3 +2145,207 @@ describe("per-domain allowed_types (R-01b)", () => {
 		expect(result.errors[0]).toMatch(/Allowed types: convention/);
 	});
 });
+
+describe("per-domain required_fields (R-01c)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-required-fields-"));
+		await initMulchDir(tmpDir);
+	});
+
+	afterEach(async () => {
+		resetRegistry();
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("succeeds when all required_fields are present on the record", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner"] } },
+				custom_types: {
+					task: {
+						required: ["description"],
+						optional: ["oncall_owner"],
+						dedup_key: "description",
+						summary: "{description}",
+					},
+				},
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"backend",
+				"--type",
+				"task",
+				"--description",
+				"ship it",
+				"--oncall-owner",
+				"alice",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded task/);
+
+		await initRegistryFromConfig(tmpDir);
+		const records = await readExpertiseFile(getExpertisePath("backend", tmpDir));
+		expect(records).toHaveLength(1);
+		expect((records[0] as unknown as Record<string, unknown>).oncall_owner).toBe("alice");
+	});
+
+	it("rejects a record missing one required_field with retry hint", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner"] } },
+				custom_types: {
+					task: {
+						required: ["description"],
+						optional: ["oncall_owner"],
+						dedup_key: "description",
+						summary: "{description}",
+					},
+				},
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "backend", "--type", "task", "--description", "ship it"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toMatch(/domain "backend" requires field\(s\) "oncall_owner"/);
+		expect(r.stderr).toMatch(/Retry: ml record backend/);
+		expect(r.stderr).toMatch(/--oncall-owner "<oncall_owner>"/);
+	});
+
+	it("lists every missing required_field in a single error", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner", "severity"] } },
+				custom_types: {
+					task: {
+						required: ["description"],
+						optional: ["oncall_owner", "severity"],
+						dedup_key: "description",
+						summary: "{description}",
+					},
+				},
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "backend", "--type", "task", "--description", "ship it"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		// Single error line lists all missing fields.
+		expect(r.stderr).toMatch(/domain "backend" requires field\(s\) "oncall_owner", "severity"/);
+		// Retry hint includes both missing flags.
+		expect(r.stderr).toMatch(/--oncall-owner "<oncall_owner>"/);
+		expect(r.stderr).toMatch(/--severity "<severity>"/);
+	});
+
+	it("stacks on top of per-type required (per-type still enforced)", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner"] } },
+				custom_types: {
+					task: {
+						required: ["description"],
+						optional: ["oncall_owner"],
+						dedup_key: "description",
+						summary: "{description}",
+					},
+				},
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		// Has the domain-required field but is missing the per-type required
+		// "description". Per-type validation must still fire — the domain check
+		// adds on top, doesn't replace.
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "backend", "--type", "task", "--oncall-owner", "alice"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toMatch(/task records require: description/);
+	});
+
+	it("missing/empty required_fields preserves back-compat", () => {
+		// Default config has no required_fields → behavior unchanged.
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "anywhere", "--type", "decision", "--title", "t", "--rationale", "r"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded decision/);
+	});
+
+	it("processStdinRecords rejects per-record when required_fields are missing", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner"] } },
+				custom_types: {
+					task: {
+						required: ["description"],
+						optional: ["oncall_owner"],
+						dedup_key: "description",
+						summary: "{description}",
+					},
+				},
+			},
+			tmpDir,
+		);
+		await initRegistryFromConfig(tmpDir);
+		const filePath = getExpertisePath("backend", tmpDir);
+		await createExpertiseFile(filePath);
+
+		const result = await processStdinRecords(
+			"backend",
+			false,
+			false,
+			false,
+			JSON.stringify([
+				{
+					type: "task",
+					description: "with owner",
+					oncall_owner: "alice",
+					classification: "tactical",
+				},
+				{
+					type: "task",
+					description: "no owner",
+					classification: "tactical",
+				},
+			]),
+			tmpDir,
+		);
+
+		expect(result.created).toBe(1);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]).toMatch(/domain "backend" requires field\(s\) "oncall_owner"/);
+	});
+});

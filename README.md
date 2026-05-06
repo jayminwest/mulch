@@ -169,6 +169,25 @@ domains:
 
 `disabled_types` wins on overlap — if a domain allows `failure` but `disabled_types: [failure]` is also set, the write still succeeds with the disabled-type deprecation warning, so peer agents in shared domains don't hard-fail when a type is being retired.
 
+### Per-Domain Required Fields
+
+Require additional top-level fields on every record written into a domain by listing them under `required_fields`:
+
+```yaml
+domains:
+  backend:
+    allowed_types: [task]
+    required_fields: [oncall_owner]
+custom_types:
+  task:
+    required: [description]
+    optional: [oncall_owner]
+    dedup_key: description
+    summary: "{description}"
+```
+
+`ml record` rejects writes that omit any listed field and prints a single retry hint with all missing fields filled in. `required_fields` stacks on top of the per-type required fields enforced by the schema — it adds, never replaces. Top-level field names only; nested paths (`evidence.commit`, etc.) are out of scope. Empty or missing `required_fields` preserves back-compat behavior.
+
 ### Disabled Types
 
 Mark a type as deprecated to retire it gracefully across shared domains:

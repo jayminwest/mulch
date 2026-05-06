@@ -34,6 +34,34 @@ function getAllowedTypes(config: MulchConfig, domain: string): string[] | null {
 	return list;
 }
 
+// Resolve a domain's required_fields. Empty/missing means no extra
+// requirements (back-compat). Top-level field names only; nested paths are
+// out of scope for v1.
+function getRequiredFields(config: MulchConfig, domain: string): string[] | null {
+	const list = config.domains[domain]?.required_fields;
+	if (!list || list.length === 0) return null;
+	return list;
+}
+
+// Return the subset of `fields` that are missing or empty on the record.
+// Treats undefined/null/""/empty-array as missing.
+function findMissingDomainFields(record: ExpertiseRecord, fields: string[]): string[] {
+	const r = record as unknown as Record<string, unknown>;
+	const missing: string[] = [];
+	for (const field of fields) {
+		const value = r[field];
+		if (
+			value === undefined ||
+			value === null ||
+			value === "" ||
+			(Array.isArray(value) && value.length === 0)
+		) {
+			missing.push(field);
+		}
+	}
+	return missing;
+}
+
 // snake_case field name → camelCase Commander option key (e.g. "test_results" → "testResults").
 function fieldToOptionKey(field: string): string {
 	return field.replace(/_(.)/g, (_, c: string) => c.toUpperCase());
@@ -206,6 +234,7 @@ export async function processStdinRecords(
 	// Validate each record against schema (cached on registry)
 	const validate = getRegistry().validator;
 	const allowedTypes = getAllowedTypes(config, domain);
+	const requiredFields = getRequiredFields(config, domain);
 
 	const errors: string[] = [];
 	const validRecords: ExpertiseRecord[] = [];
@@ -245,6 +274,16 @@ export async function processStdinRecords(
 			if (typeof recordType === "string" && !allowedTypes.includes(recordType)) {
 				errors.push(
 					`Record ${i}: type "${recordType}" is not allowed in domain "${domain}". Allowed types: ${allowedTypes.join(", ")}.`,
+				);
+				continue;
+			}
+		}
+
+		if (requiredFields) {
+			const missing = findMissingDomainFields(record as ExpertiseRecord, requiredFields);
+			if (missing.length > 0) {
+				errors.push(
+					`Record ${i}: domain "${domain}" requires field(s) ${missing.map((f) => `"${f}"`).join(", ")}.`,
 				);
 				continue;
 			}
@@ -866,6 +905,35 @@ Batch recording examples:
 				}
 				process.exitCode = 1;
 				return;
+			}
+
+			// Per-domain required_fields gate. Stacks on top of per-type required
+			// fields enforced by the schema above. Lists all missing fields in a
+			// single error so users fix the config in one pass.
+			const requiredFields = getRequiredFields(config, domain);
+			if (requiredFields) {
+				const missingFields = findMissingDomainFields(record, requiredFields);
+				if (missingFields.length > 0) {
+					const fieldList = missingFields.map((f) => `"${f}"`).join(", ");
+					const msg = `domain "${domain}" requires field(s) ${fieldList}.`;
+					if (jsonMode) {
+						outputJsonError("record", msg);
+					} else {
+						console.error(chalk.red(`Error: ${msg}`));
+						const retryCmd = buildRetryCommand(
+							domain,
+							content,
+							options,
+							missingFields.map((f) => ({
+								flag: `--${f.replace(/_/g, "-")}`,
+								placeholder: `<${f}>`,
+							})),
+						);
+						console.error(chalk.dim(`  Retry: ${retryCmd}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
 			}
 
 			const filePath = getExpertisePath(domain);

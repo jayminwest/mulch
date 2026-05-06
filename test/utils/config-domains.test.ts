@@ -94,3 +94,71 @@ classification_defaults:
 		expect(parsed.domains.backend.allowed_types).toEqual(["convention", "pattern"]);
 	});
 });
+
+describe("DomainConfig required_fields", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-domain-required-"));
+		await initMulchDir(tmpDir);
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("round-trips required_fields via writeConfig + readConfig", async () => {
+		const cfg: MulchConfig = {
+			...DEFAULT_CONFIG,
+			domains: {
+				backend: { required_fields: ["oncall_owner", "severity"] },
+				frontend: { required_fields: ["oncall_owner"] },
+				notes: {},
+			},
+		};
+		await writeConfig(cfg, tmpDir);
+
+		const got = await readConfig(tmpDir);
+		expect(got.domains.backend?.required_fields).toEqual(["oncall_owner", "severity"]);
+		expect(got.domains.frontend?.required_fields).toEqual(["oncall_owner"]);
+		expect(got.domains.notes?.required_fields).toBeUndefined();
+	});
+
+	it("parses required_fields from hand-authored YAML alongside allowed_types", async () => {
+		const raw = `version: "1"
+domains:
+  backend:
+    allowed_types: [task]
+    required_fields: [oncall_owner]
+  notes: {}
+governance:
+  max_entries: 100
+  warn_entries: 150
+  hard_limit: 200
+classification_defaults:
+  shelf_life:
+    tactical: 14
+    observational: 30
+`;
+		await writeFile(getConfigPath(tmpDir), raw, "utf-8");
+
+		const cfg = await readConfig(tmpDir);
+		expect(cfg.domains.backend?.allowed_types).toEqual(["task"]);
+		expect(cfg.domains.backend?.required_fields).toEqual(["oncall_owner"]);
+		expect(cfg.domains.notes?.required_fields).toBeUndefined();
+	});
+
+	it("required_fields serializes as a YAML list under the domain map", async () => {
+		const cfg: MulchConfig = {
+			...DEFAULT_CONFIG,
+			domains: { backend: { required_fields: ["oncall_owner"] } },
+		};
+		await writeConfig(cfg, tmpDir);
+
+		const raw = await readFile(getConfigPath(tmpDir), "utf-8");
+		const parsed = yaml.load(raw) as {
+			domains: { backend: { required_fields: string[] } };
+		};
+		expect(parsed.domains.backend.required_fields).toEqual(["oncall_owner"]);
+	});
+});

@@ -39,9 +39,12 @@ export interface CustomTypeConfig {
 
 // Per-domain configuration. `allowed_types` gates which registered record
 // types may be written into the domain — empty/missing means all registered
-// types are allowed (back-compat).
+// types are allowed (back-compat). `required_fields` lists additional
+// top-level fields a record must carry on top of its per-type requirements;
+// empty/missing means no extra requirements.
 export interface DomainConfig {
 	allowed_types?: string[];
+	required_fields?: string[];
 }
 
 export interface MulchConfig {
