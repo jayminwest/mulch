@@ -52,6 +52,10 @@ interface BaseRecord {
 	// classification tier. Lives on the record across the demotion until
 	// archive; bumped each pass that re-demotes.
 	supersession_demoted_at?: string;
+	// Set by `ml prune --check-anchors` when anchor-validity decay (R-05f)
+	// demotes a record one tier because too many of its file/dir anchors no
+	// longer resolve. Bumped each pass that re-demotes.
+	anchor_decay_demoted_at?: string;
 }
 
 export interface ConventionRecord extends BaseRecord {

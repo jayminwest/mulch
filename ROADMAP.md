@@ -207,10 +207,14 @@ Archive below 0.3, delete below 0.05. `ml fitness <id>` shows per-axis breakdown
   `supersession_demoted_at`. Cross-domain supersession honored. `--aggressive` collapses
   straight to archived in one pass; `--hard` hard-deletes the bottomed-out record.
   Staleness still wins over supersession when both apply.
-- **R-05f — Anchor-validity decay.** Seeded as mulch-2551. Records whose file anchors have
-  been deleted past a threshold auto-demote (rather than `ml doctor --fix` silently stripping).
-  `dir_anchors[]` shipped under R-01 (mulch-476b) so records can attach to a directory and
-  stay valid as files within it shuffle — this remaining piece is just the decay weighting.
+- **R-05f — Anchor-validity decay.** ✅ Shipped (mulch-2551). `ml prune --check-anchors`
+  walks records whose `files[]` / `dir_anchors[]` / `evidence.file` anchors no longer resolve
+  one tier down the ladder (`foundational → tactical → observational → archived`) when
+  `valid_fraction` falls below the configured threshold and the record is older than
+  `grace_days`. Stamps `anchor_decay_demoted_at` on each demotion. Zero-anchor records are
+  exempt. Staleness still wins over anchor decay. `--explain` prints per-record breakdowns
+  (broken anchors + tier transition). Knobs live under `decay.anchor_validity` in
+  `mulch.config.yaml` (defaults: `threshold: 0.5`, `grace_days: 7`).
 - **R-05g — Continuous fitness formula.** The unifying mechanism above. Weights in
   `mulch.config.yaml`, `ml fitness <id>` for transparency, `ml prune --explain` for debugging.
 
@@ -458,9 +462,13 @@ revisions know what's already off the punch list.
   classification ladder, one tier per pass, stamping `supersession_demoted_at`. Bottomed-out
   records archive (or hard-delete with `--hard`). `--aggressive` collapses fully in one
   pass. Cross-domain by design.
+- **R-05f — Anchor-validity decay (mulch-2551, 2026-05-06).** `ml prune --check-anchors`
+  demotes records whose `files[]` / `dir_anchors[]` / `evidence.file` no longer resolve.
+  Each demotion stamps `anchor_decay_demoted_at`. Zero-anchor records exempt; staleness
+  wins on overlap; supersession + anchor decay co-stamp but only demote one tier per pass.
+  `--explain` prints broken-anchor breakdowns. Knobs in `decay.anchor_validity`.
 
 Open seeds tracking remaining roadmap work:
-- mulch-2551 (R-05f — anchor-validity decay)
 - mulch-6deb (R-04 — provider plugin registry)
 - mulch-8e40 (R-10 — secret-scanning recipe)
 - mulch-1d5b (R-09 — multi-repo federation)
@@ -479,9 +487,10 @@ A first cut at order of attack — not committed:
    primitive everything else leans on.
 3. ~~**R-05a + R-05e** (soft archive + supersession decay)~~ — both shipped (mulch-7876,
    mulch-4426; 2026-05-06).
-4. **R-06** (ownership) — needed before R-12 can route resolution. **Next.**
-5. **R-03** (Claude hook namespace + profiles) — leverages R-02; unlocks R-05c, R-11.
-6. **R-05f** (anchor-validity decay) — small follow-up now that `dir_anchors[]` has shipped.
+4. ~~**R-05f** (anchor-validity decay)~~ — shipped (mulch-2551, 2026-05-06). Small follow-up
+   to `dir_anchors[]`; emits the `w_anchor` signal that R-05g will blend.
+5. **R-06** (ownership) — needed before R-12 can route resolution. **Next.**
+6. **R-03** (Claude hook namespace + profiles) — leverages R-02; unlocks R-05c, R-11.
 7. **R-04** (provider plugins) — pure refactor of `setup.ts`; can happen any time.
 8. **R-11 + R-05d** (auto-confirmations + confirmation decay) — paired; ship together.
 9. **R-05g** (fitness formula) — once R-05c/d/e/f are emitting signal, unify them.

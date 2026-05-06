@@ -52,6 +52,19 @@ export interface DomainConfig {
 	required_fields?: string[];
 }
 
+export interface AnchorValidityConfig {
+	threshold?: number;
+	grace_days?: number;
+	weight?: number;
+}
+
+export interface DecayConfig {
+	anchor_validity?: AnchorValidityConfig;
+}
+
+export const DEFAULT_ANCHOR_VALIDITY_THRESHOLD = 0.5;
+export const DEFAULT_ANCHOR_VALIDITY_GRACE_DAYS = 7;
+
 export interface MulchConfig {
 	version: string;
 	domains: Record<string, DomainConfig>;
@@ -74,6 +87,9 @@ export interface MulchConfig {
 		boost_factor: number;
 	};
 	custom_types?: Record<string, CustomTypeConfig>;
+	// Decay knobs. R-05f wires `anchor_validity` into `ml prune --check-anchors`;
+	// `weight` is reserved for the future R-05g fitness blend and otherwise unused.
+	decay?: DecayConfig;
 	// Names of registered types (built-in or custom) that emit a deprecation
 	// warning on write. Reads still succeed; the type stays in CLI choices.
 	disabled_types?: string[];

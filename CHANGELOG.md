@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Anchor-Validity Decay (R-05f, mulch-2551)
+- **`ml prune --check-anchors`**: opt-in flag that demotes a record one classification tier when its file/dir anchors stop resolving. For each record we count valid vs. broken anchors across `files[]` (PatternRecord/ReferenceRecord), `dir_anchors[]`, and `evidence.file`; if the resulting `valid_fraction` is below the configured threshold AND the record was recorded more than `grace_days` ago, the record walks `foundational → tactical → observational → archived` (or is hard-deleted with `--hard`). Each demotion stamps `anchor_decay_demoted_at: <iso-date>` so the signal is auditable across passes.
+- **Records with zero anchors are exempt** — the absence of anchors means "applies globally," not "100% broken."
+- **Staleness still wins** when both apply — the record archives for staleness without an intermediate anchor-decay stamp.
+- **Co-existence with supersession** — a record that is both superseded and anchor-decayed still demotes only one tier per pass, but both `supersession_demoted_at` and `anchor_decay_demoted_at` get stamped.
+- **`--explain`** flag: prints per-record reasons for each demotion, listing the broken anchors (kind + path) and the tier transition. Works for both supersession and anchor decay.
+- **Configurable knobs** under `decay.anchor_validity` in `mulch.config.yaml`:
+  ```yaml
+  decay:
+    anchor_validity:
+      threshold: 0.5    # demote if valid_fraction < this
+      grace_days: 7     # don't punish records younger than this
+      weight: 1.0       # reserved for the future R-05g fitness blend
+  ```
+- **JSON output adds `totalAnchorDemoted`, `totalSupersessionDemoted`, plus per-domain `anchor_demoted` / `supersession_demoted`** breakdowns alongside existing `pruned` / `demoted` counts. With `--explain`, the payload includes an `explanations[]` array.
+
 #### Supersession-Based Auto-Demotion (R-05e, mulch-4426)
 - **`ml prune` demotes superseded records by one tier per pass**: when record B has `supersedes: [A]`, A walks down the classification ladder (`foundational → tactical → observational → archived`). Each demotion stamps `supersession_demoted_at: <iso-date>` on A so the event is auditable. The signal was already in the schema — supersession is now a first-class decay axis.
 - **Cross-domain by design**: a record in domain X can supersede a record in domain Y. Supersession is content-relational, not domain-bound.
