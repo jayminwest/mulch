@@ -3,6 +3,7 @@ import type { Command } from "commander";
 import {
 	DEFAULT_ANCHOR_VALIDITY_GRACE_DAYS,
 	DEFAULT_ANCHOR_VALIDITY_THRESHOLD,
+	validateAnchorValidityConfig,
 } from "../schemas/config.ts";
 import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
 import {
@@ -243,6 +244,17 @@ export function registerPruneCommand(program: Command): void {
 				const shelfLife = config.classification_defaults.shelf_life;
 				const projectRoot = process.cwd();
 				const anchorCfg = config.decay?.anchor_validity ?? {};
+				const anchorValidationErrors = validateAnchorValidityConfig(anchorCfg);
+				if (anchorValidationErrors.length > 0) {
+					const msg = `Invalid decay.anchor_validity config: ${anchorValidationErrors.join("; ")}. Edit .mulch/mulch.config.yaml.`;
+					if (jsonMode) {
+						outputJsonError("prune", msg);
+					} else {
+						console.error(chalk.red(`Error: ${msg}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
 				const anchorThreshold = anchorCfg.threshold ?? DEFAULT_ANCHOR_VALIDITY_THRESHOLD;
 				const anchorGrace = anchorCfg.grace_days ?? DEFAULT_ANCHOR_VALIDITY_GRACE_DAYS;
 

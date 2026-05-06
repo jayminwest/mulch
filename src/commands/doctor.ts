@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
-import type { MulchConfig } from "../schemas/config.ts";
+import { type MulchConfig, validateAnchorValidityConfig } from "../schemas/config.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
 import {
 	getExpertiseDir,
@@ -524,6 +524,36 @@ async function checkGovernance(config: MulchConfig, cwd?: string): Promise<Docto
 	};
 }
 
+function checkDecayConfig(config: MulchConfig): DoctorCheck {
+	const cfg = config.decay?.anchor_validity;
+	if (!cfg) {
+		return {
+			name: "decay-config",
+			status: "pass",
+			message: "decay.anchor_validity uses defaults",
+			fixable: false,
+			details: [],
+		};
+	}
+	const errors = validateAnchorValidityConfig(cfg);
+	if (errors.length > 0) {
+		return {
+			name: "decay-config",
+			status: "fail",
+			message: `decay.anchor_validity is invalid (${errors.length} issue${errors.length === 1 ? "" : "s"})`,
+			fixable: false,
+			details: errors,
+		};
+	}
+	return {
+		name: "decay-config",
+		status: "pass",
+		message: "decay.anchor_validity is valid",
+		fixable: false,
+		details: [],
+	};
+}
+
 // Walk every domain's records and bucket them as conforming or violating
 // domain-level rules (allowed_types / required_fields). Used by both the
 // informational and failing checks so we read+parse JSONL once.
@@ -995,6 +1025,7 @@ export function registerDoctorCommand(program: Command): void {
 			checks.push(await checkDuplicates(config));
 			checks.push(await checkFileAnchors(config));
 			checks.push(await checkGovernance(config));
+			checks.push(checkDecayConfig(config));
 			checks.push(await checkUpdateAvailable());
 
 			const summary = {

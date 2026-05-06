@@ -502,4 +502,49 @@ describe("ml prune --check-anchors — anchor-validity decay (R-05f)", () => {
 		const archive = await readArchiveFile(getArchivePath("testing", tmpDir));
 		expect(archive.find((r) => r.id === "mx-cas0001")).toBeDefined();
 	});
+
+	describe("decay.anchor_validity validation", () => {
+		it("rejects negative grace_days with a formatted error", async () => {
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { testing: {}, architecture: {} },
+					decay: { anchor_validity: { grace_days: -1 } },
+				},
+				tmpDir,
+			);
+			const result = await runPrune(tmpDir, ["--check-anchors"]);
+			expect(result.stderr).toContain("Invalid decay.anchor_validity config");
+			expect(result.stderr).toContain("grace_days must be >= 0");
+			expect(result.exitCode).toBe(1);
+		});
+
+		it("rejects threshold > 1", async () => {
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { testing: {}, architecture: {} },
+					decay: { anchor_validity: { threshold: 1.5 } },
+				},
+				tmpDir,
+			);
+			const result = await runPrune(tmpDir, ["--check-anchors"]);
+			expect(result.stderr).toContain("threshold must be between 0 and 1");
+			expect(result.exitCode).toBe(1);
+		});
+
+		it("rejects NaN threshold (YAML `.nan`)", async () => {
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { testing: {}, architecture: {} },
+					decay: { anchor_validity: { threshold: Number.NaN } },
+				},
+				tmpDir,
+			);
+			const result = await runPrune(tmpDir, ["--check-anchors"]);
+			expect(result.stderr).toContain("threshold must be a finite number");
+			expect(result.exitCode).toBe(1);
+		});
+	});
 });

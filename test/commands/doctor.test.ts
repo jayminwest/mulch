@@ -827,3 +827,64 @@ describe("doctor — dir_anchors (R-01)", () => {
 		expect(records[0]?.dir_anchors).toBeUndefined();
 	});
 });
+
+describe("doctor — decay-config check", () => {
+	it("passes when decay block is absent (uses defaults)", async () => {
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find((c: { name: string }) => c.name === "decay-config") as {
+			status: string;
+		};
+		expect(check.status).toBe("pass");
+	});
+
+	it("fails on negative grace_days with the offending value in details", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { testing: {}, api: {} },
+				decay: { anchor_validity: { grace_days: -3 } },
+			},
+			tmpDir,
+		);
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find((c: { name: string }) => c.name === "decay-config") as {
+			status: string;
+			details: string[];
+		};
+		expect(check.status).toBe("fail");
+		expect(check.details.some((d) => d.includes("grace_days must be >= 0"))).toBe(true);
+	});
+
+	it("fails on threshold out of range", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { testing: {}, api: {} },
+				decay: { anchor_validity: { threshold: 2 } },
+			},
+			tmpDir,
+		);
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find((c: { name: string }) => c.name === "decay-config") as {
+			status: string;
+			details: string[];
+		};
+		expect(check.status).toBe("fail");
+		expect(check.details.some((d) => d.includes("threshold must be between 0 and 1"))).toBe(true);
+	});
+});

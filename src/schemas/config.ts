@@ -65,6 +65,39 @@ export interface DecayConfig {
 export const DEFAULT_ANCHOR_VALIDITY_THRESHOLD = 0.5;
 export const DEFAULT_ANCHOR_VALIDITY_GRACE_DAYS = 7;
 
+/**
+ * Range-check decay.anchor_validity knobs. Returns a list of human-readable
+ * error strings (empty when valid). Caught at command-time (e.g. `ml prune
+ * --check-anchors`) so a misconfigured threshold/grace doesn't silently produce
+ * wrong demotion decisions:
+ *   - threshold < 0 or > 1: validFraction is in [0, 1], so out-of-range values
+ *     either always-decay (threshold > 1) or never-decay (threshold < 0).
+ *   - grace_days < 0: every record passes the grace check, so brand-new records
+ *     can decay before their anchors stabilize.
+ *   - non-finite numbers (NaN/Infinity): YAML accepts `.nan` / `.inf` literals
+ *     that bypass the type check.
+ */
+export function validateAnchorValidityConfig(cfg: AnchorValidityConfig): string[] {
+	const errors: string[] = [];
+	const t = cfg.threshold;
+	if (t !== undefined) {
+		if (typeof t !== "number" || !Number.isFinite(t)) {
+			errors.push(`threshold must be a finite number (got ${JSON.stringify(t)})`);
+		} else if (t < 0 || t > 1) {
+			errors.push(`threshold must be between 0 and 1 (got ${t})`);
+		}
+	}
+	const g = cfg.grace_days;
+	if (g !== undefined) {
+		if (typeof g !== "number" || !Number.isFinite(g)) {
+			errors.push(`grace_days must be a finite number (got ${JSON.stringify(g)})`);
+		} else if (g < 0) {
+			errors.push(`grace_days must be >= 0 (got ${g})`);
+		}
+	}
+	return errors;
+}
+
 export interface MulchConfig {
 	version: string;
 	domains: Record<string, DomainConfig>;

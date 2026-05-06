@@ -4,6 +4,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/markers.ts";
+import { isQuiet } from "../utils/palette.ts";
 
 export const ONBOARD_VERSION = 4;
 export const VERSION_MARKER = `<!-- mulch-onboard-v:${String(ONBOARD_VERSION)} -->`;
@@ -268,12 +269,12 @@ export async function runOnboard(options: {
 			};
 			const colorFn = colors[action] ?? chalk.white;
 			const msg = messages[action] ?? action;
-			console.log(colorFn(msg));
+			if (!isQuiet()) console.log(colorFn(msg));
 		}
 
 		if (duplicates.length > 0) {
 			const names = duplicates.map((d) => d.fileName).join(", ");
-			if (!options.jsonMode) {
+			if (!options.jsonMode && !isQuiet()) {
 				console.log(chalk.yellow(`Warning: mulch snippet also found in: ${names}`));
 			}
 		}
@@ -331,12 +332,12 @@ export async function runOnboard(options: {
 			up_to_date: `Mulch snippet in ${target.fileName} is already up to date. No changes made.`,
 		};
 		const color = action === "up_to_date" ? chalk.yellow : chalk.green;
-		console.log(color(messages[action]));
+		if (!isQuiet()) console.log(color(messages[action]));
 	}
 
 	if (duplicates.length > 0) {
 		const names = duplicates.map((d) => d.fileName).join(", ");
-		if (!options.jsonMode) {
+		if (!options.jsonMode && !isQuiet()) {
 			console.log(chalk.yellow(`Warning: mulch snippet also found in: ${names}`));
 		}
 	}

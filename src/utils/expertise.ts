@@ -62,7 +62,17 @@ export async function readExpertiseFile(
 		if (trimmed.length === 0) continue;
 		// Skip comment lines (used by archive-file banners).
 		if (trimmed.startsWith("#")) continue;
-		const raw = JSON.parse(line) as Record<string, unknown>;
+		let raw: Record<string, unknown>;
+		try {
+			raw = JSON.parse(line) as Record<string, unknown>;
+		} catch (err) {
+			// Without context the bare "Unexpected token …" from V8/JSC is unhelpful
+			// — point the operator at the exact file:line, which matters most for
+			// archive files that callers rarely open directly.
+			const reason = err instanceof Error ? err.message : String(err);
+			const preview = trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+			throw new Error(`Malformed JSONL at ${filePath}:${i + 1}: ${reason}. Line: ${preview}`);
+		}
 		// Normalize legacy outcome (singular) to outcomes (array) for backward compat
 		if (
 			"outcome" in raw &&

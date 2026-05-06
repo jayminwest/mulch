@@ -1,8 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Command } from "commander";
+import { registerAddCommand } from "../../src/commands/add.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import {
 	getExpertisePath,
@@ -12,6 +14,7 @@ import {
 	writeConfig,
 } from "../../src/utils/config.ts";
 import { createExpertiseFile } from "../../src/utils/expertise.ts";
+import { setQuiet } from "../../src/utils/palette.ts";
 
 describe("add command", () => {
 	let tmpDir: string;
@@ -106,5 +109,45 @@ describe("add command", () => {
 		expect(updatedConfig.governance.max_entries).toBe(100);
 		expect(updatedConfig.governance.warn_entries).toBe(150);
 		expect(updatedConfig.governance.hard_limit).toBe(200);
+	});
+
+	describe("--quiet semantics", () => {
+		it("suppresses the success message when quiet is set", async () => {
+			const origCwd = process.cwd();
+			process.chdir(tmpDir);
+			setQuiet(true);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = new Command();
+				program.name("mulch").exitOverride();
+				registerAddCommand(program);
+				await program.parseAsync(["node", "mulch", "add", "qtest"]);
+				expect(logSpy).not.toHaveBeenCalled();
+				const updated = await readConfig(tmpDir);
+				expect(updated.domains).toHaveProperty("qtest");
+			} finally {
+				logSpy.mockRestore();
+				setQuiet(false);
+				process.chdir(origCwd);
+			}
+		});
+
+		it("emits the success message when quiet is unset", async () => {
+			const origCwd = process.cwd();
+			process.chdir(tmpDir);
+			setQuiet(false);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = new Command();
+				program.name("mulch").exitOverride();
+				registerAddCommand(program);
+				await program.parseAsync(["node", "mulch", "add", "loud"]);
+				expect(logSpy).toHaveBeenCalled();
+				expect(logSpy.mock.calls[0]?.[0]).toContain("Added domain");
+			} finally {
+				logSpy.mockRestore();
+				process.chdir(origCwd);
+			}
+		});
 	});
 });

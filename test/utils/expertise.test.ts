@@ -77,6 +77,30 @@ describe("expertise utils", () => {
 			expect(result).toHaveLength(1);
 			expect(result[0]).toEqual(record);
 		});
+
+		it("rejects malformed JSONL with file:line context", async () => {
+			const filePath = join(tmpDir, "broken.jsonl");
+			const good = makeConvention("ok");
+			// Two valid records, then a corrupted line, then another valid line.
+			const lines = [
+				JSON.stringify(good),
+				JSON.stringify(makeConvention("ok2")),
+				`{"type":"convention","content":"truncated`,
+				JSON.stringify(makeConvention("ok3")),
+			];
+			await writeFile(filePath, `${lines.join("\n")}\n`, "utf-8");
+
+			await expect(readExpertiseFile(filePath)).rejects.toThrow(
+				/Malformed JSONL at .*broken\.jsonl:3/,
+			);
+		});
+
+		it("malformed-line error includes a line preview", async () => {
+			const filePath = join(tmpDir, "preview.jsonl");
+			await writeFile(filePath, "not-json-at-all\n", "utf-8");
+
+			await expect(readExpertiseFile(filePath)).rejects.toThrow(/not-json-at-all/);
+		});
 	});
 
 	describe("appendRecord", () => {

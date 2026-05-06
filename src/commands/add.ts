@@ -4,6 +4,7 @@ import type { Command } from "commander";
 import { getExpertisePath, getMulchDir, readConfig, writeConfig } from "../utils/config.ts";
 import { createExpertiseFile } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { isQuiet } from "../utils/palette.ts";
 
 export function registerAddCommand(program: Command): void {
 	program
@@ -44,7 +45,7 @@ export function registerAddCommand(program: Command): void {
 
 			if (jsonMode) {
 				outputJson({ success: true, command: "add", domain });
-			} else {
+			} else if (!isQuiet()) {
 				console.log(chalk.green(`Added domain "${domain}".`));
 			}
 		});

@@ -254,6 +254,46 @@ describe("rank command", () => {
 		}
 	});
 
+	it("rejects --limit with trailing garbage instead of silently truncating", async () => {
+		process.chdir(tmpDir);
+		const errSpy = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const program = makeProgram();
+			await program.parseAsync(["node", "mulch", "rank", "--limit", "10abc"]);
+			expect(errSpy.mock.calls[0]?.[0]).toContain("--limit must be a positive integer");
+			expect(errSpy.mock.calls[0]?.[0]).toContain('"10abc"');
+			expect(process.exitCode).toBe(1);
+		} finally {
+			errSpy.mockRestore();
+		}
+	});
+
+	it("rejects --limit with a non-integer (e.g. 3.7)", async () => {
+		process.chdir(tmpDir);
+		const errSpy = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const program = makeProgram();
+			await program.parseAsync(["node", "mulch", "rank", "--limit", "3.7"]);
+			expect(errSpy.mock.calls[0]?.[0]).toContain("--limit must be a positive integer");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			errSpy.mockRestore();
+		}
+	});
+
+	it("rejects --min-score with trailing garbage (e.g. 0.5xyz)", async () => {
+		process.chdir(tmpDir);
+		const errSpy = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const program = makeProgram();
+			await program.parseAsync(["node", "mulch", "rank", "--min-score", "0.5xyz"]);
+			expect(errSpy.mock.calls[0]?.[0]).toContain("--min-score must be a non-negative number");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			errSpy.mockRestore();
+		}
+	});
+
 	it("hints at `ml add` when [domain] is unknown", async () => {
 		process.chdir(tmpDir);
 		const errSpy = spyOn(console, "error").mockImplementation(() => {});

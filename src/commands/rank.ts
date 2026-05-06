@@ -19,6 +19,21 @@ function formatScore(score: number): string {
 	return Number.isInteger(score) ? String(score) : score.toFixed(1);
 }
 
+const POSITIVE_INT_RE = /^\d+$/;
+const NON_NEGATIVE_NUMBER_RE = /^\d+(\.\d+)?$/;
+
+function parseStrictPositiveInt(raw: string): number | null {
+	if (!POSITIVE_INT_RE.test(raw)) return null;
+	const n = Number(raw);
+	return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
+function parseStrictNonNegativeNumber(raw: string): number | null {
+	if (!NON_NEGATIVE_NUMBER_RE.test(raw)) return null;
+	const n = Number(raw);
+	return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export function registerRankCommand(program: Command): void {
 	program
 		.command("rank")
@@ -38,9 +53,12 @@ export function registerRankCommand(program: Command): void {
 			) => {
 				const jsonMode = program.opts().json === true;
 				try {
-					const limit = Number.parseInt(options.limit, 10);
-					if (Number.isNaN(limit) || limit < 1) {
-						const msg = "--limit must be a positive integer.";
+					// `Number.parseInt("10abc", 10)` silently strips trailing garbage and
+					// returns 10 — accept the typo as success. Use a regex + Number()
+					// pair so `--limit 10abc` / `--limit 3.7` are rejected.
+					const limit = parseStrictPositiveInt(options.limit);
+					if (limit === null) {
+						const msg = `--limit must be a positive integer (got "${options.limit}").`;
 						if (jsonMode) {
 							outputJsonError("rank", msg);
 						} else {
@@ -50,9 +68,9 @@ export function registerRankCommand(program: Command): void {
 						return;
 					}
 
-					const minScore = Number.parseFloat(options.minScore);
-					if (Number.isNaN(minScore) || minScore < 0) {
-						const msg = "--min-score must be a non-negative number.";
+					const minScore = parseStrictNonNegativeNumber(options.minScore);
+					if (minScore === null) {
+						const msg = `--min-score must be a non-negative number (got "${options.minScore}").`;
 						if (jsonMode) {
 							outputJsonError("rank", msg);
 						} else {
