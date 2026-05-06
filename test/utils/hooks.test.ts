@@ -208,8 +208,8 @@ echo '{"value":99}'`,
 
 	it("times out and blocks when a pre-* hook exceeds the configured timeout", async () => {
 		// Busy-loop in shell builtins so killing the parent shell terminates the
-		// whole hook (a `sleep` would be a forked exec that survives a SIGTERM
-		// to the shell on macOS).
+		// whole hook (kept as the original smoke case; the subprocess-orphan
+		// case below is the real regression guard).
 		const script = await writeScript(tmpDir, "slow.sh", "while :; do :; done");
 		await writeConfig(
 			{
@@ -225,6 +225,32 @@ echo '{"value":99}'`,
 		expect(res.blocked).toBe(true);
 		expect(res.blockReason).toContain("timed out");
 		expect(elapsed).toBeLessThan(3000);
+	});
+
+	it("times out cleanly even when the hook backgrounds a forked exec that holds stdout open", async () => {
+		// Regression for mulch-9c81 (PR #21 stress finding): `sleep` is a forked
+		// exec, not a shell builtin. Bun.spawn's `timeout` only signals the
+		// direct `sh` child, leaving the orphaned `sleep` to keep the inherited
+		// stdout fd open — which made `Promise.all([Response.text(), …])` hang
+		// indefinitely. Running the hook in its own process group and calling
+		// `process.kill(-pid, "SIGKILL")` on timeout reaches every descendant.
+		const script = await writeScript(tmpDir, "background-sleep.sh", "sleep 30 & wait");
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				hooks: { "pre-record": [script] },
+				hook_settings: { timeout_ms: 300 },
+			},
+			tmpDir,
+		);
+		const start = Date.now();
+		const res = await runHooks("pre-record", {}, { cwd: tmpDir, forwardStderr: false });
+		const elapsed = Date.now() - start;
+		expect(res.blocked).toBe(true);
+		expect(res.blockReason).toContain("timed out");
+		// If the orphan sleep kept stdout open, this would block until either
+		// `sleep` exits (30s) or the test runner times out.
+		expect(elapsed).toBeLessThan(2000);
 	});
 
 	it("pre-prune blocks but never mutates payload", async () => {

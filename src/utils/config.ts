@@ -69,8 +69,9 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #   # Lifecycle hook scripts. Each event maps to an ordered list of shell
 #   # commands. Mulch invokes each with the relevant payload as JSON on stdin.
 #   # Exit 0 = continue. Non-zero from a \`pre-*\` hook blocks the action; from
-#   # a \`post-*\` hook emits a warning. \`pre-record\`, \`pre-prime\`, and
-#   # \`pre-prune\` may mutate the payload by printing modified JSON on stdout.
+#   # a \`post-*\` hook emits a warning. Only \`pre-record\` and \`pre-prime\` may
+#   # mutate the payload by printing modified JSON on stdout; \`pre-prune\` is
+#   # block-or-allow only — its stdout is ignored.
 #   #
 #   # pre-record:    [./.mulch/hooks/scan-secrets.sh, ./.mulch/hooks/require-owner.sh]
 #   # post-record:   [./.mulch/hooks/post-to-slack.sh]

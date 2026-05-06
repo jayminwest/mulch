@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import {
 	DEFAULT_HOOK_TIMEOUT_MS,
 	HOOK_EVENTS,
@@ -77,37 +78,62 @@ async function runOne(
 	timeoutMs: number,
 ): Promise<RunOneResult> {
 	const start = Date.now();
-	// `timeout: <ms>` instructs Bun to SIGTERM the subprocess (and its process
-	// group) when the deadline elapses. `killSignal: "SIGKILL"` upgrades to
-	// SIGKILL after a short grace, so a `sleep` invoked through `sh -c` doesn't
-	// outlive the parent shell.
-	const proc = Bun.spawn(["sh", "-c", command], {
+	// Run the hook in its own process group (POSIX session) so a timeout can
+	// SIGKILL every descendant — not just the immediate `sh`. Bun.spawn's
+	// `timeout` option only signals the direct child; a forked exec like
+	// `sleep 30 & wait` orphans the sleep, which keeps stdout/stderr open and
+	// hangs `Promise.all([Response.text(), Response.text(), proc.exited])`
+	// indefinitely (R-02 stress finding). Node's child_process supports
+	// `detached: true` (calls setsid on POSIX, putting the child in a new pgid
+	// equal to its pid), and `process.kill(-pid, "SIGKILL")` reaches the whole
+	// group. Bun re-exports node:child_process so this works on the Bun runtime.
+	const child = spawn("sh", ["-c", command], {
 		cwd,
-		stdin: "pipe",
-		stdout: "pipe",
-		stderr: "pipe",
+		stdio: ["pipe", "pipe", "pipe"],
 		env: { ...process.env, MULCH_HOOK: "1" },
-		timeout: timeoutMs,
-		killSignal: "SIGKILL",
+		detached: true,
 	});
 
-	try {
-		proc.stdin.write(stdinJson);
-		await proc.stdin.end();
-	} catch {
-		// Script may have closed stdin early — not fatal.
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		if (typeof child.pid === "number") {
+			try {
+				// Negative pid → process group. SIGKILL is unblockable so this
+				// reaches every descendant even if the hook script ignores SIGTERM.
+				process.kill(-child.pid, "SIGKILL");
+			} catch {
+				// ESRCH if the group already died; ignore.
+			}
+		}
+	}, timeoutMs);
+
+	let stdout = "";
+	let stderr = "";
+	child.stdout?.on("data", (b: Buffer) => {
+		stdout += b.toString();
+	});
+	child.stderr?.on("data", (b: Buffer) => {
+		stderr += b.toString();
+	});
+
+	if (child.stdin) {
+		try {
+			child.stdin.write(stdinJson);
+			child.stdin.end();
+		} catch {
+			// Script may have closed stdin early — not fatal.
+		}
 	}
 
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
-
-	const timedOut = proc.signalCode === "SIGTERM" || proc.signalCode === "SIGKILL";
+	const exitCode = await new Promise<number>((resolve) => {
+		child.on("close", (code: number | null) => resolve(code ?? 0));
+		child.on("error", () => resolve(1));
+	});
+	clearTimeout(timer);
 
 	return {
-		exitCode: timedOut ? 124 : (exitCode ?? 0),
+		exitCode: timedOut ? 124 : exitCode,
 		stdout,
 		stderr,
 		durationMs: Date.now() - start,
@@ -118,9 +144,11 @@ async function runOne(
 /**
  * Run all hook scripts registered for `event` in declaration order. Each script
  * receives the current payload as JSON on stdin. For mutable events
- * (pre-record / pre-prime / pre-prune), a script may print modified JSON on
- * stdout; that JSON becomes the input to the next script and the final
- * `result.payload` returned to the caller.
+ * (`pre-record`, `pre-prime`), a script may print modified JSON on stdout; that
+ * JSON becomes the input to the next script and the final `result.payload`
+ * returned to the caller. `pre-prune` is block-or-allow only — its stdout is
+ * ignored even though it is a `pre-*` event, so a hook cannot reshape the
+ * candidate set.
  *
  * Semantics summary:
  *   - `pre-*` non-zero exit (or timeout) → blocks: subsequent scripts skipped,

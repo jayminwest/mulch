@@ -4,11 +4,11 @@ export const DEFAULT_SEARCH_BOOST_FACTOR = 0.1;
 
 export const DEFAULT_HOOK_TIMEOUT_MS = 5_000;
 
-// Lifecycle events. `pre-*` hooks block on non-zero exit and may mutate the
-// payload via stdout JSON (only events that pass payloads where mutation is
-// meaningful — pre-record, pre-prime, pre-prune). `post-*` hooks are
-// observation-only: a non-zero exit emits a warning but never fails the parent
-// command.
+// Lifecycle events. `pre-*` hooks block on non-zero exit. Only `pre-record`
+// and `pre-prime` may mutate the payload via stdout JSON; `pre-prune` is
+// block-or-allow only (its stdout is ignored, so a hook cannot reshape the
+// candidate set). `post-*` hooks are observation-only: a non-zero exit emits a
+// warning but never fails the parent command.
 export type HookEvent = "pre-record" | "post-record" | "pre-prime" | "pre-prune";
 
 export const HOOK_EVENTS: readonly HookEvent[] = [
