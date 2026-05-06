@@ -26,7 +26,7 @@ export function registerAddCommand(program: Command): void {
 
 			const config = await readConfig();
 
-			if (config.domains.includes(domain)) {
+			if (domain in config.domains) {
 				if (jsonMode) {
 					outputJsonError("add", `Domain "${domain}" already exists.`);
 				} else {
@@ -39,7 +39,7 @@ export function registerAddCommand(program: Command): void {
 			const expertisePath = getExpertisePath(domain);
 			await createExpertiseFile(expertisePath);
 
-			config.domains.push(domain);
+			config.domains[domain] = {};
 			await writeConfig(config);
 
 			if (jsonMode) {

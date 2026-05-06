@@ -37,7 +37,7 @@ describe("init command", () => {
 
 		const config = await readConfig(tmpDir);
 		expect(config.version).toBe("1");
-		expect(config.domains).toEqual([]);
+		expect(config.domains).toEqual({});
 		expect(config.governance.max_entries).toBe(100);
 		expect(config.governance.warn_entries).toBe(150);
 		expect(config.governance.hard_limit).toBe(200);
@@ -59,7 +59,7 @@ describe("init command", () => {
 
 		// Customize the config
 		const config = await readConfig(tmpDir);
-		config.domains = ["custom-domain"];
+		config.domains = { "custom-domain": {} };
 		config.governance.max_entries = 50;
 		await writeConfig(config, tmpDir);
 
@@ -68,7 +68,7 @@ describe("init command", () => {
 
 		// Config should retain customizations
 		const after = await readConfig(tmpDir);
-		expect(after.domains).toEqual(["custom-domain"]);
+		expect(after.domains).toEqual({ "custom-domain": {} });
 		expect(after.governance.max_entries).toBe(50);
 	});
 
@@ -141,7 +141,7 @@ describe("init command", () => {
 
 		const config = await readConfig(tmpDir);
 		expect(config.version).toBe("1");
-		expect(config.domains).toEqual([]);
+		expect(config.domains).toEqual({});
 		expect(config.governance.max_entries).toBe(100);
 		expect(config.classification_defaults.shelf_life.tactical).toBe(14);
 		expect(config.prime).toBeUndefined();

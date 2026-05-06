@@ -19,7 +19,7 @@ describe("record command", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-record-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 	});
 
 	afterEach(async () => {
@@ -858,7 +858,7 @@ describe("processStdinRecords", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-stdin-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 	});
 
 	afterEach(async () => {
@@ -1125,7 +1125,7 @@ describe("processStdinRecords", () => {
 		expect(records).toHaveLength(1);
 
 		const config = await import("../../src/utils/config.ts").then((m) => m.readConfig(tmpDir));
-		expect(config.domains).toContain("newdomain");
+		expect(config.domains).toHaveProperty("newdomain");
 	});
 
 	it("throws error for invalid JSON", async () => {
@@ -1348,7 +1348,7 @@ describe("batch mode (--batch)", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-batch-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 	});
 
 	afterEach(async () => {
@@ -1617,7 +1617,7 @@ describe("validation hints", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-record-hints-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 	});
@@ -1691,7 +1691,7 @@ describe("auto-create domain in CLI mode", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-record-autocreate-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: [] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: {} }, tmpDir);
 	});
 
 	afterEach(async () => {
@@ -1734,11 +1734,11 @@ describe("auto-create domain in CLI mode", () => {
 
 		const { readConfig } = await import("../../src/utils/config.ts");
 		const config = await readConfig(tmpDir);
-		expect(config.domains).toContain("autodomain");
+		expect(config.domains).toHaveProperty("autodomain");
 	});
 
 	it("recording to existing domain still works", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["existing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { existing: {} } }, tmpDir);
 		const filePath = getExpertisePath("existing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -1877,7 +1877,7 @@ describe("evidence schema: multi-tracker fields", () => {
 		const tmpDir2 = await mkdtemp(join(tmpdir(), "mulch-ev-test-"));
 		try {
 			await initMulchDir(tmpDir2);
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir2);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir2);
 			const filePath = getExpertisePath("testing", tmpDir2);
 			await createExpertiseFile(filePath);
 
@@ -1908,7 +1908,10 @@ describe("disabled-type writes (Phase 3)", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-disabled-write-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"], disabled_types: ["failure"] }, tmpDir);
+		await writeConfig(
+			{ ...DEFAULT_CONFIG, domains: { cli: {} }, disabled_types: ["failure"] },
+			tmpDir,
+		);
 		await initRegistryFromConfig(tmpDir);
 	});
 

@@ -176,7 +176,7 @@ export async function processStdinRecords(
 }> {
 	const config = await readConfig(cwd);
 
-	if (!config.domains.includes(domain)) {
+	if (!(domain in config.domains)) {
 		await addDomain(domain, cwd);
 	}
 
@@ -658,7 +658,7 @@ Batch recording examples:
 			}
 			const config = await readConfig();
 
-			if (!config.domains.includes(domain)) {
+			if (!(domain in config.domains)) {
 				await addDomain(domain);
 				if (!isQuiet()) {
 					console.log(`${brand("✓")} ${brand(`Auto-created domain "${domain}"`)}`);

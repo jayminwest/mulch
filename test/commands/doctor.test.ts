@@ -27,7 +27,7 @@ function daysAgo(days: number): string {
 beforeEach(async () => {
 	tmpDir = await mkdtemp(join(tmpdir(), "mulch-doctor-test-"));
 	await initMulchDir(tmpDir);
-	await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "api"] }, tmpDir);
+	await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, api: {} } }, tmpDir);
 });
 
 afterEach(async () => {
@@ -106,10 +106,10 @@ describe("doctor health checks", () => {
 		const { readdir } = await import("node:fs/promises");
 		const files = await readdir(expertiseDir);
 		const jsonlFiles = files.filter((f) => f.endsWith(".jsonl"));
-		const config = { ...DEFAULT_CONFIG, domains: ["testing", "api"] };
+		const config = { ...DEFAULT_CONFIG, domains: { testing: {}, api: {} } };
 		const orphans = jsonlFiles
 			.map((f) => f.replace(".jsonl", ""))
-			.filter((d) => !config.domains.includes(d));
+			.filter((d) => !(d in config.domains));
 		expect(orphans).toContain("orphan");
 	});
 
@@ -198,7 +198,7 @@ describe("doctor health checks", () => {
 	it("detects governance threshold violations", async () => {
 		const config = {
 			...DEFAULT_CONFIG,
-			domains: ["testing"],
+			domains: { testing: {} },
 			governance: {
 				...DEFAULT_CONFIG.governance,
 				warn_entries: 5,
@@ -349,7 +349,7 @@ describe("doctor — Phase 3 type registry + unknown-types checks", () => {
 		await writeConfig(
 			{
 				...DEFAULT_CONFIG,
-				domains: ["cli"],
+				domains: { cli: {} },
 				custom_types: {
 					hypothesis: {
 						required: ["statement"],

@@ -25,7 +25,7 @@ function daysAgo(days: number): string {
 beforeEach(async () => {
 	tmpDir = await mkdtemp(join(tmpdir(), "mulch-ready-test-"));
 	await initMulchDir(tmpDir);
-	await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "api"] }, tmpDir);
+	await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, api: {} } }, tmpDir);
 });
 
 afterEach(async () => {

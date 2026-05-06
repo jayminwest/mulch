@@ -24,7 +24,7 @@ describe("prune command", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-prune-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 	});
 
 	afterEach(async () => {

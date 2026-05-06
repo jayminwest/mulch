@@ -48,7 +48,7 @@ describe("custom_types end-to-end", () => {
 		await writeConfig(
 			{
 				...DEFAULT_CONFIG,
-				domains: ["research"],
+				domains: { research: {} },
 				custom_types: { hypothesis: HYPOTHESIS_CFG, runbook: RUNBOOK_CFG },
 			},
 			tmpDir,
@@ -200,7 +200,7 @@ describe("custom_types end-to-end", () => {
 		await writeConfig(
 			{
 				...DEFAULT_CONFIG,
-				domains: ["research"],
+				domains: { research: {} },
 				custom_types: {
 					adr: {
 						required: ["title", "decision"],
@@ -237,7 +237,7 @@ describe("custom_types end-to-end", () => {
 		await writeConfig(
 			{
 				...DEFAULT_CONFIG,
-				domains: ["research"],
+				domains: { research: {} },
 				custom_types: {
 					pattern: {
 						required: ["x"],

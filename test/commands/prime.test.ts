@@ -57,7 +57,7 @@ describe("prime command", () => {
 	});
 
 	it("generates prime output with a single domain", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -80,7 +80,7 @@ describe("prime command", () => {
 	});
 
 	it("generates prime output with multiple domains", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 		const testingPath = getExpertisePath("testing", tmpDir);
 		const archPath = getExpertisePath("architecture", tmpDir);
@@ -103,7 +103,7 @@ describe("prime command", () => {
 
 		const config = await readConfig(tmpDir);
 		const sections: string[] = [];
-		for (const domain of config.domains) {
+		for (const domain of Object.keys(config.domains)) {
 			const filePath = getExpertisePath(domain, tmpDir);
 			const records = await readExpertiseFile(filePath);
 			const lastUpdated = await getFileModTime(filePath);
@@ -136,7 +136,7 @@ describe("prime command", () => {
 	});
 
 	it("--full includes classification and evidence in output", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -160,7 +160,7 @@ describe("prime command", () => {
 	});
 
 	it("--full=false omits classification and evidence", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -181,7 +181,7 @@ describe("prime command", () => {
 	});
 
 	it("--json outputs valid JSON with domain records", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -204,7 +204,7 @@ describe("prime command", () => {
 	});
 
 	it("--format xml outputs XML with domain tags", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -236,7 +236,7 @@ describe("prime command", () => {
 	});
 
 	it("--format xml escapes special characters", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -255,7 +255,7 @@ describe("prime command", () => {
 	});
 
 	it("--format plain outputs plain text", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -291,7 +291,7 @@ describe("prime command", () => {
 
 	describe("domain argument scoping", () => {
 		it("outputs only the specified domain when domain arg is given", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
@@ -315,8 +315,8 @@ describe("prime command", () => {
 			// Simulate scoping to just "testing"
 			const config = await readConfig(tmpDir);
 			const targetDomains = ["testing"];
-			expect(config.domains).toContain("testing");
-			expect(config.domains).toContain("architecture");
+			expect(config.domains).toHaveProperty("testing");
+			expect(config.domains).toHaveProperty("architecture");
 
 			const sections: string[] = [];
 			for (const domain of targetDomains) {
@@ -334,15 +334,15 @@ describe("prime command", () => {
 		});
 
 		it("validates domain exists in config", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const config = await readConfig(tmpDir);
 			const domainArg = "nonexistent";
 
-			expect(config.domains.includes(domainArg)).toBe(false);
+			expect(domainArg in config.domains).toBe(false);
 		});
 
 		it("domain scoping works with --json format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
@@ -383,7 +383,7 @@ describe("prime command", () => {
 		});
 
 		it("domain scoping works with --format xml", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
@@ -421,7 +421,7 @@ describe("prime command", () => {
 	});
 
 	it("formats domain with all record types", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["fulltest"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { fulltest: {} } }, tmpDir);
 		const filePath = getExpertisePath("fulltest", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -469,7 +469,7 @@ describe("prime command", () => {
 
 	describe("reference and guide record formatting", () => {
 		it("formats reference records under References heading", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -492,7 +492,7 @@ describe("prime command", () => {
 		});
 
 		it("formats guide records under Guides heading", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -513,7 +513,7 @@ describe("prime command", () => {
 		});
 
 		it("XML format handles reference and guide records", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -547,7 +547,7 @@ describe("prime command", () => {
 		});
 
 		it("plain text format handles reference and guide records", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -578,7 +578,7 @@ describe("prime command", () => {
 		});
 
 		it("JSON output includes reference and guide records", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -617,15 +617,18 @@ describe("prime command", () => {
 
 	describe("domain exclusion", () => {
 		it("validates excluded domain exists in config", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const config = await readConfig(tmpDir);
 			const excludedDomain = "nonexistent";
 
-			expect(config.domains.includes(excludedDomain)).toBe(false);
+			expect(excludedDomain in config.domains).toBe(false);
 		});
 
 		it("excludes specified domain from output", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture", "api"] }, tmpDir);
+			await writeConfig(
+				{ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {}, api: {} } },
+				tmpDir,
+			);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
@@ -658,7 +661,7 @@ describe("prime command", () => {
 			// Exclude architecture domain
 			const config = await readConfig(tmpDir);
 			const excluded = ["architecture"];
-			const targetDomains = config.domains.filter((d) => !excluded.includes(d));
+			const targetDomains = Object.keys(config.domains).filter((d) => !excluded.includes(d));
 
 			const sections: string[] = [];
 			for (const domain of targetDomains) {
@@ -681,7 +684,7 @@ describe("prime command", () => {
 			await writeConfig(
 				{
 					...DEFAULT_CONFIG,
-					domains: ["testing", "architecture", "api", "database"],
+					domains: { testing: {}, architecture: {}, api: {}, database: {} },
 				},
 				tmpDir,
 			);
@@ -725,7 +728,7 @@ describe("prime command", () => {
 			// Exclude architecture and api domains
 			const config = await readConfig(tmpDir);
 			const excluded = ["architecture", "api"];
-			const targetDomains = config.domains.filter((d) => !excluded.includes(d));
+			const targetDomains = Object.keys(config.domains).filter((d) => !excluded.includes(d));
 
 			const sections: string[] = [];
 			for (const domain of targetDomains) {
@@ -750,7 +753,7 @@ describe("prime command", () => {
 			await writeConfig(
 				{
 					...DEFAULT_CONFIG,
-					domains: ["testing", "architecture", "api", "database"],
+					domains: { testing: {}, architecture: {}, api: {}, database: {} },
 				},
 				tmpDir,
 			);
@@ -805,7 +808,7 @@ describe("prime command", () => {
 		});
 
 		it("exclusion works with --format xml", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
@@ -828,7 +831,7 @@ describe("prime command", () => {
 
 			const config = await readConfig(tmpDir);
 			const excluded = ["architecture"];
-			const targetDomains = config.domains.filter((d) => !excluded.includes(d));
+			const targetDomains = Object.keys(config.domains).filter((d) => !excluded.includes(d));
 
 			const sections: string[] = [];
 			for (const domain of targetDomains) {
@@ -844,7 +847,7 @@ describe("prime command", () => {
 		});
 
 		it("exclusion works with --json format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
@@ -867,7 +870,7 @@ describe("prime command", () => {
 
 			const config = await readConfig(tmpDir);
 			const excluded = ["architecture"];
-			const targetDomains = config.domains.filter((d) => !excluded.includes(d));
+			const targetDomains = Object.keys(config.domains).filter((d) => !excluded.includes(d));
 
 			const domains: {
 				domain: string;
@@ -889,7 +892,10 @@ describe("prime command", () => {
 
 	describe("multi-domain prime", () => {
 		it("multiple domains produce combined output", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture", "api"] }, tmpDir);
+			await writeConfig(
+				{ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {}, api: {} } },
+				tmpDir,
+			);
 
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
@@ -947,12 +953,12 @@ describe("prime command", () => {
 		});
 
 		it("empty domain selection falls back to all domains", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 			const config = await readConfig(tmpDir);
 			const requested: string[] = [];
 			const unique = [...new Set(requested)];
-			const targetDomains = unique.length > 0 ? unique : config.domains;
+			const targetDomains = unique.length > 0 ? unique : Object.keys(config.domains);
 
 			expect(targetDomains).toEqual(["testing", "architecture"]);
 		});
@@ -960,7 +966,7 @@ describe("prime command", () => {
 
 	describe("compact mode", () => {
 		it("outputs one-liner per record with type tags", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["database"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { database: {} } }, tmpDir);
 			const filePath = getExpertisePath("database", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -1028,7 +1034,7 @@ describe("prime command", () => {
 		});
 
 		it("reference without files falls back to description", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -1071,7 +1077,7 @@ describe("prime command", () => {
 		});
 
 		it("compact with multiple domains", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["db", "api"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { db: {}, api: {} } }, tmpDir);
 			const dbPath = getExpertisePath("db", tmpDir);
 			const apiPath = getExpertisePath("api", tmpDir);
 			await createExpertiseFile(dbPath);
@@ -1111,7 +1117,7 @@ describe("prime command", () => {
 
 	describe("context filtering", () => {
 		it("--files option filters records by specified files", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 			const filePath = getExpertisePath("cli", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -1350,7 +1356,7 @@ describe("prime command", () => {
 		});
 
 		it("filtered records integrate with formatting pipeline", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 			const filePath = getExpertisePath("cli", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -1389,7 +1395,7 @@ describe("prime command", () => {
 		});
 
 		it("context filtering skips empty domains", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli", "database"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {}, database: {} } }, tmpDir);
 			const cliPath = getExpertisePath("cli", tmpDir);
 			const dbPath = getExpertisePath("database", tmpDir);
 			await createExpertiseFile(cliPath);
@@ -1432,7 +1438,7 @@ describe("prime command", () => {
 
 	describe("record links in prime output", () => {
 		it("shows relates_to in markdown format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1451,7 +1457,7 @@ describe("prime command", () => {
 		});
 
 		it("shows supersedes in markdown format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1469,7 +1475,7 @@ describe("prime command", () => {
 		});
 
 		it("shows both links together", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1490,7 +1496,7 @@ describe("prime command", () => {
 		});
 
 		it("shows links in compact format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1509,7 +1515,7 @@ describe("prime command", () => {
 		});
 
 		it("shows links in XML format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1530,7 +1536,7 @@ describe("prime command", () => {
 		});
 
 		it("shows links in plain text format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1548,7 +1554,7 @@ describe("prime command", () => {
 		});
 
 		it("omits link brackets when no links present", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1742,7 +1748,7 @@ describe("prime command", () => {
 				summary: "{description}",
 			};
 			await writeConfig(
-				{ ...DEFAULT_CONFIG, domains: ["backend"], custom_types: { adr: ADR_CFG } },
+				{ ...DEFAULT_CONFIG, domains: { backend: {} }, custom_types: { adr: ADR_CFG } },
 				tmpDir,
 			);
 			await initRegistryFromConfig(tmpDir);
@@ -1989,7 +1995,7 @@ describe("prime command", () => {
 		});
 
 		it("budget integrates with compact formatting pipeline", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2029,7 +2035,7 @@ describe("prime command", () => {
 		});
 
 		it("budget summary line appears in final output when records are dropped", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2058,7 +2064,7 @@ describe("prime command", () => {
 		});
 
 		it("session-end reminder is always shown regardless of budget", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2165,7 +2171,7 @@ describe("prime command", () => {
 		}
 
 		it("shows hint when domain arg not found", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			process.chdir(tmpDir);
 			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
 			try {
@@ -2182,7 +2188,7 @@ describe("prime command", () => {
 		});
 
 		it("shows hint when --exclude-domain not found", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			process.chdir(tmpDir);
 			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
 			try {
@@ -2229,7 +2235,7 @@ describe("prime command", () => {
 		});
 
 		it("compact lines show classification badge for foundational records", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2248,7 +2254,7 @@ describe("prime command", () => {
 		});
 
 		it("compact lines show classification badge for tactical records", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2268,7 +2274,7 @@ describe("prime command", () => {
 		});
 
 		it("compact lines show confirmation score when outcomes are present", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2292,7 +2298,7 @@ describe("prime command", () => {
 		});
 
 		it("compact lines omit score marker when no outcomes", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2311,7 +2317,7 @@ describe("prime command", () => {
 		});
 
 		it("compact lines show partial score as decimal", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -2355,7 +2361,7 @@ describe("prime command", () => {
 		}
 
 		async function seedTwoDomains(): Promise<void> {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli", "testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {}, testing: {} } }, tmpDir);
 			const cliPath = getExpertisePath("cli", tmpDir);
 			const testingPath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(cliPath);
@@ -2581,7 +2587,7 @@ describe("prime command", () => {
 		}
 
 		async function seed(): Promise<void> {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 			const cliPath = getExpertisePath("cli", tmpDir);
 			await createExpertiseFile(cliPath);
 			await appendRecord(cliPath, {

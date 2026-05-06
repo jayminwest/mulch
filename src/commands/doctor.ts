@@ -67,7 +67,7 @@ async function checkConfig(cwd?: string): Promise<DoctorCheck> {
 
 async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
 	const details: string[] = [];
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		let content: string;
 		try {
@@ -109,7 +109,7 @@ async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise
 	const validate = registry.validator;
 	const details: string[] = [];
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		let content: string;
 		try {
@@ -171,7 +171,7 @@ async function checkStaleRecords(config: MulchConfig, cwd?: string): Promise<Doc
 	const details: string[] = [];
 	let staleCount = 0;
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		for (const record of records) {
@@ -208,7 +208,7 @@ async function checkTypeRegistry(config: MulchConfig, cwd?: string): Promise<Doc
 	// Bucket records by type across all domains.
 	const counts: Record<string, number> = {};
 	for (const def of registry.enabled()) counts[def.name] = 0;
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		// allowUnknownTypes here so this informational check never throws on
 		// pre-existing unknown types (checkUnknownTypes flags them separately).
@@ -245,7 +245,7 @@ async function checkUnknownTypes(config: MulchConfig, cwd?: string): Promise<Doc
 	const registry = getRegistry();
 	const details: string[] = [];
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		let content: string;
 		try {
@@ -302,7 +302,7 @@ async function checkOrphanedDomains(config: MulchConfig, cwd?: string): Promise<
 		for (const file of files) {
 			if (file.endsWith(".jsonl")) {
 				const domain = file.replace(".jsonl", "");
-				if (!config.domains.includes(domain)) {
+				if (!(domain in config.domains)) {
 					details.push(`File "${file}" exists but domain "${domain}" is not in config`);
 				}
 			}
@@ -312,7 +312,7 @@ async function checkOrphanedDomains(config: MulchConfig, cwd?: string): Promise<
 	}
 
 	// Check for config domains without JSONL files
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		if (!existsSync(filePath)) {
 			details.push(`Domain "${domain}" in config but no JSONL file exists`);
@@ -341,7 +341,7 @@ async function checkDuplicates(config: MulchConfig, cwd?: string): Promise<Docto
 	const details: string[] = [];
 	let dupCount = 0;
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		for (let i = 1; i < records.length; i++) {
@@ -377,7 +377,7 @@ async function checkDuplicates(config: MulchConfig, cwd?: string): Promise<Docto
 async function checkLegacyOutcome(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
 	const details: string[] = [];
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		let content: string;
 		try {
@@ -430,7 +430,7 @@ async function checkFileAnchors(config: MulchConfig, cwd?: string): Promise<Doct
 	const projectRoot = cwd ?? process.cwd();
 	const details: string[] = [];
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		for (const record of records) {
@@ -470,7 +470,7 @@ async function checkGovernance(config: MulchConfig, cwd?: string): Promise<Docto
 	const details: string[] = [];
 	let worstStatus: "pass" | "warn" | "fail" = "pass";
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		const count = records.length;
@@ -558,7 +558,7 @@ async function applyFixes(
 		switch (check.name) {
 			case "jsonl-integrity": {
 				// Remove invalid JSON lines
-				for (const domain of config.domains) {
+				for (const domain of Object.keys(config.domains)) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
 						let content: string;
@@ -596,7 +596,7 @@ async function applyFixes(
 			case "schema-validation": {
 				const registry = getRegistry();
 				const validate = registry.validator;
-				for (const domain of config.domains) {
+				for (const domain of Object.keys(config.domains)) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
 						const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
@@ -616,7 +616,7 @@ async function applyFixes(
 			case "stale-records": {
 				const now = new Date();
 				const shelfLife = config.classification_defaults.shelf_life;
-				for (const domain of config.domains) {
+				for (const domain of Object.keys(config.domains)) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
 						const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
@@ -632,7 +632,7 @@ async function applyFixes(
 			}
 
 			case "legacy-outcome": {
-				for (const domain of config.domains) {
+				for (const domain of Object.keys(config.domains)) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
 						let content: string;
@@ -696,7 +696,7 @@ async function applyFixes(
 
 			case "file-anchors": {
 				const projectRoot = cwd ?? process.cwd();
-				for (const domain of config.domains) {
+				for (const domain of Object.keys(config.domains)) {
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
 						const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
@@ -734,8 +734,8 @@ async function applyFixes(
 					for (const file of files) {
 						if (file.endsWith(".jsonl")) {
 							const domain = file.replace(".jsonl", "");
-							if (!config.domains.includes(domain)) {
-								config.domains.push(domain);
+							if (!(domain in config.domains)) {
+								config.domains[domain] = {};
 								fixed.push(`Added orphaned domain "${domain}" to config`);
 							}
 						}
@@ -744,7 +744,7 @@ async function applyFixes(
 					// expertise dir doesn't exist
 				}
 				// Create missing JSONL files
-				for (const domain of config.domains) {
+				for (const domain of Object.keys(config.domains)) {
 					const filePath = getExpertisePath(domain, cwd);
 					if (!existsSync(filePath)) {
 						await createExpertiseFile(filePath);

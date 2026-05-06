@@ -241,7 +241,7 @@ describe("validate CLI — unknown-type policy (Phase 3)", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-validate-unknown-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 
 		// Plant one good record and one with an unregistered type.
 		const filePath = getExpertisePath("cli", tmpDir);

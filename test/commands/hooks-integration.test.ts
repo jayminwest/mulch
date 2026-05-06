@@ -24,7 +24,10 @@ async function writeHookScript(dir: string, name: string, body: string): Promise
 }
 
 async function configureWith(cwd: string, hooks: MulchConfig["hooks"]): Promise<void> {
-	await writeMulchConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"], hooks }, cwd);
+	await writeMulchConfig(
+		{ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} }, hooks },
+		cwd,
+	);
 	await initRegistryFromConfig(cwd);
 }
 
@@ -231,7 +234,7 @@ console.log(JSON.stringify(j));
 "`,
 		);
 		await writeMulchConfig(
-			{ ...DEFAULT_CONFIG, domains: ["testing"], hooks: { "pre-prime": [filter] } },
+			{ ...DEFAULT_CONFIG, domains: { testing: {} }, hooks: { "pre-prime": [filter] } },
 			tmpDir,
 		);
 
@@ -268,7 +271,7 @@ console.log(JSON.stringify(j));
 			"echo 'team boundary violation' >&2; exit 2",
 		);
 		await writeMulchConfig(
-			{ ...DEFAULT_CONFIG, domains: ["testing"], hooks: { "pre-prime": [block] } },
+			{ ...DEFAULT_CONFIG, domains: { testing: {} }, hooks: { "pre-prime": [block] } },
 			tmpDir,
 		);
 
@@ -316,7 +319,7 @@ describe("prune + hooks (CLI)", () => {
 			"echo 'human review required' >&2; exit 1",
 		);
 		await writeMulchConfig(
-			{ ...DEFAULT_CONFIG, domains: ["testing"], hooks: { "pre-prune": [block] } },
+			{ ...DEFAULT_CONFIG, domains: { testing: {} }, hooks: { "pre-prune": [block] } },
 			tmpDir,
 		);
 
@@ -346,7 +349,7 @@ describe("prune + hooks (CLI)", () => {
 
 		const allow = await writeHookScript(tmpDir, "allow.sh", "cat > /dev/null; exit 0");
 		await writeMulchConfig(
-			{ ...DEFAULT_CONFIG, domains: ["testing"], hooks: { "pre-prune": [allow] } },
+			{ ...DEFAULT_CONFIG, domains: { testing: {} }, hooks: { "pre-prune": [allow] } },
 			tmpDir,
 		);
 
@@ -379,7 +382,7 @@ describe("prune + hooks (CLI)", () => {
 			`cat > /dev/null; touch '${marker}'; exit 0`,
 		);
 		await writeMulchConfig(
-			{ ...DEFAULT_CONFIG, domains: ["testing"], hooks: { "pre-prune": [hook] } },
+			{ ...DEFAULT_CONFIG, domains: { testing: {} }, hooks: { "pre-prune": [hook] } },
 			tmpDir,
 		);
 

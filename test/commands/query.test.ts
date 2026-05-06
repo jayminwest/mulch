@@ -34,7 +34,7 @@ describe("query command", () => {
 	});
 
 	it("reads records from a single domain", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -53,7 +53,7 @@ describe("query command", () => {
 	});
 
 	it("filters records by type", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -86,7 +86,7 @@ describe("query command", () => {
 	});
 
 	it("returns empty array for domain with no records", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["empty-domain"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { "empty-domain": {} } }, tmpDir);
 		const filePath = getExpertisePath("empty-domain", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -95,7 +95,7 @@ describe("query command", () => {
 	});
 
 	it("queries multiple domains", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 		const testingPath = getExpertisePath("testing", tmpDir);
 		const archPath = getExpertisePath("architecture", tmpDir);
@@ -130,7 +130,7 @@ describe("query command", () => {
 
 	it("filterByType returns empty when no records match", async () => {
 		const filePath = getExpertisePath("testing", tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		await createExpertiseFile(filePath);
 
 		await appendRecord(filePath, {
@@ -147,7 +147,7 @@ describe("query command", () => {
 
 	describe("classification filtering", () => {
 		it("filters by foundational classification", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -188,7 +188,7 @@ describe("query command", () => {
 		});
 
 		it("returns empty when no records match classification", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -205,7 +205,7 @@ describe("query command", () => {
 		});
 
 		it("combines classification filter with type filter", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -257,7 +257,7 @@ describe("query command", () => {
 		}
 
 		it("returns JSON with success and domains array for a valid domain", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -290,7 +290,7 @@ describe("query command", () => {
 		});
 
 		it("returns JSON for --all with multiple domains", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
 			await createExpertiseFile(testingPath);
@@ -333,7 +333,7 @@ describe("query command", () => {
 		});
 
 		it("returns JSON with empty domains array when --all and no domains configured", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: [] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: {} }, tmpDir);
 
 			process.chdir(tmpDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
@@ -356,7 +356,7 @@ describe("query command", () => {
 		});
 
 		it("returns JSON error for unknown domain", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 
 			process.chdir(tmpDir);
 			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -379,7 +379,7 @@ describe("query command", () => {
 		});
 
 		it("shows hint when domain not found (text mode)", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 
 			process.chdir(tmpDir);
 			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -397,7 +397,7 @@ describe("query command", () => {
 		});
 
 		it("returns JSON error when no domain and no --all flag", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 
 			process.chdir(tmpDir);
 			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -444,7 +444,7 @@ describe("query command", () => {
 		});
 
 		it("filters records by type in JSON mode", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -489,7 +489,7 @@ describe("query command", () => {
 		});
 
 		it("filters records by classification in JSON mode", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -536,7 +536,7 @@ describe("query command", () => {
 		});
 
 		it("filters records by file path in JSON mode", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -587,7 +587,7 @@ describe("query command", () => {
 		});
 
 		it("returns empty records array for domain with no records in JSON mode", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -612,7 +612,7 @@ describe("query command", () => {
 
 	describe("file filtering", () => {
 		it("filters pattern records by file path", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -640,7 +640,7 @@ describe("query command", () => {
 		});
 
 		it("filters reference records by file path", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -660,7 +660,7 @@ describe("query command", () => {
 		});
 
 		it("records without files field are excluded", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -684,7 +684,7 @@ describe("query command", () => {
 		});
 
 		it("file filter across domains isolates correctly", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 			const testingPath = getExpertisePath("testing", tmpDir);
 			const archPath = getExpertisePath("architecture", tmpDir);
 			await createExpertiseFile(testingPath);
@@ -740,7 +740,7 @@ describe("query command", () => {
 		}
 
 		it("filters records with outcomes containing success", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -796,7 +796,7 @@ describe("query command", () => {
 		});
 
 		it("filters records with outcomes containing failure", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -844,7 +844,7 @@ describe("query command", () => {
 		});
 
 		it("excludes records without outcomes when filtering by outcome status", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -882,7 +882,7 @@ describe("query command", () => {
 		});
 
 		it("outcome-status combined with type filter narrows results", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -942,7 +942,7 @@ describe("query command", () => {
 		}
 
 		it("sortByConfirmationScore places high-score records first", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -973,7 +973,7 @@ describe("query command", () => {
 		});
 
 		it("records without outcomes sort to the end", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -1002,7 +1002,7 @@ describe("query command", () => {
 		});
 
 		it("sort combined with type filter works correctly", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -1042,7 +1042,7 @@ describe("query command", () => {
 		});
 
 		it("does not mutate original record array order", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 
@@ -1096,7 +1096,7 @@ describe("query command", () => {
 		}
 
 		it("--format compact outputs compact format (contains [convention] marker)", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1122,7 +1122,7 @@ describe("query command", () => {
 		});
 
 		it("--format ids outputs one ID per line", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1158,7 +1158,7 @@ describe("query command", () => {
 		});
 
 		it("--format ids skips records without IDs", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1192,7 +1192,7 @@ describe("query command", () => {
 		});
 
 		it("default (no --format) uses markdown format with ## heading", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1217,7 +1217,7 @@ describe("query command", () => {
 		});
 
 		it("--format xml outputs XML with domain tag", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1242,7 +1242,7 @@ describe("query command", () => {
 		});
 
 		it("--format plain outputs plain-text format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1269,7 +1269,7 @@ describe("query command", () => {
 		});
 
 		it("global --format flag (on program) is honored when per-command flag absent", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {
@@ -1299,7 +1299,7 @@ describe("query command", () => {
 		});
 
 		it("per-command --format takes precedence over global --format", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
 			await appendRecord(filePath, {

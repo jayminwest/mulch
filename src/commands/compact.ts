@@ -171,10 +171,10 @@ async function handleAnalyze(jsonMode: boolean, domain?: string): Promise<void> 
 	const allCandidates: CompactCandidate[] = [];
 
 	// Filter to specific domain if provided, otherwise check all domains
-	const domainsToCheck = domain ? [domain] : config.domains;
+	const domainsToCheck = domain ? [domain] : Object.keys(config.domains);
 
 	// Validate domain if specified
-	if (domain && !config.domains.includes(domain)) {
+	if (domain && !(domain in config.domains)) {
 		const msg = `Domain "${domain}" not found in config.`;
 		if (jsonMode) {
 			outputJsonError("compact", msg);
@@ -262,10 +262,10 @@ async function handleAuto(
 	const maxRecords = Number.parseInt(options.maxRecords as string, 10) || 50;
 
 	// Filter to specific domain if provided, otherwise check all domains
-	const domainsToCheck = domain ? [domain] : config.domains;
+	const domainsToCheck = domain ? [domain] : Object.keys(config.domains);
 
 	// Validate domain if specified
-	if (domain && !config.domains.includes(domain)) {
+	if (domain && !(domain in config.domains)) {
 		const msg = `Domain "${domain}" not found in config.`;
 		if (jsonMode) {
 			outputJsonError("compact", msg);
@@ -618,7 +618,7 @@ async function handleApply(
 ): Promise<void> {
 	const config = await readConfig();
 
-	if (!config.domains.includes(domain)) {
+	if (!(domain in config.domains)) {
 		const msg = `Domain "${domain}" not found in config.`;
 		if (jsonMode) {
 			outputJsonError("compact", msg);

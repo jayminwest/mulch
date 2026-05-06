@@ -125,15 +125,15 @@ export function registerPrimeCommand(program: Command): void {
 				const useManifest = effectiveMode === "manifest" && !isScoped;
 
 				for (const d of unique) {
-					if (!config.domains.includes(d)) {
+					if (!(d in config.domains)) {
 						if (jsonMode) {
 							outputJsonError(
 								"prime",
-								`Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 						} else {
 							console.error(
-								`Error: Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Error: Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 							console.error(
 								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
@@ -146,15 +146,15 @@ export function registerPrimeCommand(program: Command): void {
 
 				const excluded = options.excludeDomain ?? [];
 				for (const d of excluded) {
-					if (!config.domains.includes(d)) {
+					if (!(d in config.domains)) {
 						if (jsonMode) {
 							outputJsonError(
 								"prime",
-								`Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 						} else {
 							console.error(
-								`Error: Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Error: Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 							console.error(
 								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
@@ -165,7 +165,7 @@ export function registerPrimeCommand(program: Command): void {
 					}
 				}
 
-				let targetDomains = unique.length > 0 ? unique : config.domains;
+				let targetDomains = unique.length > 0 ? unique : Object.keys(config.domains);
 
 				targetDomains = targetDomains.filter((d) => !excluded.includes(d));
 

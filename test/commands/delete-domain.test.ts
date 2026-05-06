@@ -110,12 +110,12 @@ describe("delete-domain command (removeDomain)", () => {
 	it("removes an existing domain from config", async () => {
 		await addDomain("testing", tmpDir);
 		const before = await readConfig(tmpDir);
-		expect(before.domains).toContain("testing");
+		expect(before.domains).toHaveProperty("testing");
 
 		await removeDomain("testing", tmpDir);
 
 		const after = await readConfig(tmpDir);
-		expect(after.domains).not.toContain("testing");
+		expect(after.domains).not.toHaveProperty("testing");
 	});
 
 	it("throws when domain does not exist", async () => {
@@ -141,7 +141,7 @@ describe("delete-domain command (removeDomain)", () => {
 
 		await expect(removeDomain("testing", tmpDir)).resolves.toBeUndefined();
 		const after = await readConfig(tmpDir);
-		expect(after.domains).not.toContain("testing");
+		expect(after.domains).not.toHaveProperty("testing");
 	});
 
 	it("removes only the specified domain, leaves others intact", async () => {
@@ -152,9 +152,9 @@ describe("delete-domain command (removeDomain)", () => {
 		await removeDomain("beta", tmpDir);
 
 		const config = await readConfig(tmpDir);
-		expect(config.domains).not.toContain("beta");
-		expect(config.domains).toContain("alpha");
-		expect(config.domains).toContain("gamma");
+		expect(config.domains).not.toHaveProperty("beta");
+		expect(config.domains).toHaveProperty("alpha");
+		expect(config.domains).toHaveProperty("gamma");
 	});
 
 	it("config governance settings are preserved after removal", async () => {
@@ -174,7 +174,7 @@ describe("delete-domain CLI", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-delete-domain-cli-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 	});
@@ -191,7 +191,7 @@ describe("delete-domain CLI", () => {
 
 		expect(exitCode).toBe(0);
 		const config = await readConfig(tmpDir);
-		expect(config.domains).not.toContain("testing");
+		expect(config.domains).not.toHaveProperty("testing");
 		expect(existsSync(filePath)).toBe(false);
 	});
 
@@ -210,7 +210,7 @@ describe("delete-domain CLI", () => {
 		expect(stdout).toContain("[DRY RUN]");
 		// Domain and file should still exist
 		const config = await readConfig(tmpDir);
-		expect(config.domains).toContain("testing");
+		expect(config.domains).toHaveProperty("testing");
 		expect(existsSync(filePath)).toBe(true);
 	});
 
@@ -244,6 +244,6 @@ describe("delete-domain CLI", () => {
 			dryRun: true,
 		});
 		const config = await readConfig(tmpDir);
-		expect(config.domains).toContain("testing");
+		expect(config.domains).toHaveProperty("testing");
 	});
 });

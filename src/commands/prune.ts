@@ -57,7 +57,7 @@ export function registerPruneCommand(program: Command): void {
 			// locking. Locks are taken in phase 3 only for domains that actually
 			// have stale records, so a no-op prune doesn't block other writers.
 			const candidatesByDomain: Array<{ domain: string; records: ExpertiseRecord[] }> = [];
-			for (const domain of config.domains) {
+			for (const domain of Object.keys(config.domains)) {
 				const filePath = getExpertisePath(domain);
 				const records = await readExpertiseFile(filePath);
 				const stale = records.filter((r) => isStale(r, now, shelfLife));
@@ -90,7 +90,7 @@ export function registerPruneCommand(program: Command): void {
 			// records added since phase 1, then drop stale ones. Domains with no
 			// stale candidates are not relocked.
 			const candidateDomains = new Set(candidatesByDomain.map((c) => c.domain));
-			for (const domain of config.domains) {
+			for (const domain of Object.keys(config.domains)) {
 				if (!candidateDomains.has(domain)) continue;
 				const filePath = getExpertisePath(domain);
 

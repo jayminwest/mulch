@@ -57,16 +57,16 @@ export function registerReadyCommand(program: Command): void {
 
 				let domainsToCheck: string[];
 				if (options.domain) {
-					if (!config.domains.includes(options.domain)) {
+					if (!(options.domain in config.domains)) {
 						if (jsonMode) {
 							outputJsonError(
 								"ready",
-								`Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 						} else {
 							console.error(
 								chalk.red(
-									`Error: domain "${options.domain}" not found. Available: ${config.domains.join(", ")}`,
+									`Error: domain "${options.domain}" not found. Available: ${Object.keys(config.domains).join(", ")}`,
 								),
 							);
 						}
@@ -75,7 +75,7 @@ export function registerReadyCommand(program: Command): void {
 					}
 					domainsToCheck = [options.domain];
 				} else {
-					domainsToCheck = config.domains;
+					domainsToCheck = Object.keys(config.domains);
 				}
 
 				let sinceMs: number | undefined;

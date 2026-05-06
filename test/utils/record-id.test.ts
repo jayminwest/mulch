@@ -19,7 +19,7 @@ let tmpDir: string;
 beforeEach(async () => {
 	tmpDir = await mkdtemp(join(tmpdir(), "mulch-id-test-"));
 	await initMulchDir(tmpDir);
-	await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+	await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 });
 
 afterEach(async () => {

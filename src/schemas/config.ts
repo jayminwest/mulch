@@ -37,9 +37,15 @@ export interface CustomTypeConfig {
 	aliases?: Record<string, string[]>;
 }
 
+// Per-domain configuration. Empty for now; fields land in mulch-64dc-b
+// (allowed_types) and mulch-64dc-c (required_fields). Use a unique-symbol brand
+// so the type is structurally distinct from {} without yet declaring real fields.
+declare const domainConfigBrand: unique symbol;
+export type DomainConfig = { [domainConfigBrand]?: never };
+
 export interface MulchConfig {
 	version: string;
-	domains: string[];
+	domains: Record<string, DomainConfig>;
 	governance: {
 		max_entries: number;
 		warn_entries: number;
@@ -74,7 +80,7 @@ export interface MulchConfig {
 
 export const DEFAULT_CONFIG: MulchConfig = {
 	version: "1",
-	domains: [],
+	domains: {},
 	governance: {
 		max_entries: 100,
 		warn_entries: 150,

@@ -25,15 +25,17 @@ export function registerOutcomeCommand(program: Command): void {
 			try {
 				const config = await readConfig();
 
-				if (!config.domains.includes(domain)) {
+				if (!(domain in config.domains)) {
 					if (jsonMode) {
 						outputJsonError(
 							"outcome",
-							`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+							`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 						);
 					} else {
 						console.error(chalk.red(`Error: domain "${domain}" not found in config.`));
-						console.error(chalk.red(`Available domains: ${config.domains.join(", ") || "(none)"}`));
+						console.error(
+							chalk.red(`Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`),
+						);
 					}
 					process.exitCode = 1;
 					return;

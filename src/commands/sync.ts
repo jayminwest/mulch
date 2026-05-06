@@ -59,7 +59,7 @@ async function validateExpertise(cwd?: string): Promise<ValidateResult> {
 	// reconciles correctly without needing a restart.
 	await initRegistryFromConfig(cwd);
 	const config = await readConfig(cwd);
-	const domains = config.domains;
+	const domains = Object.keys(config.domains);
 
 	const registry = getRegistry();
 	const validate = registry.validator;

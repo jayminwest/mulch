@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import yaml from "js-yaml";
-import type { MulchConfig } from "../schemas/config.ts";
+import type { DomainConfig, MulchConfig } from "../schemas/config.ts";
 import { DEFAULT_CONFIG } from "../schemas/config.ts";
 import { createExpertiseFile } from "./expertise.ts";
 
@@ -189,6 +189,21 @@ export function getExpertisePath(domain: string, cwd: string = process.cwd()): s
 	return join(getExpertiseDir(cwd), `${domain}.jsonl`);
 }
 
+// Legacy on-disk shape was `domains: [a, b]`; current shape is
+// `domains: { a: {}, b: {} }`. Normalize both to the object map at read time so
+// older configs keep working without user migration.
+function normalizeDomains(raw: unknown): Record<string, DomainConfig> {
+	if (Array.isArray(raw)) {
+		const map: Record<string, DomainConfig> = {};
+		for (const name of raw) {
+			if (typeof name === "string") map[name] = {};
+		}
+		return map;
+	}
+	if (raw && typeof raw === "object") return raw as Record<string, DomainConfig>;
+	return {};
+}
+
 export async function readConfig(cwd: string = process.cwd()): Promise<MulchConfig> {
 	const configPath = getConfigPath(cwd);
 	let content: string;
@@ -200,14 +215,16 @@ export async function readConfig(cwd: string = process.cwd()): Promise<MulchConf
 		}
 		throw err;
 	}
-	return yaml.load(content) as MulchConfig;
+	const parsed = yaml.load(content) as MulchConfig;
+	parsed.domains = normalizeDomains(parsed.domains);
+	return parsed;
 }
 
 export async function addDomain(domain: string, cwd: string = process.cwd()): Promise<void> {
 	validateDomainName(domain);
 	const config = await readConfig(cwd);
-	if (!config.domains.includes(domain)) {
-		config.domains.push(domain);
+	if (!(domain in config.domains)) {
+		config.domains[domain] = {};
 		await writeConfig(config, cwd);
 	}
 	const filePath = getExpertisePath(domain, cwd);
@@ -219,11 +236,10 @@ export async function addDomain(domain: string, cwd: string = process.cwd()): Pr
 export async function removeDomain(domain: string, cwd: string = process.cwd()): Promise<void> {
 	validateDomainName(domain);
 	const config = await readConfig(cwd);
-	const index = config.domains.indexOf(domain);
-	if (index === -1) {
+	if (!(domain in config.domains)) {
 		throw new Error(`Domain "${domain}" not found in config.`);
 	}
-	config.domains.splice(index, 1);
+	delete config.domains[domain];
 	await writeConfig(config, cwd);
 	const filePath = getExpertisePath(domain, cwd);
 	if (existsSync(filePath)) {

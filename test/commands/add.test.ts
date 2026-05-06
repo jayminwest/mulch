@@ -27,13 +27,13 @@ describe("add command", () => {
 
 	it("adds a new domain to config", async () => {
 		const config = await readConfig(tmpDir);
-		expect(config.domains).toEqual([]);
+		expect(config.domains).toEqual({});
 
-		config.domains.push("testing");
+		config.domains.testing = {};
 		await writeConfig(config, tmpDir);
 
 		const updatedConfig = await readConfig(tmpDir);
-		expect(updatedConfig.domains).toContain("testing");
+		expect(updatedConfig.domains).toHaveProperty("testing");
 	});
 
 	it("creates expertise file for new domain", async () => {
@@ -45,26 +45,26 @@ describe("add command", () => {
 	});
 
 	it("detects duplicate domain in config", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 
 		const config = await readConfig(tmpDir);
-		const isDuplicate = config.domains.includes("testing");
+		const isDuplicate = "testing" in config.domains;
 		expect(isDuplicate).toBe(true);
 	});
 
 	it("adding multiple domains works", async () => {
 		const config = await readConfig(tmpDir);
 
-		config.domains.push("testing");
-		config.domains.push("architecture");
-		config.domains.push("devops");
+		config.domains.testing = {};
+		config.domains.architecture = {};
+		config.domains.devops = {};
 		await writeConfig(config, tmpDir);
 
 		const updatedConfig = await readConfig(tmpDir);
-		expect(updatedConfig.domains).toHaveLength(3);
-		expect(updatedConfig.domains).toContain("testing");
-		expect(updatedConfig.domains).toContain("architecture");
-		expect(updatedConfig.domains).toContain("devops");
+		expect(Object.keys(updatedConfig.domains)).toHaveLength(3);
+		expect(updatedConfig.domains).toHaveProperty("testing");
+		expect(updatedConfig.domains).toHaveProperty("architecture");
+		expect(updatedConfig.domains).toHaveProperty("devops");
 	});
 
 	it("creating expertise file for each domain", async () => {
@@ -79,11 +79,11 @@ describe("add command", () => {
 	it("domain name is preserved in config round-trip", async () => {
 		const domainName = "my-special-domain";
 		const config = await readConfig(tmpDir);
-		config.domains.push(domainName);
+		config.domains[domainName] = {};
 		await writeConfig(config, tmpDir);
 
 		const updatedConfig = await readConfig(tmpDir);
-		expect(updatedConfig.domains).toContain(domainName);
+		expect(updatedConfig.domains).toHaveProperty(domainName);
 	});
 
 	it("expertise file path uses domain name", () => {
@@ -99,7 +99,7 @@ describe("add command", () => {
 
 	it("config preserves governance settings after adding domain", async () => {
 		const config = await readConfig(tmpDir);
-		config.domains.push("testing");
+		config.domains.testing = {};
 		await writeConfig(config, tmpDir);
 
 		const updatedConfig = await readConfig(tmpDir);

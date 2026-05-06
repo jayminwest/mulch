@@ -57,7 +57,7 @@ describe("sync command", () => {
 		originalCwd = process.cwd();
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-sync-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const expertisePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(expertisePath);
 		initGitRepo(tmpDir);
@@ -347,7 +347,7 @@ describe("sync command", () => {
 		// keep failing forever even after the config is reconciled.
 		it("validates against fresh config, not the registry loaded at process start", async () => {
 			// Process-start registry has only built-ins: write empty config.
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["research"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { research: {} } }, tmpDir);
 			await initRegistryFromConfig(tmpDir);
 
 			const filePath = getExpertisePath("research", tmpDir);
@@ -369,7 +369,7 @@ describe("sync command", () => {
 			await writeConfig(
 				{
 					...DEFAULT_CONFIG,
-					domains: ["research"],
+					domains: { research: {} },
 					custom_types: {
 						hypothesis: {
 							required: ["statement"],
@@ -403,7 +403,7 @@ describe("sync command", () => {
 		});
 
 		it("emits a targeted unknown-type error when config still doesn't declare the type", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["research"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { research: {} } }, tmpDir);
 			await initRegistryFromConfig(tmpDir);
 
 			const filePath = getExpertisePath("research", tmpDir);

@@ -56,7 +56,7 @@ export function registerQueryCommand(program: Command): void {
 				const domainsToQuery: string[] = [];
 
 				if (options.all) {
-					domainsToQuery.push(...config.domains);
+					domainsToQuery.push(...Object.keys(config.domains));
 					if (domainsToQuery.length === 0) {
 						if (jsonMode) {
 							outputJson({ success: true, command: "query", domains: [] });
@@ -66,15 +66,15 @@ export function registerQueryCommand(program: Command): void {
 						return;
 					}
 				} else if (domain) {
-					if (!config.domains.includes(domain)) {
+					if (!(domain in config.domains)) {
 						if (jsonMode) {
 							outputJsonError(
 								"query",
-								`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+								`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 						} else {
 							console.error(
-								`Error: Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+								`Error: Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 							console.error(
 								`Hint: Run \`ml add ${domain}\` to create this domain, or check .mulch/mulch.config.yaml`,

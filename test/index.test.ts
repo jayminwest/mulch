@@ -115,7 +115,7 @@ describe("src/index.ts exports", () => {
 		it("exports MulchConfig type", () => {
 			const config: MulchConfig = {
 				version: "1",
-				domains: ["test"],
+				domains: { test: {} },
 				governance: {
 					max_entries: 100,
 					warn_entries: 75,
@@ -152,7 +152,7 @@ describe("src/index.ts exports", () => {
 
 			const configPath = join(configDir, "mulch.config.yaml");
 			const configContent = `version: "1"
-domains: []
+domains: {}
 governance:
   max_entries: 100
   warn_entries: 75

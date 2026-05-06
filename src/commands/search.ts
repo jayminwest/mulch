@@ -103,15 +103,15 @@ export function registerSearchCommand(program: Command): void {
 					let domainsToSearch: string[];
 
 					if (options.domain) {
-						if (!config.domains.includes(options.domain)) {
+						if (!(options.domain in config.domains)) {
 							if (jsonMode) {
 								outputJsonError(
 									"search",
-									`Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
+									`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 								);
 							} else {
 								console.error(
-									`Error: Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
+									`Error: Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 								);
 								console.error(
 									`Hint: Run \`mulch add ${options.domain}\` to create this domain, or check .mulch/mulch.config.yaml`,
@@ -122,7 +122,7 @@ export function registerSearchCommand(program: Command): void {
 						}
 						domainsToSearch = [options.domain];
 					} else {
-						domainsToSearch = config.domains;
+						domainsToSearch = Object.keys(config.domains);
 					}
 
 					let totalMatches = 0;

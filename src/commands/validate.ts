@@ -14,7 +14,7 @@ export function registerValidateCommand(program: Command): void {
 		.action(async () => {
 			const jsonMode = program.opts().json === true;
 			const config = await readConfig();
-			const domains = config.domains;
+			const domains = Object.keys(config.domains);
 
 			const registry = getRegistry();
 			const validate = registry.validator;

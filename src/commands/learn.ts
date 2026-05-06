@@ -20,7 +20,7 @@ export async function matchFilesToDomains(
 	const matched = new Set<string>();
 	const matches: DomainMatch[] = [];
 
-	for (const domain of config.domains) {
+	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath);
 
