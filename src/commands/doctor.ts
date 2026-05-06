@@ -641,7 +641,7 @@ async function checkDomainConformance(
 			? {
 					name: "domain-violations",
 					status: "fail",
-					message: `${violations.length} record(s) violate domain rules (allowed_types / required_fields)`,
+					message: `${totalViolations} record(s) violate domain rules (allowed_types / required_fields)`,
 					fixable: false,
 					details: violations,
 				}

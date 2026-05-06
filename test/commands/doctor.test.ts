@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
@@ -561,6 +561,68 @@ describe("doctor — domain conformance (R-01d)", () => {
 		).toBe(true);
 		// Domain violations don't expose --fix in v1 — they require human judgment.
 		expect(violations.fixable).toBe(false);
+	});
+
+	it("counts a record with multiple simultaneous violations as one record", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: {
+					backend: {
+						allowed_types: ["convention"],
+						required_fields: ["oncall_owner"],
+					},
+				},
+			},
+			conformDir,
+		);
+		const filePath = getExpertisePath("backend", conformDir);
+		await createExpertiseFile(filePath);
+		// Two conforming records...
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "ok1",
+			classification: "tactical",
+			recorded_at: "2026-01-01T00:00:00.000Z",
+			oncall_owner: "alice",
+		} as unknown as ExpertiseRecord);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "ok2",
+			classification: "tactical",
+			recorded_at: "2026-01-01T00:00:00.000Z",
+			oncall_owner: "bob",
+		} as unknown as ExpertiseRecord);
+		// ...and one record that violates BOTH rules at once.
+		await writeFile(
+			filePath,
+			`${(await readFile(filePath, "utf-8")).trimEnd()}\n${JSON.stringify({
+				type: "reference",
+				id: "mx-bad001",
+				name: "n",
+				description: "d",
+				classification: "tactical",
+				recorded_at: "2026-01-01T00:00:00.000Z",
+			})}\n`,
+			"utf-8",
+		);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: conformDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const info = out.checks.find((c: { name: string }) => c.name === "domain-conformance");
+		const violations = out.checks.find((c: { name: string }) => c.name === "domain-violations");
+		expect(info.message).toMatch(/2\/3 record\(s\) conform/);
+		expect(info.details[0]).toMatch(/2\/3 conforming, 1 violation/);
+		expect(violations.status).toBe("fail");
+		expect(violations.message).toMatch(/^1 record\(s\) violate/);
+		// Detail block still lists every individual violation.
+		expect(violations.details.length).toBe(2);
+		expect(violations.details.some((d: string) => d.includes("allowed_types"))).toBe(true);
+		expect(violations.details.some((d: string) => d.includes("oncall_owner"))).toBe(true);
 	});
 });
 
