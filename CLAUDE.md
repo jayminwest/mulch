@@ -32,20 +32,44 @@ Three classifications with shelf lives for pruning: `foundational` (permanent), 
 
 - `disabled_types: [name]` in config — emits a deprecation warning on write but keeps reads/CLI choices working. Cross-project safe.
 - `aliases: { canonical: [legacy_names] }` per custom type — legacy field names on disk are rewritten to canonical at read time.
+- `extends: <builtin>` on custom-type entries — inherit `required`/`optional`/`dedup_key`/`id_key`/`summary`/`compact`/`section_title`/`extracts_files`/`files_field` from one of the six built-ins. Override only what differs; arrays merge as a union. Validation rejects custom-from-custom and `extends`-ing a `disabled_types` entry. AJV schema layering preserves `additionalProperties: false`.
 - Unknown-type policy: `readExpertiseFile` throws a targeted error (`Unknown record type "X" at <file>:<line> (id=<id>)`) when a record's type isn't registered. Pass `{ allowUnknownTypes: true }` to opt out. The `--allow-unknown-types` global CLI flag wires the same opt-out via `src/utils/runtime-flags.ts`.
-- `ml sync` calls `initRegistryFromConfig(cwd)` before validating so worktree/CI lag (JSONL lands via `merge=union` before config does) reconciles automatically once config catches up — sync intentionally ignores `--allow-unknown-types`.
+- `ml sync` calls `initRegistryFromConfig(cwd)` before validating so worktree/CI lag (JSONL lands via `merge=union` before config does) reconciles automatically once config catches up — sync intentionally ignores `--allow-unknown-types` and `--allow-domain-mismatch`.
 - `ml doctor` adds a `type-registry` informational check (built-in vs custom, per-type counts, disabled marker) and an `unknown-types` failing check.
+
+### Per-Domain Rules
+
+- `domains` is a `Record<string, DomainConfig>` (not a `string[]`). Each entry can declare `allowed_types` (gates `--type` on write) and `required_fields` (top-level fields every record in the domain must carry). Empty/missing values preserve back-compat (any registered type accepted, no extra required fields).
+- `disabled_types` wins over `allowed_types` on overlap so peer agents in shared domains don't hard-fail when a type is being retired.
+- Doctor surfaces `domain-conformance` (informational) and `domain-violations` (failing) checks; sync re-validates against on-disk rules before staging. The `--allow-domain-mismatch` global flag (honored by `ml record` / `ml validate`) is the worktree/CI lag escape hatch — sync intentionally ignores it.
+- `domain-rules-compatibility` doctor check catches misconfiguration where `required_fields` names a field no allowed type can hold. AJV failures on records inside such a domain get an extra runtime hint identifying the offending field/type.
+
+### Lifecycle Hooks
+
+`hooks` config block in `mulch.config.yaml` registers ordered shell scripts for `pre-record` / `post-record` / `pre-prime` / `pre-prune`. Scripts receive the payload as JSON on stdin (`MULCH_HOOK=1` set, cwd at project root). Exit `0` to continue; non-zero **blocks** for `pre-*`, **warns** for `post-*`. `pre-record` and `pre-prime` may print a modified payload on stdout to mutate it for downstream scripts and the eventual write — both `{ event, payload }` and bare-payload shapes are accepted. Per-hook timeout via `hook_settings.timeout_ms` (default 5000ms; SIGKILL on timeout). Dry-run skips hooks (record, prune) so previews never trigger Slack posts or `digest-then-confirm` confirmations.
+
+### Prune Lifecycle (Soft Archive + Decay)
+
+- `ml prune` defaults to **soft-archive**: stale records move to `.mulch/archive/<domain>.jsonl` (with `status: "archived"` and `archived_at: <iso-date>`) rather than being deleted. Each archive file starts with a `# ARCHIVED — ...` banner; `readExpertiseFile` skips `#`-prefixed lines.
+- **Supersession decay**: when record B has `supersedes: [A]`, A walks one tier per pass (`foundational → tactical → observational → archived`), stamping `supersession_demoted_at`. `--aggressive` collapses straight to archived. Cross-domain by design.
+- **Anchor-validity decay** (opt-in via `--check-anchors`): records whose file/dir anchors stop resolving demote one tier per pass when `valid_fraction` drops below `decay.anchor_validity.threshold` AND the record is older than `grace_days`. Stamps `anchor_decay_demoted_at`. Records with zero anchors are exempt — absence means "applies globally".
+- Staleness wins on overlap (no intermediate demotion stamp). `--explain` prints per-record reasons for each demotion.
+- `ml restore <id>` brings a soft-archived record back to live expertise. `ml search --archived` is the only read path that walks `.mulch/archive/`; `ml prime` and default search never read it.
+
+### Provider Recipe Discovery
+
+`ml setup <name>` resolves recipes in this order: filesystem (`.mulch/recipes/<name>.ts` or `.sh`) → npm (`mulch-recipe-<name>`) → built-in (the six in `src/commands/setup.ts`). Filesystem wins so orgs can override built-ins without forking. TypeScript recipes are loaded directly by Bun and must default-export a `ProviderRecipe` (`install` / `check` / `remove` returning `{ success, message }`); shape is validated at load. Shell recipes are invoked as `<script> install|check|remove` with cwd at project root and `MULCH_RECIPE_NAME` / `MULCH_RECIPE_ACTION` in env. `ml setup --list` enumerates everything with source + shadow markers.
 
 ### Command Pattern
 
-Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 25 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
+Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 26 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
 
 ### Concurrency Safety
 
 - **Advisory file locking**: `withFileLock(filePath, fn)` in `src/utils/lock.ts` — uses `O_CREAT|O_EXCL` lock files with 50ms retry, 5s timeout, and 30s stale lock detection
 - **Atomic writes**: `writeExpertiseFile()` in `src/utils/expertise.ts` writes to a temp file then renames, preventing partial/corrupt JSONL
 - **Write commands** (record, edit, delete, delete-domain, compact, prune, restore, doctor --fix) use both mechanisms
-- **Read-only commands** (prime, query, search, status, validate) need no locking
+- **Read-only commands** (prime, query, search, rank, status, validate, learn, ready) need no locking
 
 ### Worktree-Aware Storage
 

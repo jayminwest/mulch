@@ -38,7 +38,7 @@ import { setAllowDomainMismatch, setAllowUnknownTypes } from "./utils/runtime-fl
 // .mulch/ directory exists yet (e.g., before `ml init`).
 await initRegistryFromConfig();
 
-export const VERSION = "0.7.0";
+export const VERSION = "0.8.0";
 
 const rawArgs = process.argv.slice(2);
 

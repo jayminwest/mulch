@@ -7,16 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [0.8.0] - 2026-05-06
 
-#### Per-domain `required_fields` incompatibility surfaces clearly (mulch-cc51)
-- **New `domain-rules-compatibility` doctor check**: when `domain.required_fields` names a field no allowed type can hold (built-in/custom schemas use `additionalProperties: false`), `ml doctor` now reports the offending field, lists the domain's allowed types, and prints a fix-it hint pointing at `custom_types`. Catches the misconfiguration at config time instead of every write.
-- **Targeted runtime hint on AJV failure**: when a record write fails schema validation AND the rejected `additionalProperty` is in `domain.required_fields`, `ml record` now appends a clear hint identifying the field and the type that doesn't declare it, instead of letting users wade through the raw `oneOf` / `additionalProperties` soup.
-
-#### Custom-type summary templates: brace-style + register-time validation (mulch-2da1)
-- **Mustache-style `{{field}}` now resolves identically to `{field}`** in `compileSummaryTemplate`, so the prior init-wizard examples (and any user templates copied from Mustache-style docs) render correctly instead of leaking literal braces around the value.
-- **Unknown-token validation at registry load**: `validateCustomTypeConfig` now rejects summary templates whose tokens aren't declared on the type (or inherited via `extends`, or a base record field). The error names the bad token and lists every legal one, replacing the previous silent empty-string render at `ml prime` time.
-- **Init-wizard examples** (`src/utils/config.ts`) and the README's `Custom Types` / `Aliases (Schema Evolution)` snippets are now single-brace `{field}` for consistency. The README also calls out that both styles are accepted and tokens are validated.
+Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provider recipes — Mulch grows up from "shared shelf" to "shared shelf with rules and lifecycle". Custom types now inherit from built-ins, records can anchor to directories, prune demotes superseded/decayed records before archiving, and a new `ml rank` surfaces top confirmation-frequency records without a query. 1120 tests across 58 files (up from 840 / 41 in 0.7.0).
 
 ### Added
 
@@ -80,6 +73,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ml prime --files <path>` matches by directory membership**: a record matches when *either* `files[]` lists the path *or* any `dir_anchors[]` entry is an ancestor directory. Boundary-respecting prefix check (`src/util` does not match `src/utils/foo.ts`).
 - **`ml doctor` extension**: the existing `file-anchors` check now scans `dir_anchors[]` and flags entries pointing at deleted directories. `--fix` strips broken dir anchors the same way it strips broken file anchors; when every entry is broken, the field is removed entirely.
 
+#### Per-Domain Allowed Types & Required Fields (R-01b/c/d)
+- **`domain.allowed_types`**: gate which record types may be written into a domain — `ml record` rejects any `--type` not in the list and prints a copy-paste retry hint with the first allowed type filled in. Empty/missing list preserves back-compat (any registered type accepted). `disabled_types` wins on overlap so peer agents in shared domains don't hard-fail when a type is being retired.
+- **`domain.required_fields`**: require additional top-level fields on every record written into a domain. `ml record` rejects writes that omit any listed field with a single retry hint listing all missing fields. Stacks on top of per-type required fields — adds, never replaces. Top-level fields only.
+- **Doctor re-validation**: new `domain-conformance` (informational) and `domain-violations` (failing) checks surface existing records that violate domain rules — catches worktree/CI lag where records land via `merge=union` before config does. No `--fix` in v1: violations need human judgment (rewrite vs. relax the rule).
+- **Sync re-validation**: `ml sync` re-reads `mulch.config.yaml` and re-validates every on-disk record against the current rules before staging. Once config catches up, sync reconciles without a process restart. Sync intentionally ignores `--allow-domain-mismatch` — escape hatches stop at the commit gate.
+- **`--allow-domain-mismatch`** global flag: tolerates rule violations during the lag window. Honored by `ml record` and `ml validate` only.
+- **Config reshape (mulch-68ba)**: `domains` reshaped from `string[]` to `Record<string, DomainConfig>` so per-domain settings have a home. Migration is automatic for legacy configs.
+
+#### Domain-Rules Compatibility Surfacing (mulch-cc51)
+- **New `domain-rules-compatibility` doctor check**: when `domain.required_fields` names a field no allowed type can hold (built-in/custom schemas use `additionalProperties: false`), `ml doctor` now reports the offending field, lists the domain's allowed types, and prints a fix-it hint pointing at `custom_types`. Catches the misconfiguration at config time instead of every write.
+- **Targeted runtime hint on AJV failure**: when a record write fails schema validation AND the rejected `additionalProperty` is in `domain.required_fields`, `ml record` now appends a clear hint identifying the field and the type that doesn't declare it, instead of letting users wade through the raw `oneOf` / `additionalProperties` soup.
+
 #### Lifecycle Hooks (R-02)
 - **`hooks` config block** in `mulch.config.yaml`: declare ordered shell scripts for `pre-record`, `post-record`, `pre-prime`, and `pre-prune`. Each script is invoked with the relevant payload as JSON on stdin (`MULCH_HOOK=1` set in the environment, cwd at the project root). Exit `0` to continue; non-zero **blocks** for `pre-*` events and **warns** for `post-*` events.
 - **Payload mutation** for `pre-record` and `pre-prime`: a script may print a modified JSON payload on stdout, which becomes input to the next script and the eventual write. Useful for redaction, owner injection, team-scoped filtering. Empty stdout leaves the payload untouched. Non-JSON stdout is ignored with a warning. Both `{ event, payload }` and bare-payload shapes are accepted on the way back.
@@ -96,6 +101,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom-type aliases**: `aliases: { canonical_field: [legacy_name, ...] }` in `custom_types` declares former field names. At read time, legacy fields are rewritten to the canonical name (canonical wins on conflict, legacy is dropped). Writes always use canonical. Schema-evolution support — rename a field without rewriting historic JSONL.
 - **`ml doctor` type registry listing**: new `type-registry` check enumerates registered types (built-in vs custom) with per-type counts and a `(disabled)` marker. New `unknown-types` check fails with file/line/id details for unregistered records.
 - **Init scaffold updated**: commented `disabled_types`, `custom_types`, and `aliases` examples in the generated `mulch.config.yaml` so users can discover the knobs.
+
+### Fixed
+
+#### Custom-type summary templates: brace-style + register-time validation (mulch-2da1)
+- **Mustache-style `{{field}}` now resolves identically to `{field}`** in `compileSummaryTemplate`, so the prior init-wizard examples (and any user templates copied from Mustache-style docs) render correctly instead of leaking literal braces around the value.
+- **Unknown-token validation at registry load**: `validateCustomTypeConfig` now rejects summary templates whose tokens aren't declared on the type (or inherited via `extends`, or a base record field). The error names the bad token and lists every legal one, replacing the previous silent empty-string render at `ml prime` time.
+- **Init-wizard examples** (`src/utils/config.ts`) and the README's `Custom Types` / `Aliases (Schema Evolution)` snippets are now single-brace `{field}` for consistency. The README also calls out that both styles are accepted and tokens are validated.
+
+#### Doctor domain-violations record count (mulch-7ac8)
+- `ml doctor`'s `domain-violations` check now counts records (not message lines) in its summary so the failing-check tally matches reality.
+
+#### Prime token estimator handles custom record types
+- `ml prime`'s budget enforcement no longer crashes when summing tokens for a custom record type — previously the type-specific token estimator only knew about the six built-ins.
+
+### Testing
+
+- 1120 tests across 58 files, 2681 expect() calls (up from 840 / 41 / 1935 in 0.7.0)
+- New tests for: `rank` command, lifecycle hooks (pre/post-record, pre-prime, pre-prune), soft-archive prune (archive read/write, banner skipping, restore, search --archived), supersession demotion, anchor-validity decay, custom-type inheritance via `extends`, dir anchors (record write, prime --files matching, doctor scanning), per-domain `allowed_types` / `required_fields` gates, doctor re-validation, sync re-validation, registry (custom types, disabled_types, unknown-type policy, aliases), provider recipe discovery (filesystem, npm, built-in resolution + --list)
 
 ## [0.7.0] - 2026-04-28
 
@@ -559,7 +582,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/jayminwest/mulch/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jayminwest/mulch/compare/v0.6.5...v0.7.0
 [0.6.5]: https://github.com/jayminwest/mulch/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/jayminwest/mulch/compare/v0.6.3...v0.6.4
