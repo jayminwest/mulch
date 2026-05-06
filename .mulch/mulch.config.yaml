@@ -117,3 +117,12 @@ hook_settings:
   # Per-hook timeout in ms. Default is 5000; pinned explicitly so the value
   # survives a future default change.
   timeout_ms: 5000
+decay:
+  # `ml prune --check-anchors` demotes one tier per pass when a record's
+  # files[]/dir_anchors[]/evidence.file resolves below `threshold` AND the
+  # record is older than `grace_days`. `weight` is reserved for the future
+  # R-05g fitness blend; pinned to 1.0 today.
+  anchor_validity:
+    threshold: 0.5
+    grace_days: 7
+    weight: 1.0
