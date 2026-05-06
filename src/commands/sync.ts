@@ -5,6 +5,11 @@ import type { Command } from "commander";
 import { initRegistryFromConfig } from "../registry/init.ts";
 import { getRegistry } from "../registry/type-registry.ts";
 import { getExpertisePath, isInsideWorktree, readConfig } from "../utils/config.ts";
+import {
+	findMissingDomainFields,
+	getAllowedTypes,
+	getRequiredFields,
+} from "../utils/domain-rules.ts";
 import { applyAliases } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
@@ -69,6 +74,12 @@ async function validateExpertise(cwd?: string): Promise<ValidateResult> {
 
 	for (const domain of domains) {
 		const filePath = getExpertisePath(domain, cwd);
+		// Resolve domain rules from the just-reloaded config so worktree/CI lag
+		// (records landing before config) is caught once config catches up.
+		// Sync intentionally ignores --allow-domain-mismatch — like
+		// --allow-unknown-types, escape hatches stop at the commit gate.
+		const allowedTypes = getAllowedTypes(config, domain);
+		const requiredFields = getRequiredFields(config, domain);
 		let content: string;
 		try {
 			content = await readFile(filePath, "utf-8");
@@ -125,6 +136,34 @@ async function validateExpertise(cwd?: string): Promise<ValidateResult> {
 					line: lineNumber,
 					message: `Schema validation failed: ${schemaErrors}`,
 				});
+				continue;
+			}
+
+			if (parsed && typeof parsed === "object") {
+				const record = parsed as Record<string, unknown>;
+				const recordType = typeof record.type === "string" ? record.type : "<unknown>";
+				const id = typeof record.id === "string" ? record.id : null;
+				const idPart = id ? ` (id=${id})` : "";
+
+				if (allowedTypes && !allowedTypes.includes(recordType)) {
+					errors.push({
+						domain,
+						line: lineNumber,
+						message: `type "${recordType}"${idPart} is not allowed in domain "${domain}". Allowed types: ${allowedTypes.join(", ")}. Fix the record or relax allowed_types in mulch.config.yaml.`,
+					});
+					continue;
+				}
+
+				if (requiredFields) {
+					const missing = findMissingDomainFields(record, requiredFields);
+					if (missing.length > 0) {
+						errors.push({
+							domain,
+							line: lineNumber,
+							message: `record${idPart} missing required field(s) ${missing.map((f) => `"${f}"`).join(", ")} in domain "${domain}". Fix the record or relax required_fields in mulch.config.yaml.`,
+						});
+					}
+				}
 			}
 		}
 	}

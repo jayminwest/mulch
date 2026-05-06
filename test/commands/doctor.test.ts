@@ -434,3 +434,132 @@ describe("doctor — Phase 3 type registry + unknown-types checks", () => {
 		expect(out.summary.fail).toBeGreaterThanOrEqual(1);
 	});
 });
+
+describe("doctor — domain conformance (R-01d)", () => {
+	let conformDir: string;
+
+	beforeEach(async () => {
+		conformDir = await mkdtemp(join(tmpdir(), "mulch-doctor-conform-"));
+		await initMulchDir(conformDir);
+	});
+
+	afterEach(async () => {
+		await rm(conformDir, { recursive: true, force: true });
+	});
+
+	it("passes both checks when every record matches its domain rules", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: {
+					backend: { allowed_types: ["convention"], required_fields: ["oncall_owner"] },
+				},
+			},
+			conformDir,
+		);
+		const filePath = getExpertisePath("backend", conformDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "ok",
+			classification: "tactical",
+			recorded_at: "2026-01-01T00:00:00.000Z",
+			// Extra top-level field — domain rule requires it.
+			oncall_owner: "alice",
+		} as unknown as ExpertiseRecord);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: conformDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const info = out.checks.find((c: { name: string }) => c.name === "domain-conformance");
+		const violations = out.checks.find((c: { name: string }) => c.name === "domain-violations");
+		expect(info.status).toBe("pass");
+		expect(info.message).toMatch(/1\/1 record\(s\) conform/);
+		expect(info.details).toContain("backend (rules): 1/1 conforming, 0 violations");
+		expect(violations.status).toBe("pass");
+	});
+
+	it("flags a record whose type is not in allowed_types and keeps type-registry passing", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { allowed_types: ["convention"] } },
+			},
+			conformDir,
+		);
+		const filePath = getExpertisePath("backend", conformDir);
+		await createExpertiseFile(filePath);
+		await writeFile(
+			filePath,
+			`${JSON.stringify({
+				type: "pattern",
+				id: "mx-bad",
+				name: "n",
+				description: "d",
+				classification: "tactical",
+				recorded_at: "2026-01-01T00:00:00.000Z",
+			})}\n`,
+			"utf-8",
+		);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: conformDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const info = out.checks.find((c: { name: string }) => c.name === "domain-conformance");
+		const violations = out.checks.find((c: { name: string }) => c.name === "domain-violations");
+		const typeRegistry = out.checks.find((c: { name: string }) => c.name === "type-registry");
+		expect(info.status).toBe("pass");
+		expect(info.details[0]).toMatch(/0\/1 conforming, 1 violation/);
+		expect(violations.status).toBe("fail");
+		expect(violations.details.some((d: string) => d.includes("[mx-bad]"))).toBe(true);
+		expect(violations.details.some((d: string) => d.includes('"pattern"'))).toBe(true);
+		// pattern is registered — type-registry shouldn't fail just because the
+		// domain disallows it.
+		expect(typeRegistry.status).toBe("pass");
+	});
+
+	it("flags a record missing a domain-required field", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner"] } },
+			},
+			conformDir,
+		);
+		const filePath = getExpertisePath("backend", conformDir);
+		await createExpertiseFile(filePath);
+		await writeFile(
+			filePath,
+			`${JSON.stringify({
+				type: "convention",
+				id: "mx-noown",
+				content: "c",
+				classification: "tactical",
+				recorded_at: "2026-01-01T00:00:00.000Z",
+			})}\n`,
+			"utf-8",
+		);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: conformDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const violations = out.checks.find((c: { name: string }) => c.name === "domain-violations");
+		expect(violations.status).toBe("fail");
+		expect(
+			violations.details.some(
+				(d: string) => d.includes("[mx-noown]") && d.includes("oncall_owner"),
+			),
+		).toBe(true);
+		// Domain violations don't expose --fix in v1 — they require human judgment.
+		expect(violations.fixable).toBe(false);
+	});
+});

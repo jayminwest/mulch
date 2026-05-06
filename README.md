@@ -188,6 +188,23 @@ custom_types:
 
 `ml record` rejects writes that omit any listed field and prints a single retry hint with all missing fields filled in. `required_fields` stacks on top of the per-type required fields enforced by the schema — it adds, never replaces. Top-level field names only; nested paths (`evidence.commit`, etc.) are out of scope. Empty or missing `required_fields` preserves back-compat behavior.
 
+### Doctor and Sync Re-Validation
+
+`ml doctor` surfaces existing records that violate domain rules so worktree/CI lag (records landing before config catches up via `merge=union`) doesn't sit silently:
+
+- **`domain-conformance`** (informational) — per-domain summary of conforming vs. violating records. Runs whether or not the domain has rules; domains with no rules report all records as conforming.
+- **`domain-violations`** (failing) — lists each offending record with `domain:line [id] (type)` and the rule it broke (type not in `allowed_types`, or missing `required_fields`). No `--fix` in v1: violations require human judgment (rewrite the record vs. relax the rule).
+
+`ml sync` re-reads `mulch.config.yaml` and re-validates every on-disk record against the current rules before staging. This is the worktree/CI lag escape valve: once config catches up, sync reconciles without a restart. Sync intentionally ignores `--allow-domain-mismatch` — like `--allow-unknown-types`, escape hatches stop at the commit gate.
+
+The `--allow-domain-mismatch` global flag is the same kind of escape hatch as `--allow-unknown-types`, and is honored by `ml record` and `ml validate` only:
+
+```bash
+ml record backend --type pattern --name x --description y --allow-domain-mismatch
+ml validate --allow-domain-mismatch    # tolerate rule violations during the lag window
+ml sync                                 # gatekeeps commits — ignores the flag
+```
+
 ### Disabled Types
 
 Mark a type as deprecated to retire it gracefully across shared domains:

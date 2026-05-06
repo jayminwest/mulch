@@ -2,9 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import chalk from "chalk";
 import { type Command, Option } from "commander";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
-import type { MulchConfig } from "../schemas/config.ts";
 import type { Classification, Evidence, ExpertiseRecord, Outcome } from "../schemas/record.ts";
 import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
+import {
+	findMissingDomainFields,
+	getAllowedTypes,
+	getRequiredFields,
+} from "../utils/domain-rules.ts";
 import {
 	appendRecord,
 	findDuplicate,
@@ -16,6 +20,7 @@ import { runHooks } from "../utils/hooks.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
+import { isAllowDomainMismatch } from "../utils/runtime-flags.ts";
 
 function buildTypeRequirements(): Record<string, string> {
 	const out: Record<string, string> = {};
@@ -23,43 +28,6 @@ function buildTypeRequirements(): Record<string, string> {
 		out[def.name] = `${def.name} records require: ${def.required.join(", ")}`;
 	}
 	return out;
-}
-
-// Resolve a domain's allowed_types. Empty/missing means all registered types
-// allowed (back-compat). Returns the configured list when set so callers can
-// surface it in error messages.
-function getAllowedTypes(config: MulchConfig, domain: string): string[] | null {
-	const list = config.domains[domain]?.allowed_types;
-	if (!list || list.length === 0) return null;
-	return list;
-}
-
-// Resolve a domain's required_fields. Empty/missing means no extra
-// requirements (back-compat). Top-level field names only; nested paths are
-// out of scope for v1.
-function getRequiredFields(config: MulchConfig, domain: string): string[] | null {
-	const list = config.domains[domain]?.required_fields;
-	if (!list || list.length === 0) return null;
-	return list;
-}
-
-// Return the subset of `fields` that are missing or empty on the record.
-// Treats undefined/null/""/empty-array as missing.
-function findMissingDomainFields(record: ExpertiseRecord, fields: string[]): string[] {
-	const r = record as unknown as Record<string, unknown>;
-	const missing: string[] = [];
-	for (const field of fields) {
-		const value = r[field];
-		if (
-			value === undefined ||
-			value === null ||
-			value === "" ||
-			(Array.isArray(value) && value.length === 0)
-		) {
-			missing.push(field);
-		}
-	}
-	return missing;
 }
 
 // snake_case field name → camelCase Commander option key (e.g. "test_results" → "testResults").
@@ -269,7 +237,8 @@ export async function processStdinRecords(
 			continue;
 		}
 
-		if (allowedTypes) {
+		const allowDomainMismatch = isAllowDomainMismatch();
+		if (allowedTypes && !allowDomainMismatch) {
 			const recordType = (record as Record<string, unknown>).type;
 			if (typeof recordType === "string" && !allowedTypes.includes(recordType)) {
 				errors.push(
@@ -279,8 +248,8 @@ export async function processStdinRecords(
 			}
 		}
 
-		if (requiredFields) {
-			const missing = findMissingDomainFields(record as ExpertiseRecord, requiredFields);
+		if (requiredFields && !allowDomainMismatch) {
+			const missing = findMissingDomainFields(record as Record<string, unknown>, requiredFields);
 			if (missing.length > 0) {
 				errors.push(
 					`Record ${i}: domain "${domain}" requires field(s) ${missing.map((f) => `"${f}"`).join(", ")}.`,
@@ -828,9 +797,11 @@ Batch recording examples:
 			// types allowed (back-compat). disabled_types is independent — a type
 			// in allowed_types still writes (with deprecation warning) even when
 			// also disabled; cross-project peers in shared domains shouldn't
-			// hard-fail on an upstream config change.
+			// hard-fail on an upstream config change. --allow-domain-mismatch
+			// skips this gate (worktree/CI lag escape hatch).
+			const allowDomainMismatch = isAllowDomainMismatch();
 			const allowedTypes = getAllowedTypes(config, domain);
-			if (allowedTypes && !allowedTypes.includes(recordType)) {
+			if (allowedTypes && !allowDomainMismatch && !allowedTypes.includes(recordType)) {
 				const allowedList = allowedTypes.join(", ");
 				const msg = `type "${recordType}" is not allowed in domain "${domain}". Allowed types: ${allowedList}.`;
 				if (jsonMode) {
@@ -910,9 +881,13 @@ Batch recording examples:
 			// Per-domain required_fields gate. Stacks on top of per-type required
 			// fields enforced by the schema above. Lists all missing fields in a
 			// single error so users fix the config in one pass.
+			// --allow-domain-mismatch skips this gate (worktree/CI lag escape hatch).
 			const requiredFields = getRequiredFields(config, domain);
-			if (requiredFields) {
-				const missingFields = findMissingDomainFields(record, requiredFields);
+			if (requiredFields && !allowDomainMismatch) {
+				const missingFields = findMissingDomainFields(
+					record as unknown as Record<string, unknown>,
+					requiredFields,
+				);
 				if (missingFields.length > 0) {
 					const fieldList = missingFields.map((f) => `"${f}"`).join(", ");
 					const msg = `domain "${domain}" requires field(s) ${fieldList}.`;

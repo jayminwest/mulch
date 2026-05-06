@@ -29,7 +29,7 @@ import { registerValidateCommand } from "./commands/validate.ts";
 import { initRegistryFromConfig } from "./registry/init.ts";
 import { outputJsonError } from "./utils/json-output.ts";
 import { brand, muted, setQuiet } from "./utils/palette.ts";
-import { setAllowUnknownTypes } from "./utils/runtime-flags.ts";
+import { setAllowDomainMismatch, setAllowUnknownTypes } from "./utils/runtime-flags.ts";
 
 // Initialize the type registry from config so any custom_types declared in
 // mulch.config.yaml are first-class. Falls back to built-ins-only when no
@@ -65,6 +65,10 @@ if (rawArgs.includes("--allow-unknown-types")) {
 	setAllowUnknownTypes(true);
 }
 
+if (rawArgs.includes("--allow-domain-mismatch")) {
+	setAllowDomainMismatch(true);
+}
+
 // Detect --timing early (before Commander) so we can measure from startup
 const hasTiming = rawArgs.includes("--timing");
 const startTime = Date.now();
@@ -85,6 +89,10 @@ program
 	.option(
 		"--allow-unknown-types",
 		"tolerate on-disk records of unregistered types (worktree/CI lag escape hatch)",
+	)
+	.option(
+		"--allow-domain-mismatch",
+		"tolerate records that violate per-domain allowed_types/required_fields (escape hatch for record/validate; ignored by sync)",
 	)
 	.addOption(
 		new Option(

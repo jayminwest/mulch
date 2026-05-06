@@ -2349,3 +2349,94 @@ describe("per-domain required_fields (R-01c)", () => {
 		expect(result.errors[0]).toMatch(/domain "backend" requires field\(s\) "oncall_owner"/);
 	});
 });
+
+describe("--allow-domain-mismatch escape hatch (R-01d)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-domain-mismatch-"));
+		await initMulchDir(tmpDir);
+	});
+
+	afterEach(async () => {
+		resetRegistry();
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("--allow-domain-mismatch lets a disallowed type write", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { allowed_types: ["convention"] } },
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"--allow-domain-mismatch",
+				"record",
+				"backend",
+				"--type",
+				"pattern",
+				"--name",
+				"x",
+				"--description",
+				"y",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded pattern/);
+	});
+
+	it("--allow-domain-mismatch lets a record without required_fields write", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner"] } },
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"--allow-domain-mismatch",
+				"record",
+				"backend",
+				"some content",
+				"--type",
+				"convention",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded convention/);
+	});
+
+	it("without the flag, the same record is rejected (regression guard)", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { allowed_types: ["convention"] } },
+			},
+			tmpDir,
+		);
+		await createExpertiseFile(getExpertisePath("backend", tmpDir));
+
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "backend", "--type", "pattern", "--name", "x", "--description", "y"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toMatch(/type "pattern" is not allowed/);
+	});
+});

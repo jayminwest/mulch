@@ -14,6 +14,11 @@ import {
 	writeConfig,
 } from "../utils/config.ts";
 import {
+	findMissingDomainFields,
+	getAllowedTypes,
+	getRequiredFields,
+} from "../utils/domain-rules.ts";
+import {
 	applyAliases,
 	createExpertiseFile,
 	findDuplicate,
@@ -511,6 +516,139 @@ async function checkGovernance(config: MulchConfig, cwd?: string): Promise<Docto
 	};
 }
 
+// Walk every domain's records and bucket them as conforming or violating
+// domain-level rules (allowed_types / required_fields). Used by both the
+// informational and failing checks so we read+parse JSONL once.
+async function collectDomainConformance(
+	config: MulchConfig,
+	cwd?: string,
+): Promise<{
+	perDomain: Array<{
+		domain: string;
+		total: number;
+		conforming: number;
+		violations: number;
+		hasRules: boolean;
+	}>;
+	violations: string[];
+}> {
+	const perDomain: Array<{
+		domain: string;
+		total: number;
+		conforming: number;
+		violations: number;
+		hasRules: boolean;
+	}> = [];
+	const violations: string[] = [];
+
+	for (const domain of Object.keys(config.domains)) {
+		const allowedTypes = getAllowedTypes(config, domain);
+		const requiredFields = getRequiredFields(config, domain);
+		const hasRules = allowedTypes !== null || requiredFields !== null;
+
+		const filePath = getExpertisePath(domain, cwd);
+		let content: string;
+		try {
+			content = await readFile(filePath, "utf-8");
+		} catch {
+			perDomain.push({ domain, total: 0, conforming: 0, violations: 0, hasRules });
+			continue;
+		}
+
+		const lines = content.split("\n");
+		let total = 0;
+		let badCount = 0;
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = (lines[i] ?? "").trim();
+			if (line.length === 0) continue;
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(line);
+			} catch {
+				continue; // jsonl-integrity reports parse errors
+			}
+			if (!parsed || typeof parsed !== "object") continue;
+			total++;
+
+			const record = parsed as Record<string, unknown>;
+			const recordType = typeof record.type === "string" ? record.type : "<unknown>";
+			const id = typeof record.id === "string" ? record.id : "<no-id>";
+			const lineNumber = i + 1;
+			let recordViolated = false;
+
+			if (allowedTypes && !allowedTypes.includes(recordType)) {
+				recordViolated = true;
+				violations.push(
+					`${domain}:${lineNumber} [${id}] type "${recordType}" not in allowed_types [${allowedTypes.join(", ")}]`,
+				);
+			}
+
+			if (requiredFields) {
+				const missing = findMissingDomainFields(record, requiredFields);
+				if (missing.length > 0) {
+					recordViolated = true;
+					violations.push(
+						`${domain}:${lineNumber} [${id}] (${recordType}) missing required field(s): ${missing.join(", ")}`,
+					);
+				}
+			}
+
+			if (recordViolated) badCount++;
+		}
+
+		perDomain.push({
+			domain,
+			total,
+			conforming: total - badCount,
+			violations: badCount,
+			hasRules,
+		});
+	}
+
+	return { perDomain, violations };
+}
+
+async function checkDomainConformance(
+	config: MulchConfig,
+	cwd?: string,
+): Promise<{ info: DoctorCheck; violations: DoctorCheck }> {
+	const { perDomain, violations } = await collectDomainConformance(config, cwd);
+
+	const infoDetails = perDomain.map((d) => {
+		const rulesLabel = d.hasRules ? "rules" : "no rules";
+		return `${d.domain} (${rulesLabel}): ${d.conforming}/${d.total} conforming, ${d.violations} violation${d.violations === 1 ? "" : "s"}`;
+	});
+	const totalRecords = perDomain.reduce((s, d) => s + d.total, 0);
+	const totalViolations = perDomain.reduce((s, d) => s + d.violations, 0);
+	const info: DoctorCheck = {
+		name: "domain-conformance",
+		status: "pass",
+		message: `${totalRecords - totalViolations}/${totalRecords} record(s) conform to domain rules`,
+		fixable: false,
+		details: infoDetails,
+	};
+
+	const violationsCheck: DoctorCheck =
+		violations.length > 0
+			? {
+					name: "domain-violations",
+					status: "fail",
+					message: `${violations.length} record(s) violate domain rules (allowed_types / required_fields)`,
+					fixable: false,
+					details: violations,
+				}
+			: {
+					name: "domain-violations",
+					status: "pass",
+					message: "All records conform to domain rules",
+					fixable: false,
+					details: [],
+				};
+
+	return { info, violations: violationsCheck };
+}
+
 async function checkUpdateAvailable(): Promise<DoctorCheck> {
 	const current = getCurrentVersion();
 	const latest = getLatestVersion();
@@ -794,6 +932,9 @@ export function registerDoctorCommand(program: Command): void {
 			checks.push(await checkSchemaValidation(config));
 			checks.push(await checkUnknownTypes(config));
 			checks.push(await checkTypeRegistry(config));
+			const domainConformance = await checkDomainConformance(config);
+			checks.push(domainConformance.info);
+			checks.push(domainConformance.violations);
 			checks.push(await checkStaleRecords(config));
 			checks.push(await checkOrphanedDomains(config));
 			checks.push(await checkDuplicates(config));
