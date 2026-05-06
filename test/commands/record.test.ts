@@ -2303,6 +2303,44 @@ describe("per-domain required_fields (R-01c)", () => {
 		expect(r.stdout).toMatch(/Recorded decision/);
 	});
 
+	it("targeted hint when required_field is rejected by closed schema (mulch-cc51)", async () => {
+		// Domain demands a field that no allowed type holds (built-in convention
+		// has additionalProperties: false). Without the hint, AJV emits a
+		// confusing oneOf/additionalProperties soup. With the hint, the user
+		// learns the real cause: declare a custom_type or drop the requirement.
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { backend: { required_fields: ["oncall_owner"] } },
+			},
+			tmpDir,
+		);
+		await initRegistryFromConfig(tmpDir);
+		const filePath = getExpertisePath("backend", tmpDir);
+		await createExpertiseFile(filePath);
+
+		const result = await processStdinRecords(
+			"backend",
+			false,
+			false,
+			false,
+			JSON.stringify({
+				type: "convention",
+				content: "be on call",
+				oncall_owner: "@platform",
+				classification: "tactical",
+			}),
+			tmpDir,
+		);
+
+		expect(result.created).toBe(0);
+		expect(result.errors).toHaveLength(1);
+		const err = result.errors[0] as string;
+		expect(err).toMatch(/Domain "backend" requires field\(s\) "oncall_owner"/);
+		expect(err).toMatch(/type "convention" does not declare them/);
+		expect(err).toMatch(/custom_type/);
+	});
+
 	it("processStdinRecords rejects per-record when required_fields are missing", async () => {
 		await writeConfig(
 			{

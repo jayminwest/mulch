@@ -626,6 +626,124 @@ describe("doctor — domain conformance (R-01d)", () => {
 	});
 });
 
+describe("doctor — domain-rules-compatibility (mulch-cc51)", () => {
+	let compatDir: string;
+
+	beforeEach(async () => {
+		compatDir = await mkdtemp(join(tmpdir(), "mulch-doctor-compat-"));
+		await initMulchDir(compatDir);
+	});
+
+	afterEach(async () => {
+		await rm(compatDir, { recursive: true, force: true });
+	});
+
+	it("flags required_fields entries no allowed type can hold", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: {
+					backend: { required_fields: ["oncall_owner"] },
+				},
+			},
+			compatDir,
+		);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: compatDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find(
+			(c: { name: string }) => c.name === "domain-rules-compatibility",
+		);
+		expect(check.status).toBe("fail");
+		expect(check.message).toMatch(/1 domain required_field\(s\) incompatible/);
+		expect(check.details.length).toBe(1);
+		const detail = check.details[0] as string;
+		expect(detail).toContain('"backend"');
+		expect(detail).toContain('"oncall_owner"');
+		expect(detail).toContain("custom_type");
+	});
+
+	it("passes when required_fields names a base record field", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: {
+					backend: { required_fields: ["evidence", "tags"] },
+				},
+			},
+			compatDir,
+		);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: compatDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find(
+			(c: { name: string }) => c.name === "domain-rules-compatibility",
+		);
+		expect(check.status).toBe("pass");
+	});
+
+	it("passes when at least one allowed type declares the required field", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: {
+					// pattern declares `files` as optional, so requiring `files` is satisfiable.
+					notes: { allowed_types: ["pattern"], required_fields: ["files"] },
+				},
+			},
+			compatDir,
+		);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: compatDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find(
+			(c: { name: string }) => c.name === "domain-rules-compatibility",
+		);
+		expect(check.status).toBe("pass");
+	});
+
+	it("flags incompatibility scoped to the domain's allowed_types", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: {
+					// pattern has `files` (optional), but convention does not — when
+					// allowed_types is restricted to convention, requiring files is
+					// unsatisfiable even though some other type would accept it.
+					notes: { allowed_types: ["convention"], required_fields: ["files"] },
+				},
+			},
+			compatDir,
+		);
+
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: compatDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find(
+			(c: { name: string }) => c.name === "domain-rules-compatibility",
+		);
+		expect(check.status).toBe("fail");
+		const detail = check.details[0] as string;
+		expect(detail).toContain('"files"');
+		expect(detail).toContain("allowed: convention");
+	});
+});
+
 describe("doctor — dir_anchors (R-01)", () => {
 	it("flags broken dir_anchors[] paths in file-anchors check", async () => {
 		const filePath = getExpertisePath("testing", tmpDir);

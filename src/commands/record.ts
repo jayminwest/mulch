@@ -7,6 +7,7 @@ import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
 import { inferDirAnchors, normalizeDirAnchor } from "../utils/dir-anchors.ts";
 import {
 	findMissingDomainFields,
+	findRejectedRequiredFields,
 	getAllowedTypes,
 	getRequiredFields,
 } from "../utils/domain-rules.ts";
@@ -241,7 +242,16 @@ export async function processStdinRecords(
 				typeof recordType === "string" && requirements[recordType]
 					? `. Hint: ${requirements[recordType]}`
 					: "";
-			errors.push(`Record ${i}: ${validationErrors}${typeHint}`);
+			const rejectedRequired = findRejectedRequiredFields(validate.errors, requiredFields);
+			const domainHint =
+				rejectedRequired.length > 0
+					? `. Domain "${domain}" requires field(s) ${rejectedRequired
+							.map((f) => `"${f}"`)
+							.join(
+								", ",
+							)}, but type "${typeof recordType === "string" ? recordType : "?"}" does not declare them. Declare a custom_type that holds these fields, or remove them from required_fields in mulch.config.yaml.`
+					: "";
+			errors.push(`Record ${i}: ${validationErrors}${typeHint}${domainHint}`);
 			continue;
 		}
 
@@ -890,12 +900,30 @@ Batch recording examples:
 
 			// Validate against JSON schema (cached on registry)
 			const validate = getRegistry().validator;
+			// Pre-fetch required_fields so we can rewrite the AJV error when a
+			// rejected additionalProperty is one the domain demands — otherwise
+			// users see a confusing oneOf/additionalProperties soup with no hint
+			// that the real cause is the closed schema vs. domain rule mismatch.
+			const requiredFields = getRequiredFields(config, domain);
 			if (!validate(record)) {
 				const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
 				const requirements = buildTypeRequirements();
 				const typeHint = requirements[recordType] ? `. Hint: ${requirements[recordType]}` : "";
+				const rejectedRequired = findRejectedRequiredFields(validate.errors, requiredFields);
+				const domainHint =
+					rejectedRequired.length > 0
+						? `Domain "${domain}" requires field(s) ${rejectedRequired
+								.map((f) => `"${f}"`)
+								.join(
+									", ",
+								)}, but type "${recordType}" does not declare them. Declare a custom_type that holds these fields, or remove them from required_fields in mulch.config.yaml.`
+						: "";
 				if (jsonMode) {
-					outputJsonError("record", `Schema validation failed: ${errors.join("; ")}${typeHint}`);
+					const suffix = domainHint ? `. ${domainHint}` : "";
+					outputJsonError(
+						"record",
+						`Schema validation failed: ${errors.join("; ")}${typeHint}${suffix}`,
+					);
 				} else {
 					console.error(chalk.red("Error: record failed schema validation:"));
 					for (const err of validate.errors ?? []) {
@@ -903,6 +931,9 @@ Batch recording examples:
 					}
 					if (requirements[recordType]) {
 						console.error(chalk.yellow(`Hint: ${requirements[recordType]}`));
+					}
+					if (domainHint) {
+						console.error(chalk.yellow(`Hint: ${domainHint}`));
 					}
 				}
 				process.exitCode = 1;
@@ -913,7 +944,6 @@ Batch recording examples:
 			// fields enforced by the schema above. Lists all missing fields in a
 			// single error so users fix the config in one pass.
 			// --allow-domain-mismatch skips this gate (worktree/CI lag escape hatch).
-			const requiredFields = getRequiredFields(config, domain);
 			if (requiredFields && !allowDomainMismatch) {
 				const missingFields = findMissingDomainFields(
 					record as unknown as Record<string, unknown>,

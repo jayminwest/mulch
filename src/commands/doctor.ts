@@ -14,6 +14,7 @@ import {
 	writeConfig,
 } from "../utils/config.ts";
 import {
+	findIncompatibleRequiredFields,
 	findMissingDomainFields,
 	getAllowedTypes,
 	getRequiredFields,
@@ -616,6 +617,44 @@ async function collectDomainConformance(
 	return { perDomain, violations };
 }
 
+// Static compatibility check: a domain's required_fields can name a field that
+// no allowed type accepts. Built-in/custom schemas are closed
+// (additionalProperties: false), so writes silently fail with a confusing AJV
+// error. Surfacing this at doctor time tells the user to either declare a
+// custom_type that holds the field or drop it from required_fields.
+async function checkDomainRulesCompatibility(config: MulchConfig): Promise<DoctorCheck> {
+	const registry = getRegistry();
+	const details: string[] = [];
+	let count = 0;
+
+	for (const domain of Object.keys(config.domains)) {
+		const incompatible = findIncompatibleRequiredFields(config, domain, registry);
+		for (const { field, allowedTypes } of incompatible) {
+			count++;
+			details.push(
+				`domain "${domain}" requires field "${field}", but no allowed type accepts it (allowed: ${allowedTypes.join(", ")}). Declare a custom_type with "${field}" in required/optional, or remove "${field}" from required_fields.`,
+			);
+		}
+	}
+
+	if (count > 0) {
+		return {
+			name: "domain-rules-compatibility",
+			status: "fail",
+			message: `${count} domain required_field(s) incompatible with allowed types`,
+			fixable: false,
+			details,
+		};
+	}
+	return {
+		name: "domain-rules-compatibility",
+		status: "pass",
+		message: "All domain required_fields are compatible with allowed types",
+		fixable: false,
+		details: [],
+	};
+}
+
 async function checkDomainConformance(
 	config: MulchConfig,
 	cwd?: string,
@@ -947,6 +986,7 @@ export function registerDoctorCommand(program: Command): void {
 			checks.push(await checkSchemaValidation(config));
 			checks.push(await checkUnknownTypes(config));
 			checks.push(await checkTypeRegistry(config));
+			checks.push(await checkDomainRulesCompatibility(config));
 			const domainConformance = await checkDomainConformance(config);
 			checks.push(domainConformance.info);
 			checks.push(domainConformance.violations);

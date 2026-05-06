@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+#### Per-domain `required_fields` incompatibility surfaces clearly (mulch-cc51)
+- **New `domain-rules-compatibility` doctor check**: when `domain.required_fields` names a field no allowed type can hold (built-in/custom schemas use `additionalProperties: false`), `ml doctor` now reports the offending field, lists the domain's allowed types, and prints a fix-it hint pointing at `custom_types`. Catches the misconfiguration at config time instead of every write.
+- **Targeted runtime hint on AJV failure**: when a record write fails schema validation AND the rejected `additionalProperty` is in `domain.required_fields`, `ml record` now appends a clear hint identifying the field and the type that doesn't declare it, instead of letting users wade through the raw `oneOf` / `additionalProperties` soup.
+
 #### Custom-type summary templates: brace-style + register-time validation (mulch-2da1)
 - **Mustache-style `{{field}}` now resolves identically to `{field}`** in `compileSummaryTemplate`, so the prior init-wizard examples (and any user templates copied from Mustache-style docs) render correctly instead of leaking literal braces around the value.
 - **Unknown-token validation at registry load**: `validateCustomTypeConfig` now rejects summary templates whose tokens aren't declared on the type (or inherited via `extends`, or a base record field). The error names the bad token and lists every legal one, replacing the previous silent empty-string render at `ml prime` time.
