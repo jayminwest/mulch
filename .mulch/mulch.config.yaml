@@ -1,13 +1,67 @@
 version: '1'
 domains:
-  - cli
-  - architecture
-  - testing
-  - typescript
-  - agents
-  - ecosystem
-  - orchestration
-  - lint
+  cli:
+    # cli is the firehose: every record type is in active use.
+    allowed_types:
+      - convention
+      - pattern
+      - failure
+      - decision
+      - reference
+      - guide
+  architecture:
+    # Architectural notes lean toward decisions/patterns + occasional references.
+    allowed_types:
+      - decision
+      - pattern
+      - reference
+      - guide
+  testing:
+    # Testing surfaces conventions, patterns, and known flakes.
+    allowed_types:
+      - convention
+      - pattern
+      - failure
+      - guide
+  typescript:
+    # Language-level conventions and the failures that motivated them.
+    allowed_types:
+      - convention
+      - pattern
+      - failure
+      - decision
+  agents:
+    # Agent-watchdog signals are predominantly failure reports.
+    allowed_types:
+      - failure
+      - pattern
+      - convention
+  ecosystem:
+    # Cross-tool integration notes — keep types broad, require evidence so the
+    # tracker linkage is recorded (every existing record already carries it).
+    allowed_types:
+      - failure
+      - pattern
+      - convention
+      - decision
+      - reference
+    required_fields:
+      - evidence
+  orchestration:
+    # Orchestration patterns + the decisions that produced them.
+    allowed_types:
+      - pattern
+      - decision
+      - convention
+      - reference
+    required_fields:
+      - evidence
+  lint:
+    # Lint policy is decision-shaped today; keep room for conventions/failures.
+    allowed_types:
+      - decision
+      - convention
+      - failure
 governance:
   max_entries: 100
   warn_entries: 150
