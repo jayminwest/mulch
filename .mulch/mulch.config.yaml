@@ -9,6 +9,7 @@ domains:
       - decision
       - reference
       - guide
+      - release_decision
   architecture:
     # Architectural notes lean toward decisions/patterns + occasional references.
     allowed_types:
@@ -16,6 +17,7 @@ domains:
       - pattern
       - reference
       - guide
+      - release_decision
   testing:
     # Testing surfaces conventions, patterns, and known flakes.
     allowed_types:
@@ -23,6 +25,7 @@ domains:
       - pattern
       - failure
       - guide
+      - flake_symptom
   typescript:
     # Language-level conventions and the failures that motivated them.
     allowed_types:
@@ -36,6 +39,7 @@ domains:
       - failure
       - pattern
       - convention
+      - flake_symptom
   ecosystem:
     # Cross-tool integration notes — keep types broad, require evidence so the
     # tracker linkage is recorded (every existing record already carries it).
@@ -70,3 +74,28 @@ classification_defaults:
   shelf_life:
     tactical: 14
     observational: 30
+custom_types:
+  release_decision:
+    extends: decision
+    # Decisions tied to a specific version bump (v0.x → v1.x calls,
+    # breaking-change rationale). Inherits title/rationale from `decision`;
+    # adds `version` (always) and `breaking` (optional, "true"/"false" since
+    # the schema layer types custom-type props as string).
+    required: [version]
+    optional: [breaking]
+    summary: "{title} (v{version})"
+  flake_symptom:
+    extends: failure
+    # Flaky-test reports. `test_path` is required so the failure is anchored
+    # to a real spec; `flake_rate` is optional (we rarely have a stable %).
+    required: [test_path]
+    optional: [flake_rate]
+    aliases:
+      # Older notes referenced the field as `flake_path`. Read-time rewrite
+      # keeps legacy on-disk records loadable.
+      test_path: [flake_path]
+    summary: "{test_path}"
+# Placeholder. Populate with type names (built-in or custom) you want to
+# retire — writes emit a deprecation warning, reads keep working, and peers
+# in shared domains don't hard-fail.
+disabled_types: []
