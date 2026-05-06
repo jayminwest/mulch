@@ -655,9 +655,7 @@ describe("doctor — domain-rules-compatibility (mulch-cc51)", () => {
 			timeout: 10000,
 		});
 		const out = JSON.parse(r.stdout);
-		const check = out.checks.find(
-			(c: { name: string }) => c.name === "domain-rules-compatibility",
-		);
+		const check = out.checks.find((c: { name: string }) => c.name === "domain-rules-compatibility");
 		expect(check.status).toBe("fail");
 		expect(check.message).toMatch(/1 domain required_field\(s\) incompatible/);
 		expect(check.details.length).toBe(1);
@@ -684,9 +682,7 @@ describe("doctor — domain-rules-compatibility (mulch-cc51)", () => {
 			timeout: 10000,
 		});
 		const out = JSON.parse(r.stdout);
-		const check = out.checks.find(
-			(c: { name: string }) => c.name === "domain-rules-compatibility",
-		);
+		const check = out.checks.find((c: { name: string }) => c.name === "domain-rules-compatibility");
 		expect(check.status).toBe("pass");
 	});
 
@@ -708,9 +704,7 @@ describe("doctor — domain-rules-compatibility (mulch-cc51)", () => {
 			timeout: 10000,
 		});
 		const out = JSON.parse(r.stdout);
-		const check = out.checks.find(
-			(c: { name: string }) => c.name === "domain-rules-compatibility",
-		);
+		const check = out.checks.find((c: { name: string }) => c.name === "domain-rules-compatibility");
 		expect(check.status).toBe("pass");
 	});
 
@@ -734,9 +728,7 @@ describe("doctor — domain-rules-compatibility (mulch-cc51)", () => {
 			timeout: 10000,
 		});
 		const out = JSON.parse(r.stdout);
-		const check = out.checks.find(
-			(c: { name: string }) => c.name === "domain-rules-compatibility",
-		);
+		const check = out.checks.find((c: { name: string }) => c.name === "domain-rules-compatibility");
 		expect(check.status).toBe("fail");
 		const detail = check.details[0] as string;
 		expect(detail).toContain('"files"');
