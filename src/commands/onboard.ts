@@ -7,18 +7,18 @@ import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/
 import { isQuiet } from "../utils/palette.ts";
 import { getCurrentVersion } from "../utils/version.ts";
 
-// Schema version drives outdated-snippet detection. Bump when the snippet body
-// changes in a way that should invalidate existing installs. Independent of
-// package.version, which is rendered for display only.
-export const ONBOARD_SCHEMA_VERSION = 5;
-export const SCHEMA_MARKER = `<!-- mulch-onboard-schema:${String(ONBOARD_SCHEMA_VERSION)} -->`;
+// Single marker carries both display and detection: snippets are considered
+// current iff they include the marker for the running CLI's package version.
+// Patch bumps therefore prompt re-run, which is the desired UX (the visible
+// version in CLAUDE.md should track the installed Mulch).
+export function getVersionMarker(): string {
+	return `<!-- mulch-onboard:v${getCurrentVersion()} -->`;
+}
 
 function buildSnippet(): string {
 	const pkgVersion = getCurrentVersion();
-	const versionMarker = `<!-- mulch-onboard:v${pkgVersion} -->`;
 	return `## Project Expertise (Mulch)
-${SCHEMA_MARKER}
-${versionMarker}
+<!-- mulch-onboard:v${pkgVersion} -->
 
 This project uses [Mulch](https://github.com/jayminwest/mulch) v${pkgVersion} for structured expertise management.
 
@@ -134,7 +134,7 @@ function replaceLegacySnippet(content: string, newSection: string): string {
 
 function isSnippetCurrent(content: string): boolean {
 	if (!hasMarkerSection(content)) return false;
-	return content.includes(SCHEMA_MARKER);
+	return content.includes(getVersionMarker());
 }
 
 async function findSnippetLocations(cwd: string): Promise<OnboardTarget[]> {

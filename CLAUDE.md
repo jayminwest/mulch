@@ -95,7 +95,6 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 <!-- mulch:start -->
 ## Project Expertise (Mulch)
-<!-- mulch-onboard-schema:5 -->
 <!-- mulch-onboard:v0.8.0 -->
 
 This project uses [Mulch](https://github.com/jayminwest/mulch) v0.8.0 for structured expertise management.
