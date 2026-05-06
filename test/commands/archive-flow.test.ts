@@ -215,6 +215,50 @@ describe("ml restore", () => {
 		expect(result.exitCode).toBe(1);
 		expect(result.stderr).toContain("not found");
 	});
+
+	it("refuses to restore over a duplicate live id and leaves the archive intact", async () => {
+		// Seed a stale tactical, prune it (soft-archive), then re-record a NEW
+		// record with the same id while it's archived. Restore must refuse
+		// rather than silently produce a duplicate-id live file.
+		await seedDomain(tmpDir, "testing", [
+			{
+				id: "mx-dup001",
+				type: "convention",
+				content: "Stale tactical",
+				classification: "tactical",
+				recorded_at: daysAgo(30),
+			},
+		]);
+
+		await runCommand(tmpDir, registerPruneCommand, ["prune"]);
+
+		const archivedBefore = await readArchiveFile(getArchivePath("testing", tmpDir));
+		expect(archivedBefore).toHaveLength(1);
+		expect(archivedBefore[0]?.id).toBe("mx-dup001");
+
+		// Re-add the same id to live by hand, simulating a re-record.
+		await appendRecord(getExpertisePath("testing", tmpDir), {
+			id: "mx-dup001",
+			type: "convention",
+			content: "Replacement live record with same id",
+			classification: "foundational",
+			recorded_at: daysAgo(0),
+		});
+
+		const result = await runCommand(tmpDir, registerRestoreCommand, ["restore", "mx-dup001"]);
+		expect(result.exitCode).toBe(1);
+		expect(result.stderr).toMatch(/already exists/i);
+
+		// Live file unchanged: still exactly one record with that id.
+		const liveAfter = await readExpertiseFile(getExpertisePath("testing", tmpDir));
+		expect(liveAfter.filter((r) => r.id === "mx-dup001")).toHaveLength(1);
+		expect(liveAfter[0]).toMatchObject({ content: "Replacement live record with same id" });
+
+		// Archive untouched: the original is still there for `ml search --archived`.
+		const archivedAfter = await readArchiveFile(getArchivePath("testing", tmpDir));
+		expect(archivedAfter).toHaveLength(1);
+		expect(archivedAfter[0]?.id).toBe("mx-dup001");
+	});
 });
 
 describe("ml search --archived", () => {

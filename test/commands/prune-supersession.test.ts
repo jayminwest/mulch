@@ -351,6 +351,138 @@ describe("ml prune — supersession-based auto-demotion (R-05e)", () => {
 		expect(archive[0]?.supersession_demoted_at).toBeUndefined();
 	});
 
+	it("A↔B supersession cycle: neither cycle member is demoted, both stay live", async () => {
+		// Pre-fix bug: A.supersedes=[B] and B.supersedes=[A] caused both ids to
+		// land in supersededIds, so both got demoted/archived together. The
+		// cycle-detection path must keep both alive.
+		const aId = "mx-cycle1a";
+		const bId = "mx-cycle1b";
+		await seedDomain(tmpDir, "testing", [
+			{
+				id: aId,
+				type: "convention",
+				content: "Record A",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [bId],
+			},
+			{
+				id: bId,
+				type: "convention",
+				content: "Record B",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [aId],
+			},
+		]);
+
+		const result = await runPrune(tmpDir, []);
+		expect(result.exitCode ?? 0).toBe(0);
+		expect(result.stderr).toMatch(/cycle/i);
+
+		const live = await readLive(tmpDir, "testing");
+		expect(live).toHaveLength(2);
+		const a = findById(live, aId);
+		const b = findById(live, bId);
+		expect(a?.classification).toBe("foundational");
+		expect(b?.classification).toBe("foundational");
+		expect(a?.supersession_demoted_at).toBeUndefined();
+		expect(b?.supersession_demoted_at).toBeUndefined();
+		expect(existsSync(getArchivePath("testing", tmpDir))).toBe(false);
+	});
+
+	it("triangular supersession cycle (A→B→C→A): all three cycle members survive a prune pass", async () => {
+		const aId = "mx-tri001a";
+		const bId = "mx-tri001b";
+		const cId = "mx-tri001c";
+		await seedDomain(tmpDir, "testing", [
+			{
+				id: aId,
+				type: "convention",
+				content: "A supersedes B",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [bId],
+			},
+			{
+				id: bId,
+				type: "convention",
+				content: "B supersedes C",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [cId],
+			},
+			{
+				id: cId,
+				type: "convention",
+				content: "C supersedes A",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [aId],
+			},
+		]);
+
+		const result = await runPrune(tmpDir, []);
+		expect(result.exitCode ?? 0).toBe(0);
+
+		const live = await readLive(tmpDir, "testing");
+		expect(live).toHaveLength(3);
+		for (const id of [aId, bId, cId]) {
+			expect(findById(live, id)?.classification).toBe("foundational");
+		}
+	});
+
+	it("a record outside any cycle still demotes even when other records form a cycle", async () => {
+		const cycleA = "mx-mix001a";
+		const cycleB = "mx-mix001b";
+		const oldId = "mx-mix001c";
+		const replacementId = "mx-mix001d";
+		await seedDomain(tmpDir, "testing", [
+			{
+				id: cycleA,
+				type: "convention",
+				content: "Cycle A",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [cycleB],
+			},
+			{
+				id: cycleB,
+				type: "convention",
+				content: "Cycle B",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [cycleA],
+			},
+			{
+				id: oldId,
+				type: "convention",
+				content: "Genuinely old",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+			},
+			{
+				id: replacementId,
+				type: "convention",
+				content: "Replacement (no cycle)",
+				classification: "foundational",
+				recorded_at: daysAgo(1),
+				supersedes: [oldId],
+			},
+		]);
+
+		const result = await runPrune(tmpDir, []);
+		expect(result.exitCode ?? 0).toBe(0);
+
+		const live = await readLive(tmpDir, "testing");
+		// Cycle members untouched.
+		expect(findById(live, cycleA)?.classification).toBe("foundational");
+		expect(findById(live, cycleB)?.classification).toBe("foundational");
+		// Non-cycle supersession still demotes.
+		expect(findById(live, oldId)?.classification).toBe("tactical");
+		expect(typeof findById(live, oldId)?.supersession_demoted_at).toBe("string");
+	});
+
 	it("self-supersession does not demote a record (typo guard)", async () => {
 		const selfId = "mx-aaaa08";
 		await seedDomain(tmpDir, "testing", [

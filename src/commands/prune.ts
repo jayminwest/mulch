@@ -84,24 +84,122 @@ function nextDemotionTier(c: Classification): Classification | null {
 }
 
 /**
- * Set of record IDs referenced by any live record's `supersedes` field,
- * unioned across every domain. Cross-domain by design — supersession is
- * content-relational, not domain-bound. Self-references are filtered out.
+ * Identify ids that participate in any supersession cycle (SCC of size > 1).
+ * Iterative Tarjan, so long chains and self-loops can't blow the stack.
+ * Self-loops are filtered at edge-collection time so they don't register as
+ * trivial cycles.
  */
-function collectSupersededIds(
-	liveByDomain: ReadonlyArray<{ records: ExpertiseRecord[] }>,
-): Set<string> {
-	const superseded = new Set<string>();
-	for (const { records } of liveByDomain) {
-		for (const r of records) {
-			if (!r.supersedes || r.supersedes.length === 0) continue;
-			for (const targetId of r.supersedes) {
-				if (targetId === r.id) continue;
-				superseded.add(targetId);
+function findSupersessionCycleIds(graph: ReadonlyMap<string, Set<string>>): Set<string> {
+	const cycleIds = new Set<string>();
+	const indices = new Map<string, number>();
+	const lowlinks = new Map<string, number>();
+	const onStack = new Set<string>();
+	const stack: string[] = [];
+	let nextIndex = 0;
+
+	type Frame = { node: string; iter: Iterator<string>; pendingChild: string | null };
+	for (const start of graph.keys()) {
+		if (indices.has(start)) continue;
+		const callStack: Frame[] = [];
+		const open = (node: string) => {
+			indices.set(node, nextIndex);
+			lowlinks.set(node, nextIndex);
+			nextIndex++;
+			stack.push(node);
+			onStack.add(node);
+			const edges = graph.get(node);
+			callStack.push({
+				node,
+				iter: (edges ?? new Set<string>()).values(),
+				pendingChild: null,
+			});
+		};
+		open(start);
+
+		while (callStack.length > 0) {
+			const frame = callStack[callStack.length - 1];
+			if (!frame) break;
+			if (frame.pendingChild !== null) {
+				const childLow = lowlinks.get(frame.pendingChild);
+				const nodeLow = lowlinks.get(frame.node);
+				if (childLow !== undefined && nodeLow !== undefined && childLow < nodeLow) {
+					lowlinks.set(frame.node, childLow);
+				}
+				frame.pendingChild = null;
+			}
+			const next = frame.iter.next();
+			if (next.done) {
+				const idx = indices.get(frame.node);
+				const low = lowlinks.get(frame.node);
+				if (idx !== undefined && low !== undefined && idx === low) {
+					const component: string[] = [];
+					while (stack.length > 0) {
+						const popped = stack.pop();
+						if (popped === undefined) break;
+						onStack.delete(popped);
+						component.push(popped);
+						if (popped === frame.node) break;
+					}
+					if (component.length > 1) {
+						for (const c of component) cycleIds.add(c);
+					}
+				}
+				callStack.pop();
+				continue;
+			}
+			const target = next.value;
+			if (!indices.has(target)) {
+				frame.pendingChild = target;
+				open(target);
+			} else if (onStack.has(target)) {
+				const targetIdx = indices.get(target);
+				const nodeLow = lowlinks.get(frame.node);
+				if (targetIdx !== undefined && nodeLow !== undefined && targetIdx < nodeLow) {
+					lowlinks.set(frame.node, targetIdx);
+				}
 			}
 		}
 	}
-	return superseded;
+	return cycleIds;
+}
+
+/**
+ * Set of record IDs referenced by any live record's `supersedes` field,
+ * unioned across every domain. Cross-domain by design — supersession is
+ * content-relational, not domain-bound. Self-references are filtered out,
+ * and any record that participates in a multi-record cycle (e.g. A↔B) is
+ * excluded so cycle members aren't both demoted/archived together.
+ */
+function collectSupersededIds(liveByDomain: ReadonlyArray<{ records: ExpertiseRecord[] }>): {
+	supersededIds: Set<string>;
+	cycleIds: Set<string>;
+} {
+	const graph = new Map<string, Set<string>>();
+	const allEdges: Array<[string, string]> = [];
+	for (const { records } of liveByDomain) {
+		for (const r of records) {
+			if (!r.id || !r.supersedes || r.supersedes.length === 0) continue;
+			let edges = graph.get(r.id);
+			if (!edges) {
+				edges = new Set<string>();
+				graph.set(r.id, edges);
+			}
+			for (const targetId of r.supersedes) {
+				if (targetId === r.id) continue;
+				edges.add(targetId);
+				if (!graph.has(targetId)) graph.set(targetId, new Set<string>());
+				allEdges.push([r.id, targetId]);
+			}
+		}
+	}
+
+	const cycleIds = findSupersessionCycleIds(graph);
+	const supersededIds = new Set<string>();
+	for (const [, target] of allEdges) {
+		if (cycleIds.has(target)) continue;
+		supersededIds.add(target);
+	}
+	return { supersededIds, cycleIds };
 }
 
 export function registerPruneCommand(program: Command): void {
@@ -167,7 +265,14 @@ export function registerPruneCommand(program: Command): void {
 					liveByDomain.push({ domain, records });
 				}
 
-				const supersededIds = collectSupersededIds(liveByDomain);
+				const { supersededIds, cycleIds } = collectSupersededIds(liveByDomain);
+				if (cycleIds.size > 0 && !jsonMode && !isQuiet()) {
+					console.error(
+						chalk.yellow(
+							`Warning: supersession cycle detected for ${cycleIds.size} record(s); cycle members will not be demoted. Run \`ml doctor\` for details.`,
+						),
+					);
+				}
 
 				// Per-record anchor validity, keyed by record id (only when
 				// --check-anchors is set). Records with no id are evaluated inline

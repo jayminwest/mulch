@@ -109,16 +109,25 @@ export async function removeFromArchive(
 	});
 }
 
+export type RestoreResult = { ok: true } | { ok: false; conflict: ExpertiseRecord };
+
 /**
  * Append a single record to a live expertise file under a lock. Used by
- * `ml restore` to push an archived record back into circulation.
+ * `ml restore` to push an archived record back into circulation. Refuses
+ * to write when a live record with the same id already exists — restoring
+ * over a live id silently created duplicates pre-v0.8.1.
  */
 export async function restoreToExpertise(
 	expertisePath: string,
 	record: ExpertiseRecord,
-): Promise<void> {
-	await withFileLock(expertisePath, async () => {
+): Promise<RestoreResult> {
+	return withFileLock(expertisePath, async () => {
 		const existing = await readExpertiseFile(expertisePath);
+		if (record.id !== undefined) {
+			const conflict = existing.find((r) => r.id === record.id);
+			if (conflict) return { ok: false, conflict };
+		}
 		await writeExpertiseFile(expertisePath, [...existing, record]);
+		return { ok: true };
 	});
 }

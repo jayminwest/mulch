@@ -2,6 +2,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import type { ExpertiseRecord } from "../schemas/record.ts";
 import {
+	archiveRecords,
 	getArchivePath,
 	readArchiveFile,
 	removeFromArchive,
@@ -9,7 +10,7 @@ import {
 	stripArchiveFields,
 } from "../utils/archive.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
-import { resolveRecordId } from "../utils/expertise.ts";
+import { readExpertiseFile, resolveRecordId } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
@@ -77,6 +78,24 @@ export function registerRestoreCommand(program: Command): void {
 					return;
 				}
 
+				// Pre-check: refuse to restore over an existing live id BEFORE touching
+				// the archive. Race-safe re-check happens inside restoreToExpertise
+				// under the live file's lock; if that catches a duplicate we'll roll
+				// the archive back below.
+				const expertisePath = getExpertisePath(domain);
+				const liveExisting = await readExpertiseFile(expertisePath);
+				const livePreConflict = liveExisting.find((r) => r.id === recordId);
+				if (livePreConflict) {
+					const msg = `Live record "${recordId}" already exists in domain "${domain}" (classification: ${livePreConflict.classification}). Delete or rename the live record before restoring, or run \`ml search --archived ${recordId}\` to inspect the archived copy.`;
+					if (jsonMode) {
+						outputJsonError("restore", msg);
+					} else {
+						console.error(chalk.red(`Error: ${msg}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+
 				const removed = await removeFromArchive(domain, recordId);
 				if (!removed) {
 					const msg = `Archived record "${recordId}" disappeared between read and write (concurrent restore?).`;
@@ -90,8 +109,20 @@ export function registerRestoreCommand(program: Command): void {
 				}
 
 				const live = stripArchiveFields(removed);
-				const expertisePath = getExpertisePath(domain);
-				await restoreToExpertise(expertisePath, live);
+				const restoreRes = await restoreToExpertise(expertisePath, live);
+				if (!restoreRes.ok) {
+					// Race lost between pre-check and lock. Roll the archive back so
+					// the record isn't stranded.
+					await archiveRecords(domain, [stripArchiveFields(removed)], new Date());
+					const msg = `Live record "${recordId}" appeared in domain "${domain}" while restore was in flight (classification: ${restoreRes.conflict.classification}). Re-archived; nothing changed.`;
+					if (jsonMode) {
+						outputJsonError("restore", msg);
+					} else {
+						console.error(chalk.red(`Error: ${msg}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
 
 				if (jsonMode) {
 					outputJson({

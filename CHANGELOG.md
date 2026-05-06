@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Archive-lifecycle data integrity** (mulch-9096): `ml restore` now refuses to overwrite a live record with the same id instead of silently producing a duplicate-id JSONL. The pre-check runs before the archive is touched; a race-safe re-check inside the live-file lock rolls the archive back if a duplicate appears mid-flight. Supersession cycle detection (Tarjan SCC, iterative) excludes any record that participates in a cycle (A↔B, A→B→C→A, etc.) from `supersededIds`, so cycle members are no longer demoted/archived together. Cycle detection emits a yellow warning on `ml prune` so operators notice the misconfiguration.
+
 ## [0.8.0] - 2026-05-06
 
 Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provider recipes — Mulch grows up from "shared shelf" to "shared shelf with rules and lifecycle". Custom types now inherit from built-ins, records can anchor to directories, prune demotes superseded/decayed records before archiving, and a new `ml rank` surfaces top confirmation-frequency records without a query. 1120 tests across 58 files (up from 840 / 41 in 0.7.0).
