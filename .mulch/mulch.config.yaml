@@ -99,3 +99,21 @@ custom_types:
 # retire — writes emit a deprecation warning, reads keep working, and peers
 # in shared domains don't hard-fail.
 disabled_types: []
+hooks:
+  # pre-record: append `author:<git-email>` to record.tags[] (uses tags
+  # because record schemas are additionalProperties:false — a top-level
+  # `owner` field would fail re-validation).
+  pre-record:
+    - ./.mulch/hooks/inject-author-tag.sh
+  # pre-prune: print a digest of candidates to stderr before destructive
+  # archive runs (hooks are skipped on `--dry-run`).
+  pre-prune:
+    - ./.mulch/hooks/prune-digest.sh
+  # pre-prime: warn to stderr when the loaded set is large enough that
+  # `--manifest` or `--domain` scoping would save context.
+  pre-prime:
+    - ./.mulch/hooks/prime-budget-warn.sh
+hook_settings:
+  # Per-hook timeout in ms. Default is 5000; pinned explicitly so the value
+  # survives a future default change.
+  timeout_ms: 5000
