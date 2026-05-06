@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+	assertWritableDirAnchor,
 	fileLivesUnderDir,
 	inferDirAnchors,
 	normalizeDirAnchor,
@@ -18,6 +19,42 @@ describe("normalizeDirAnchor", () => {
 
 	it("converts backslashes to POSIX separators", () => {
 		expect(normalizeDirAnchor("src\\utils")).toBe("src/utils");
+	});
+
+	it("strips a leading ./ prefix", () => {
+		// Regression for mulch-c282: prior normalization left "./prefix" untouched
+		// so the same anchor stored from `--dir-anchor src/foo` and
+		// `--dir-anchor ./src/foo` lived in two different equivalence classes
+		// and missed each other in dedup / containment checks.
+		expect(normalizeDirAnchor("./src/foo")).toBe("src/foo");
+		expect(normalizeDirAnchor("./src/foo/")).toBe("src/foo");
+	});
+});
+
+describe("assertWritableDirAnchor", () => {
+	it("accepts repo-root-relative paths", () => {
+		expect(() => assertWritableDirAnchor("src/utils")).not.toThrow();
+		expect(() => assertWritableDirAnchor("./src/utils")).not.toThrow();
+		expect(() => assertWritableDirAnchor("")).not.toThrow();
+		expect(() => assertWritableDirAnchor("a/b/c/d")).not.toThrow();
+	});
+
+	it("rejects POSIX absolute paths", () => {
+		expect(() => assertWritableDirAnchor("/etc/passwd")).toThrow(/absolute path/);
+		expect(() => assertWritableDirAnchor("/")).toThrow(/absolute path/);
+	});
+
+	it("rejects Windows absolute paths", () => {
+		expect(() => assertWritableDirAnchor("C:\\Users\\me")).toThrow(/absolute path/);
+		expect(() => assertWritableDirAnchor("D:/repo/src")).toThrow(/absolute path/);
+		expect(() => assertWritableDirAnchor("\\\\server\\share")).toThrow(/absolute path/);
+	});
+
+	it("rejects parent-traversal segments", () => {
+		expect(() => assertWritableDirAnchor("..")).toThrow(/parent traversal/);
+		expect(() => assertWritableDirAnchor("../parent")).toThrow(/parent traversal/);
+		expect(() => assertWritableDirAnchor("src/../sibling")).toThrow(/parent traversal/);
+		expect(() => assertWritableDirAnchor("a/b/../c")).toThrow(/parent traversal/);
 	});
 });
 

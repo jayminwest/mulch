@@ -2546,6 +2546,69 @@ describe("dir_anchors (R-01)", () => {
 		expect(records[0]?.dir_anchors).toEqual(["src/foo"]);
 	});
 
+	it("normalizes a leading './' on write (mulch-c282)", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"convention",
+				"./ prefix test",
+				"--dir-anchor",
+				"./src/foo",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records[0]?.dir_anchors).toEqual(["src/foo"]);
+	});
+
+	it("rejects an absolute --dir-anchor path with a formatted error (mulch-c282)", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"convention",
+				"absolute reject",
+				"--dir-anchor",
+				"/etc/passwd",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toContain("absolute path");
+		// Record should not have been written.
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records).toEqual([]);
+	});
+
+	it("rejects a parent-traversal --dir-anchor with a formatted error (mulch-c282)", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"convention",
+				"traversal reject",
+				"--dir-anchor",
+				"../escape",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toContain("parent traversal");
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records).toEqual([]);
+	});
+
 	it("auto-populates dir_anchors from common parent of 3+ changed files", async () => {
 		execSync("mkdir -p src/utils", { cwd: tmpDir });
 		await writeFile(join(tmpDir, "src/utils/a.ts"), "// a", "utf-8");

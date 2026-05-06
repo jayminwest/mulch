@@ -4,7 +4,11 @@ import { type Command, Option } from "commander";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
 import type { Classification, Evidence, ExpertiseRecord, Outcome } from "../schemas/record.ts";
 import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
-import { inferDirAnchors, normalizeDirAnchor } from "../utils/dir-anchors.ts";
+import {
+	assertWritableDirAnchor,
+	inferDirAnchors,
+	normalizeDirAnchor,
+} from "../utils/dir-anchors.ts";
 import {
 	findMissingDomainFields,
 	findRejectedRequiredFields,
@@ -807,12 +811,29 @@ Batch recording examples:
 
 			// dir_anchors: explicit --dir-anchor wins; otherwise infer from changed
 			// files (3+ files sharing a parent directory). Normalized to drop
-			// trailing slashes; "." / repo root collapses to nothing stored.
-			const explicitDirAnchors = Array.isArray(options.dirAnchor)
-				? (options.dirAnchor as string[])
-						.map((p) => normalizeDirAnchor(p))
-						.filter((p) => p.length > 0)
-				: [];
+			// trailing slashes and a leading "./"; "." / repo root collapses to
+			// nothing stored. Absolute paths and ".." traversal are rejected with
+			// a formatted error before validation builds the record.
+			let explicitDirAnchors: string[] = [];
+			if (Array.isArray(options.dirAnchor)) {
+				try {
+					for (const raw of options.dirAnchor as string[]) {
+						assertWritableDirAnchor(raw);
+					}
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					if (jsonMode) {
+						outputJsonError("record", msg);
+					} else {
+						console.error(chalk.red(`Error: ${msg}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+				explicitDirAnchors = (options.dirAnchor as string[])
+					.map((p) => normalizeDirAnchor(p))
+					.filter((p) => p.length > 0);
+			}
 			let dirAnchors: string[] | undefined;
 			if (explicitDirAnchors.length > 0) {
 				dirAnchors = [...new Set(explicitDirAnchors)].sort();

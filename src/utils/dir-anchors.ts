@@ -1,12 +1,38 @@
-// Repo-relative POSIX paths. Strip trailing slashes, normalize "." → "" (root),
-// keep "" out of stored anchors (meaningless to anchor at the repo root).
+// Repo-relative POSIX paths. Strip trailing slashes and a leading "./", coerce
+// repo-root markers ("." / "" / "./") to "" so they're filtered out of stored
+// anchors (meaningless to anchor at the repo root). Tolerant of legacy values
+// on disk: never throws — see assertWritableDirAnchor for write-time validation
+// (which rejects absolute paths and parent-traversal segments).
 export function normalizeDirAnchor(input: string): string {
 	let v = input.trim();
 	if (v === "" || v === ".") return "";
 	v = v.replace(/\\+/g, "/");
 	v = v.replace(/\/+$/, "");
-	if (v === ".") return "";
+	if (v.startsWith("./")) v = v.slice(2);
+	v = v.replace(/\/+$/, "");
+	if (v === "" || v === ".") return "";
 	return v;
+}
+
+// Throws if the input is unsafe to store as a project-root-relative anchor:
+// absolute paths (`/etc/passwd`, `C:\…`) and parent-traversal segments (`..`)
+// would silently break ml prime/--files matching, doctor's existsSync probe,
+// and anchor-validity decay. Called at write time (ml record / ml edit) so
+// invalid input surfaces as a formatted error before it lands on disk.
+export function assertWritableDirAnchor(raw: string): void {
+	const v = raw.trim();
+	if (v.length === 0) return;
+	if (/^[a-zA-Z]:[\\/]/.test(v) || v.startsWith("/") || v.startsWith("\\")) {
+		throw new Error(
+			`dir-anchor "${raw}" is an absolute path. Use a project-root-relative path like "src/utils".`,
+		);
+	}
+	const segments = v.replace(/\\+/g, "/").split("/");
+	if (segments.includes("..")) {
+		throw new Error(
+			`dir-anchor "${raw}" contains ".." (parent traversal). Anchors must stay inside the project root.`,
+		);
+	}
 }
 
 export function fileLivesUnderDir(file: string, dir: string): boolean {
