@@ -145,23 +145,37 @@ no hijacking of Claude's memory writes in v1.
 ---
 
 ## R-04 — Provider plugin registry
-Status: [proposed] — seeded as mulch-6deb
+Status: [shipped]
+Shipped: provider recipe discovery (mulch-6deb, 2026-05-06). `ml setup <name>` resolves recipes
+via discovery instead of a closed `Record<Provider, ProviderRecipe>`. Resolution order:
+filesystem (`.mulch/recipes/<name>.{ts,sh}`) → npm (`mulch-recipe-<name>`) → built-in;
+filesystem wins so orgs can override built-ins. TypeScript recipes are loaded directly by Bun
+(default export validated against `ProviderRecipe`); shell recipes are invoked as
+`<script> install|check|remove` with `MULCH_RECIPE_NAME` / `MULCH_RECIPE_ACTION` in env;
+npm recipes resolve via `require.resolve('mulch-recipe-<name>')` from the project root.
+`ml setup --list` (and `--list --json`) surfaces every discovered provider with its source and
+flags built-ins shadowed by a same-named filesystem recipe. Unknown-provider error now points
+at `--list`, `.mulch/recipes/<name>.{ts,sh}`, and `mulch-recipe-<name>`. Examples in
+`examples/recipes/{internal-ide.ts,legacy-bot.sh}`.
 Depends on: R-02 (recipe = structured post-init hook)
 Unlocks: org-internal IDE / bot integrations without forking
 
-**Problem.** `src/commands/setup.ts:621` is a closed `Record<Provider, ProviderRecipe>`. Adding
-a 7th provider (internal IDE, custom Slack bot, internal CI) requires forking mulch.
+**Problem.** `src/commands/setup.ts` was a closed `Record<Provider, ProviderRecipe>`. Adding a
+7th provider (internal IDE, custom Slack bot, internal CI) required forking mulch.
 
-**Sketch.** Two discovery mechanisms:
+**Sketch.** Two discovery mechanisms (shipped):
 1. **Filesystem convention** (primary for org use): `.mulch/recipes/<name>.{ts,sh}` auto-discovered.
    Shell recipes get `install|check|remove` as argv.
 2. **npm convention** (for shareable): `mulch-recipe-<name>` exports a `ProviderRecipe`.
 
-Eventually the official 6 recipes move out of core into shipped recipe files.
+Follow-up (separate seed, not yet filed): move the official 6 recipes out of `setup.ts` into
+shipped recipe files, leaving `setup.ts` as just the loader + lifecycle.
 
 **Open questions.**
-- Sandboxing for arbitrary shell recipes — same trust model as R-02?
-- Do recipes get versioned, or always pulled from `main`?
+- Sandboxing for arbitrary shell recipes — same trust model as R-02 (no sandbox; users own
+  what they install). Locked: matches R-02's hook trust model.
+- Recipe versioning — npm recipes carry their own semver via package.json; filesystem recipes
+  pin to whatever's at the path. No central registry.
 
 ---
 
@@ -228,7 +242,7 @@ Archive below 0.3, delete below 0.05. `ml fitness <id>` shows per-axis breakdown
 ---
 
 ## R-06 — Ownership & review workflow
-Status: [proposed]
+Status: [proposed] — seeded as mulch-7233 (plan pl-e01a, 5 child steps)
 Depends on: R-01 (owner as required field per-domain)
 Unlocks: scalable curation; CODEOWNERS-driven defaults
 
@@ -467,14 +481,31 @@ revisions know what's already off the punch list.
   Each demotion stamps `anchor_decay_demoted_at`. Zero-anchor records exempt; staleness
   wins on overlap; supersession + anchor decay co-stamp but only demote one tier per pass.
   `--explain` prints broken-anchor breakdowns. Knobs in `decay.anchor_validity`.
+- **R-04 — Provider plugin registry (mulch-6deb, 2026-05-06).** `ml setup <name>` resolves
+  via discovery (filesystem → npm → built-in). `.mulch/recipes/<name>.{ts,sh}` auto-discovered;
+  `mulch-recipe-<name>` resolved via `require.resolve` from project root. `ml setup --list`
+  surfaces sources and shadowed built-ins. Examples shipped in `examples/recipes/`.
+- **R-01 follow-ups closed (2026-05-06).** mulch-cc51 (per-domain `required_fields`
+  incompatibility now surfaces clearly via new `domain-rules-compatibility` doctor check + a
+  targeted runtime hint on AJV failure; workaround is `extends: <builtin>` plus the additional
+  required fields). mulch-7ac8 (`ml doctor` domain-rule check now counts records, not
+  violation messages, in the summary). mulch-2da1 (custom-type summary templates now accept
+  Mustache-style `{{field}}` identically to `{field}`; unknown tokens are rejected at registry
+  load with a precise error naming the bad token and listing legal ones).
+
+**Off-roadmap: read-only score-surface tooling.**
+- **`ml rank` (mulch-cky, 2026-05-06).** `ml rank [domain]` returns records sorted by
+  confirmation score (highest first), distinct from `search --sort-by-score` in that no text
+  query is required and the output is a flat cross-domain stream rather than per-domain
+  groups. Filters `--type`, `--limit` (default 10), `--min-score` (default 0); `--json`
+  emits structured rows. Useful precursor to R-11 (auto-confirmations) — once auto-emission
+  lands, this command becomes the obvious "top-N battle-tested records" surface for
+  context-constrained consumers.
 
 Open seeds tracking remaining roadmap work:
-- mulch-6deb (R-04 — provider plugin registry)
+- mulch-7233 (R-06 — ownership & review workflow; plan pl-e01a, 5 child steps)
 - mulch-8e40 (R-10 — secret-scanning recipe)
 - mulch-1d5b (R-09 — multi-repo federation)
-- mulch-cc51 (R-01 follow-up — built-in types reject unknown CLI fields)
-- mulch-7ac8 (R-01 follow-up — doctor counts violations as records)
-- mulch-2da1 (R-01 follow-up — custom-type summary template render bug)
 
 ## Suggested sequencing
 
@@ -489,9 +520,9 @@ A first cut at order of attack — not committed:
    mulch-4426; 2026-05-06).
 4. ~~**R-05f** (anchor-validity decay)~~ — shipped (mulch-2551, 2026-05-06). Small follow-up
    to `dir_anchors[]`; emits the `w_anchor` signal that R-05g will blend.
-5. **R-06** (ownership) — needed before R-12 can route resolution. **Next.**
-6. **R-03** (Claude hook namespace + profiles) — leverages R-02; unlocks R-05c, R-11.
-7. **R-04** (provider plugins) — pure refactor of `setup.ts`; can happen any time.
+5. ~~**R-04** (provider plugins)~~ — shipped (mulch-6deb, 2026-05-06).
+6. **R-06** (ownership) — needed before R-12 can route resolution. **Next.**
+7. **R-03** (Claude hook namespace + profiles) — leverages R-02; unlocks R-05c, R-11.
 8. **R-11 + R-05d** (auto-confirmations + confirmation decay) — paired; ship together.
 9. **R-05g** (fitness formula) — once R-05c/d/e/f are emitting signal, unify them.
 10. **R-12** (contradiction detection, cheap version) — needs R-06 for routing.
