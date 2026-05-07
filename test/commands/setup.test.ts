@@ -30,7 +30,7 @@ describe("setup command", () => {
 	// ── Claude recipe ───────────────────────────────────────────
 
 	describe("claude recipe", () => {
-		it("installs hooks into new settings.json", async () => {
+		it("installs SessionStart hook into new settings.json", async () => {
 			const result = await recipes.claude.install(tmpDir);
 			expect(result.success).toBe(true);
 			expect(result.message).toContain("Installed");
@@ -44,7 +44,10 @@ describe("setup command", () => {
 				hooks: [{ type: "command", command: CLAUDE_HOOK_COMMAND }],
 			};
 			expect(settings.hooks.SessionStart).toEqual(expect.arrayContaining([expectedGroup]));
-			expect(settings.hooks.PreCompact).toEqual(expect.arrayContaining([expectedGroup]));
+			// PreCompact is no longer registered — its stdout is discarded after
+			// compaction, and SessionStart's empty matcher already covers the
+			// post-compact reload case via the `compact` filter.
+			expect(settings.hooks.PreCompact).toBeUndefined();
 		});
 
 		it("preserves existing settings when installing hooks", async () => {
@@ -105,6 +108,29 @@ describe("setup command", () => {
 			const settings = JSON.parse(
 				await readFile(join(tmpDir, ".claude", "settings.json"), "utf-8"),
 			);
+			expect(settings.hooks).toBeUndefined();
+		});
+
+		it("remove cleans up legacy PreCompact entries from older installs", async () => {
+			// Older versions of mulch wrote both SessionStart and PreCompact
+			// entries; remove() should still strip both so an upgrade-then-uninstall
+			// path leaves nothing behind.
+			const settingsPath = join(tmpDir, ".claude", "settings.json");
+			await mkdir(join(tmpDir, ".claude"), { recursive: true });
+			const legacy = {
+				hooks: {
+					SessionStart: [
+						{ matcher: "", hooks: [{ type: "command", command: CLAUDE_HOOK_COMMAND }] },
+					],
+					PreCompact: [{ matcher: "", hooks: [{ type: "command", command: CLAUDE_HOOK_COMMAND }] }],
+				},
+			};
+			await writeFile(settingsPath, JSON.stringify(legacy, null, 2), "utf-8");
+
+			const result = await recipes.claude.remove(tmpDir);
+			expect(result.success).toBe(true);
+
+			const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
 			expect(settings.hooks).toBeUndefined();
 		});
 
@@ -175,17 +201,30 @@ describe("setup command", () => {
 	// ── Codex recipe ───────────────────────────────────────────
 
 	describe("codex recipe", () => {
-		it("creates AGENTS.md with mulch section", async () => {
+		it("creates AGENTS.md and .codex/config.toml on fresh install", async () => {
 			const result = await recipes.codex.install(tmpDir);
 			expect(result.success).toBe(true);
+			expect(result.message).toContain("Installed");
 
 			const agentsPath = join(tmpDir, "AGENTS.md");
-			const content = await readFile(agentsPath, "utf-8");
-			expect(content).toContain("<!-- mulch:start -->");
-			expect(content).toContain("ml prime");
+			const tomlPath = join(tmpDir, ".codex", "config.toml");
+			expect(existsSync(agentsPath)).toBe(true);
+			expect(existsSync(tomlPath)).toBe(true);
+
+			const agents = await readFile(agentsPath, "utf-8");
+			expect(agents).toContain("<!-- mulch:start -->");
+			expect(agents).toContain("ml prime");
+
+			const toml = await readFile(tomlPath, "utf-8");
+			expect(toml).toContain("# mulch:start");
+			expect(toml).toContain("[features]");
+			expect(toml).toContain("codex_hooks = true");
+			expect(toml).toContain("[[hooks.SessionStart]]");
+			expect(toml).toContain("[[hooks.SessionStart.hooks]]");
+			expect(toml).toContain('command = "ml prime"');
 		});
 
-		it("appends to existing AGENTS.md", async () => {
+		it("appends to existing AGENTS.md without clobbering it", async () => {
 			const agentsPath = join(tmpDir, "AGENTS.md");
 			await writeFile(agentsPath, "# Existing Content\n\nSome stuff.\n", "utf-8");
 
@@ -196,11 +235,36 @@ describe("setup command", () => {
 			expect(content).toContain("<!-- mulch:start -->");
 		});
 
-		it("is idempotent", async () => {
+		it("preserves unrelated entries in existing .codex/config.toml", async () => {
+			const tomlPath = join(tmpDir, ".codex", "config.toml");
+			await mkdir(join(tmpDir, ".codex"), { recursive: true });
+			const existing = `# user-managed\nmodel = "gpt-5"\n\n[[hooks.PreToolUse]]\nmatcher = "^Bash$"\n\n[[hooks.PreToolUse.hooks]]\ntype = "command"\ncommand = "/bin/true"\n`;
+			await writeFile(tomlPath, existing, "utf-8");
+
+			await recipes.codex.install(tmpDir);
+
+			const content = await readFile(tomlPath, "utf-8");
+			expect(content).toContain('model = "gpt-5"');
+			expect(content).toContain("[[hooks.PreToolUse]]");
+			expect(content).toContain('command = "/bin/true"');
+			expect(content).toContain("# mulch:start");
+			expect(content).toContain('command = "ml prime"');
+		});
+
+		it("is idempotent — second install does not duplicate entries", async () => {
 			await recipes.codex.install(tmpDir);
 			const result = await recipes.codex.install(tmpDir);
 			expect(result.success).toBe(true);
-			expect(result.message).toContain("already contains");
+			expect(result.message).toContain("already installed");
+
+			const agents = await readFile(join(tmpDir, "AGENTS.md"), "utf-8");
+			const tomlContent = await readFile(join(tmpDir, ".codex", "config.toml"), "utf-8");
+			const agentsMarkers = (agents.match(/<!-- mulch:start -->/g) ?? []).length;
+			const tomlMarkers = (tomlContent.match(/# mulch:start/g) ?? []).length;
+			expect(agentsMarkers).toBe(1);
+			expect(tomlMarkers).toBe(1);
+			const sessionStartCount = (tomlContent.match(/\[\[hooks\.SessionStart\]\]/g) ?? []).length;
+			expect(sessionStartCount).toBe(1);
 		});
 
 		it("check passes after install", async () => {
@@ -209,116 +273,55 @@ describe("setup command", () => {
 			expect(result.success).toBe(true);
 		});
 
-		it("check fails when file is missing", async () => {
+		it("check fails when AGENTS.md is missing", async () => {
 			const result = await recipes.codex.check(tmpDir);
 			expect(result.success).toBe(false);
 		});
 
-		it("remove strips mulch section", async () => {
+		it("check fails when .codex/config.toml is missing", async () => {
+			// Stage AGENTS.md only, no toml
+			const agentsPath = join(tmpDir, "AGENTS.md");
+			await writeFile(
+				agentsPath,
+				"# AGENTS\n\n<!-- mulch:start -->\nstuff\n<!-- mulch:end -->\n",
+				"utf-8",
+			);
+			const result = await recipes.codex.check(tmpDir);
+			expect(result.success).toBe(false);
+			expect(result.message).toContain(".codex/config.toml");
+		});
+
+		it("remove strips both AGENTS.md section and TOML hook entry", async () => {
 			const agentsPath = join(tmpDir, "AGENTS.md");
 			await writeFile(agentsPath, "# Header\n\nParagraph.\n", "utf-8");
+
+			const tomlPath = join(tmpDir, ".codex", "config.toml");
+			await mkdir(join(tmpDir, ".codex"), { recursive: true });
+			await writeFile(
+				tomlPath,
+				'# user-managed\nmodel = "gpt-5"\n\n[[hooks.PreToolUse]]\nmatcher = "^Bash$"\n',
+				"utf-8",
+			);
+
 			await recipes.codex.install(tmpDir);
-			await recipes.codex.remove(tmpDir);
-
-			const content = await readFile(agentsPath, "utf-8");
-			expect(content).toContain("# Header");
-			expect(content).not.toContain("<!-- mulch:start -->");
-		});
-
-		it("remove is safe when file does not exist", async () => {
 			const result = await recipes.codex.remove(tmpDir);
 			expect(result.success).toBe(true);
+
+			const agents = await readFile(agentsPath, "utf-8");
+			expect(agents).toContain("# Header");
+			expect(agents).not.toContain("<!-- mulch:start -->");
+
+			const toml = await readFile(tomlPath, "utf-8");
+			expect(toml).toContain('model = "gpt-5"');
+			expect(toml).toContain("[[hooks.PreToolUse]]");
+			expect(toml).not.toContain("# mulch:start");
+			expect(toml).not.toContain('command = "ml prime"');
 		});
-	});
 
-	// ── Gemini recipe ──────────────────────────────────────────
-
-	describe("gemini recipe", () => {
-		it("creates settings file with mulch section", async () => {
-			const result = await recipes.gemini.install(tmpDir);
+		it("remove is safe when no files exist", async () => {
+			const result = await recipes.codex.remove(tmpDir);
 			expect(result.success).toBe(true);
-
-			const filePath = join(tmpDir, ".gemini", "settings.md");
-			expect(existsSync(filePath)).toBe(true);
-
-			const content = await readFile(filePath, "utf-8");
-			expect(content).toContain("<!-- mulch:start -->");
-			expect(content).toContain("ml prime");
-		});
-
-		it("check passes after install", async () => {
-			await recipes.gemini.install(tmpDir);
-			const result = await recipes.gemini.check(tmpDir);
-			expect(result.success).toBe(true);
-		});
-
-		it("remove cleans up section", async () => {
-			await recipes.gemini.install(tmpDir);
-			await recipes.gemini.remove(tmpDir);
-
-			const filePath = join(tmpDir, ".gemini", "settings.md");
-			const content = await readFile(filePath, "utf-8");
-			expect(content).not.toContain("<!-- mulch:start -->");
-		});
-	});
-
-	// ── Windsurf recipe ────────────────────────────────────────
-
-	describe("windsurf recipe", () => {
-		it("creates rules file with mulch section", async () => {
-			const result = await recipes.windsurf.install(tmpDir);
-			expect(result.success).toBe(true);
-
-			const filePath = join(tmpDir, ".windsurf", "rules.md");
-			expect(existsSync(filePath)).toBe(true);
-
-			const content = await readFile(filePath, "utf-8");
-			expect(content).toContain("ml prime");
-		});
-
-		it("check passes after install", async () => {
-			await recipes.windsurf.install(tmpDir);
-			const result = await recipes.windsurf.check(tmpDir);
-			expect(result.success).toBe(true);
-		});
-
-		it("remove cleans up section", async () => {
-			await recipes.windsurf.install(tmpDir);
-			await recipes.windsurf.remove(tmpDir);
-
-			const filePath = join(tmpDir, ".windsurf", "rules.md");
-			const content = await readFile(filePath, "utf-8");
-			expect(content).not.toContain("<!-- mulch:start -->");
-		});
-	});
-
-	// ── Aider recipe ───────────────────────────────────────────
-
-	describe("aider recipe", () => {
-		it("creates config file with mulch section", async () => {
-			const result = await recipes.aider.install(tmpDir);
-			expect(result.success).toBe(true);
-
-			const filePath = join(tmpDir, ".aider.conf.md");
-			expect(existsSync(filePath)).toBe(true);
-
-			const content = await readFile(filePath, "utf-8");
-			expect(content).toContain("ml prime");
-		});
-
-		it("check passes after install", async () => {
-			await recipes.aider.install(tmpDir);
-			const result = await recipes.aider.check(tmpDir);
-			expect(result.success).toBe(true);
-		});
-
-		it("remove cleans up section", async () => {
-			await recipes.aider.install(tmpDir);
-			await recipes.aider.remove(tmpDir);
-
-			const filePath = join(tmpDir, ".aider.conf.md");
-			const content = await readFile(filePath, "utf-8");
-			expect(content).not.toContain("<!-- mulch:start -->");
+			expect(result.message).toContain("nothing to remove");
 		});
 	});
 

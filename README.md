@@ -74,7 +74,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
 | `ml validate` | Schema validation across all files |
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
-| `ml setup [provider]` | Install provider-specific hooks (built-ins: claude, cursor, codex, gemini, windsurf, aider — or any name discovered via `.mulch/recipes/` or `mulch-recipe-*`; `--list` shows everything) |
+| `ml setup [provider]` | Install provider-specific hooks (built-ins: claude, cursor, codex — or any name discovered via `.mulch/recipes/` or `mulch-recipe-*`; `--list` shows everything) |
 | `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
 | `ml prune` | Soft-archive stale tactical/observational records to `.mulch/archive/`, plus tier-demote records superseded by another live record (`--hard` for true delete, `--aggressive` to collapse superseded records straight to archive, `--dry-run`) |
 | `ml restore <id>` | Restore a soft-archived record back to live expertise |
@@ -430,7 +430,7 @@ The hook returns either the full `{ event, payload }` envelope or just the inner
 
 ## Provider Recipes
 
-`ml setup <provider>` installs the wiring for an agent provider — Claude hooks, a Cursor rule, an `AGENTS.md` section, etc. Six providers ship in the box (`claude`, `cursor`, `codex`, `gemini`, `windsurf`, `aider`), but you can add your own without forking mulch.
+`ml setup <provider>` installs the wiring for an agent provider — Claude hooks, a Cursor rule, an `AGENTS.md` section plus a `.codex/config.toml` `SessionStart` hook, etc. Three providers ship in the box (`claude`, `cursor`, `codex`), but you can add your own without forking mulch.
 
 ### Discovery order
 
@@ -438,7 +438,7 @@ When you run `ml setup <name>`, mulch resolves the recipe in this order:
 
 1. **Filesystem** — `.mulch/recipes/<name>.ts` or `.mulch/recipes/<name>.sh`
 2. **npm** — a package named `mulch-recipe-<name>` resolvable from your project root
-3. **Built-in** — the six recipes shipped with mulch
+3. **Built-in** — the three recipes shipped with mulch (`claude`, `cursor`, `codex`)
 
 Filesystem wins over npm wins over built-in, so you can override a built-in recipe by writing a `.mulch/recipes/claude.ts`.
 

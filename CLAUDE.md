@@ -77,7 +77,7 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 ### Provider Integration (setup command)
 
-`src/commands/setup.ts` contains provider-specific "recipes" (claude, cursor, codex, gemini, windsurf, aider). Each recipe implements idempotent `install()`, `check()`, and `remove()` operations.
+`src/commands/setup.ts` contains provider-specific "recipes" (claude, cursor, codex). Each recipe implements idempotent `install()`, `check()`, and `remove()` operations. The Codex recipe writes both an `AGENTS.md` mulch section (fallback prose) and a `[[hooks.SessionStart]]` block in `.codex/config.toml` fenced by `# mulch:start` / `# mulch:end` line comments for idempotency. The Claude recipe registers only `SessionStart` (the empty matcher covers startup/resume/clear/compact); `PreCompact` is intentionally not registered because its stdout is discarded across compaction.
 
 ## TypeScript Conventions
 

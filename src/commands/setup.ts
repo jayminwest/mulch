@@ -190,29 +190,24 @@ const claudeRecipe: ProviderRecipe = {
 			settings.hooks = {};
 		}
 
-		const events = ["SessionStart", "PreCompact"];
-		let alreadyInstalled = true;
-
-		for (const event of events) {
-			if (!settings.hooks[event]) {
-				settings.hooks[event] = [];
-			}
-			if (!hasMulchHook(settings.hooks[event])) {
-				settings.hooks[event].push(createMulchHookGroup());
-				alreadyInstalled = false;
-			}
+		// SessionStart with empty matcher already covers startup, resume, clear,
+		// and post-compact reload. PreCompact's stdout never reaches the model
+		// after compaction so registering there is dead weight.
+		const event = "SessionStart";
+		if (!settings.hooks[event]) {
+			settings.hooks[event] = [];
 		}
-
-		if (alreadyInstalled) {
+		if (hasMulchHook(settings.hooks[event])) {
 			return { success: true, message: "Claude hooks already installed." };
 		}
+		settings.hooks[event].push(createMulchHookGroup());
 
 		await mkdir(dirname(settingsPath), { recursive: true });
 		await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
 
 		return {
 			success: true,
-			message: "Installed Claude hooks for SessionStart and PreCompact.",
+			message: "Installed Claude SessionStart hook.",
 		};
 	},
 
@@ -232,18 +227,11 @@ const claudeRecipe: ProviderRecipe = {
 			};
 		}
 
-		const events = ["SessionStart", "PreCompact"];
-		const missing: string[] = [];
-		for (const event of events) {
-			if (!settings.hooks[event] || !hasMulchHook(settings.hooks[event])) {
-				missing.push(event);
-			}
-		}
-
-		if (missing.length > 0) {
+		const event = "SessionStart";
+		if (!settings.hooks[event] || !hasMulchHook(settings.hooks[event])) {
 			return {
 				success: false,
-				message: `Missing hooks for: ${missing.join(", ")}.`,
+				message: `Missing hooks for: ${event}.`,
 			};
 		}
 		return {
@@ -422,184 +410,170 @@ ml sync         # validate, stage, and commit .mulch/ changes
 \`\`\`
 ${MARKER_END}`;
 
+// Codex hooks via .codex/config.toml — Codex 0.124.0+ (April 2026) supports
+// SessionStart hooks whose stdout JSON `additionalContext` is injected as
+// extra developer context. Schema reference:
+//   https://developers.openai.com/codex/hooks
+// We fence the managed block in marker comments so we can re-find it for
+// idempotent install and clean removal without disturbing user-added entries.
+
+const CODEX_TOML_MARKER_START = "# mulch:start — managed by `ml setup codex`";
+const CODEX_TOML_MARKER_END = "# mulch:end";
+
+const CODEX_TOML_BLOCK = `${CODEX_TOML_MARKER_START}
+[features]
+codex_hooks = true
+
+[[hooks.SessionStart]]
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "ml prime"
+statusMessage = "Loading mulch expertise"
+${CODEX_TOML_MARKER_END}`;
+
+function codexConfigPath(cwd: string): string {
+	return join(cwd, ".codex", "config.toml");
+}
+
+function hasCodexTomlBlock(content: string): boolean {
+	return content.includes(CODEX_TOML_MARKER_START);
+}
+
+function removeCodexTomlBlock(content: string): string {
+	const startIdx = content.indexOf(CODEX_TOML_MARKER_START);
+	if (startIdx === -1) return content;
+	const endMarkerIdx = content.indexOf(CODEX_TOML_MARKER_END, startIdx);
+	if (endMarkerIdx === -1) return content;
+	const endLineIdx = content.indexOf("\n", endMarkerIdx);
+	const cutEnd = endLineIdx === -1 ? content.length : endLineIdx + 1;
+
+	const before = content.substring(0, startIdx);
+	const after = content.substring(cutEnd);
+	const cleaned = (before + after).replace(/\n{3,}/g, "\n\n").trimEnd();
+	return cleaned ? `${cleaned}\n` : "";
+}
+
 const codexRecipe: ProviderRecipe = {
 	async install(cwd) {
 		const agentsPath = codexAgentsPath(cwd);
-		let content = "";
+		const tomlPath = codexConfigPath(cwd);
 
+		// 1. AGENTS.md — fallback prose for Codex versions without hook support
+		let agentsContent = "";
+		let agentsAlready = false;
 		if (existsSync(agentsPath)) {
-			content = await readFile(agentsPath, "utf-8");
-			if (hasMarkerSection(content)) {
-				return {
-					success: true,
-					message: "AGENTS.md already contains mulch section.",
-				};
-			}
+			agentsContent = await readFile(agentsPath, "utf-8");
+			agentsAlready = hasMarkerSection(agentsContent);
 		}
 
-		const newContent = content
-			? `${content.trimEnd()}\n\n${CODEX_SECTION}\n`
-			: `${CODEX_SECTION}\n`;
+		if (!agentsAlready) {
+			const newAgents = agentsContent
+				? `${agentsContent.trimEnd()}\n\n${CODEX_SECTION}\n`
+				: `${CODEX_SECTION}\n`;
+			await writeFile(agentsPath, newAgents, "utf-8");
+		}
 
-		await writeFile(agentsPath, newContent, "utf-8");
+		// 2. .codex/config.toml — SessionStart hook running `ml prime`
+		let tomlContent = "";
+		let tomlAlready = false;
+		if (existsSync(tomlPath)) {
+			tomlContent = await readFile(tomlPath, "utf-8");
+			tomlAlready = hasCodexTomlBlock(tomlContent);
+		}
 
-		return { success: true, message: "Added mulch section to AGENTS.md." };
+		if (!tomlAlready) {
+			await mkdir(dirname(tomlPath), { recursive: true });
+			const newToml = tomlContent.trim()
+				? `${tomlContent.trimEnd()}\n\n${CODEX_TOML_BLOCK}\n`
+				: `${CODEX_TOML_BLOCK}\n`;
+			await writeFile(tomlPath, newToml, "utf-8");
+		}
+
+		if (agentsAlready && tomlAlready) {
+			return {
+				success: true,
+				message: "Codex integration already installed (AGENTS.md + .codex/config.toml).",
+			};
+		}
+
+		const installed: string[] = [];
+		if (!agentsAlready) installed.push("AGENTS.md mulch section");
+		if (!tomlAlready) installed.push(".codex/config.toml SessionStart hook");
+		return { success: true, message: `Installed Codex integration: ${installed.join(", ")}.` };
 	},
 
 	async check(cwd) {
 		const agentsPath = codexAgentsPath(cwd);
+		const tomlPath = codexConfigPath(cwd);
+
 		if (!existsSync(agentsPath)) {
 			return { success: false, message: "AGENTS.md not found." };
 		}
-		const content = await readFile(agentsPath, "utf-8");
-		if (!hasMarkerSection(content)) {
+		const agentsContent = await readFile(agentsPath, "utf-8");
+		if (!hasMarkerSection(agentsContent)) {
 			return {
 				success: false,
 				message: "AGENTS.md exists but has no mulch section.",
 			};
 		}
-		return { success: true, message: "AGENTS.md contains mulch section." };
+
+		if (!existsSync(tomlPath)) {
+			return { success: false, message: ".codex/config.toml not found." };
+		}
+		const tomlContent = await readFile(tomlPath, "utf-8");
+		if (!hasCodexTomlBlock(tomlContent)) {
+			return {
+				success: false,
+				message: ".codex/config.toml exists but has no mulch SessionStart hook.",
+			};
+		}
+
+		return {
+			success: true,
+			message: "Codex integration installed (AGENTS.md + .codex/config.toml).",
+		};
 	},
 
 	async remove(cwd) {
 		const agentsPath = codexAgentsPath(cwd);
-		if (!existsSync(agentsPath)) {
+		const tomlPath = codexConfigPath(cwd);
+		const removed: string[] = [];
+
+		if (existsSync(agentsPath)) {
+			const content = await readFile(agentsPath, "utf-8");
+			if (hasMarkerSection(content)) {
+				const cleaned = removeMarkerSection(content);
+				await writeFile(agentsPath, cleaned, "utf-8");
+				removed.push("AGENTS.md mulch section");
+			}
+		}
+
+		if (existsSync(tomlPath)) {
+			const content = await readFile(tomlPath, "utf-8");
+			if (hasCodexTomlBlock(content)) {
+				const cleaned = removeCodexTomlBlock(content);
+				if (cleaned) {
+					await writeFile(tomlPath, cleaned, "utf-8");
+				} else {
+					// Block was the whole file — leave an empty file rather than
+					// deleting, so user-managed `[features]` etc. coming back
+					// later doesn't fight a recreate race. Empty file is harmless.
+					await writeFile(tomlPath, "", "utf-8");
+				}
+				removed.push(".codex/config.toml SessionStart hook");
+			}
+		}
+
+		if (removed.length === 0) {
 			return {
 				success: true,
-				message: "AGENTS.md not found; nothing to remove.",
+				message: "No Codex integration found; nothing to remove.",
 			};
 		}
-		const content = await readFile(agentsPath, "utf-8");
-		if (!hasMarkerSection(content)) {
-			return {
-				success: true,
-				message: "No mulch section in AGENTS.md; nothing to remove.",
-			};
-		}
-		const cleaned = removeMarkerSection(content);
-		await writeFile(agentsPath, cleaned, "utf-8");
-		return { success: true, message: "Removed mulch section from AGENTS.md." };
+		return { success: true, message: `Removed Codex integration: ${removed.join(", ")}.` };
 	},
 };
-
-// ── Generic markdown-file recipe (gemini, windsurf, aider) ─
-
-interface MarkdownRecipeConfig {
-	filePath: (cwd: string) => string;
-	fileName: string;
-}
-
-function createMarkdownRecipe(config: MarkdownRecipeConfig): ProviderRecipe {
-	const section = `${MARKER_START}
-## Mulch Expertise
-
-At the start of every session, run \`ml prime\` to load project expertise.
-
-This injects project-specific conventions, patterns, decisions, and other learnings into your context.
-Use \`ml prime --files src/foo.ts\` to load only records relevant to specific files.
-
-**Before completing your task**, review your work for insights worth preserving — conventions discovered,
-patterns applied, failures encountered, or decisions made — and record them:
-
-\`\`\`
-ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
-\`\`\`
-
-Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
-
-**Before you finish**, run:
-
-\`\`\`
-ml learn        # see what files changed — decide what to record
-ml record ...   # record learnings
-ml sync         # validate, stage, and commit .mulch/ changes
-\`\`\`
-${MARKER_END}`;
-
-	return {
-		async install(cwd) {
-			const filePath = config.filePath(cwd);
-			let content = "";
-
-			if (existsSync(filePath)) {
-				content = await readFile(filePath, "utf-8");
-				if (hasMarkerSection(content)) {
-					return {
-						success: true,
-						message: `${config.fileName} already contains mulch section.`,
-					};
-				}
-			}
-
-			const newContent = content ? `${content.trimEnd()}\n\n${section}\n` : `${section}\n`;
-
-			await mkdir(dirname(filePath), { recursive: true });
-			await writeFile(filePath, newContent, "utf-8");
-
-			return {
-				success: true,
-				message: `Added mulch section to ${config.fileName}.`,
-			};
-		},
-
-		async check(cwd) {
-			const filePath = config.filePath(cwd);
-			if (!existsSync(filePath)) {
-				return { success: false, message: `${config.fileName} not found.` };
-			}
-			const content = await readFile(filePath, "utf-8");
-			if (!hasMarkerSection(content)) {
-				return {
-					success: false,
-					message: `${config.fileName} exists but has no mulch section.`,
-				};
-			}
-			return {
-				success: true,
-				message: `${config.fileName} contains mulch section.`,
-			};
-		},
-
-		async remove(cwd) {
-			const filePath = config.filePath(cwd);
-			if (!existsSync(filePath)) {
-				return {
-					success: true,
-					message: `${config.fileName} not found; nothing to remove.`,
-				};
-			}
-			const content = await readFile(filePath, "utf-8");
-			if (!hasMarkerSection(content)) {
-				return {
-					success: true,
-					message: `No mulch section in ${config.fileName}; nothing to remove.`,
-				};
-			}
-
-			const cleaned = removeMarkerSection(content);
-			await writeFile(filePath, cleaned, "utf-8");
-			return {
-				success: true,
-				message: `Removed mulch section from ${config.fileName}.`,
-			};
-		},
-	};
-}
-
-const geminiRecipe = createMarkdownRecipe({
-	filePath: (cwd) => join(cwd, ".gemini", "settings.md"),
-	fileName: ".gemini/settings.md",
-});
-
-const windsurfRecipe = createMarkdownRecipe({
-	filePath: (cwd) => join(cwd, ".windsurf", "rules.md"),
-	fileName: ".windsurf/rules.md",
-});
-
-const aiderRecipe = createMarkdownRecipe({
-	filePath: (cwd) => join(cwd, ".aider.conf.md"),
-	fileName: ".aider.conf.md",
-});
 
 // ── Recipe registry ─────────────────────────────────────────
 
@@ -612,9 +586,6 @@ const BUILTIN_RECIPES = {
 	claude: claudeRecipe,
 	cursor: cursorRecipe,
 	codex: codexRecipe,
-	gemini: geminiRecipe,
-	windsurf: windsurfRecipe,
-	aider: aiderRecipe,
 } as const satisfies Record<string, ProviderRecipe>;
 
 /** @deprecated kept as alias for `BUILTIN_RECIPES` — used by tests. */

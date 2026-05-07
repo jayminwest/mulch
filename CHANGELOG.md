@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Built-in recipes for `aider`, `gemini`, and `windsurf`**: an audit against the providers' current docs found all three writing to paths the runtime doesn't actually read, so `ml setup <one of these>` was silently a no-op. `ml setup aider|gemini|windsurf` now fails with the standard unknown-provider hint pointing at `--list`, `.mulch/recipes/<name>.{ts,sh}`, and `mulch-recipe-<name>`. Users who relied on the old paths can re-create the same behavior as a filesystem recipe in their own repo.
+  - **Aider** (`.aider.conf.md`): Aider only auto-loads files explicitly listed under `read:` in `.aider.conf.yml`, so the orphan markdown file was never opened.
+  - **Gemini** (`.gemini/settings.md`): not a path Gemini CLI reads. Gemini reads `GEMINI.md` at the project root; users wanting Mulch wired into Gemini should adopt the AGENTS.md / `ml onboard` flow instead.
+  - **Windsurf** (`.windsurf/rules.md`): Windsurf uses a directory of per-rule files at `.windsurf/rules/<name>.md` with required `trigger:` frontmatter, not a single combined file.
+
+### Added
+
+- **Codex SessionStart hook** (Codex 0.124.0+, April 2026): `ml setup codex` now writes a managed `[[hooks.SessionStart]]` block to `.codex/config.toml` (in addition to the existing AGENTS.md prose section), so `ml prime` actually executes at session start and its output is injected as developer context via Codex's `additionalContext` mechanism. The TOML block is fenced by `# mulch:start` / `# mulch:end` line comments for idempotent install and clean removal — user-managed entries in the same file are preserved on `install`, `check`, and `remove`. Schema reference: https://developers.openai.com/codex/hooks. Requires `[features] codex_hooks = true`, which the managed block provides.
+
+### Fixed
+
+- **Claude `PreCompact` hook is no longer registered** by `ml setup claude`. Per the Claude Code hooks docs, `PreCompact`'s only documented control is "block the compaction" — its stdout is discarded across compaction and never reaches the model. The empty-matcher `SessionStart` registration already covers the post-compact reload path via the `compact` matcher, so the second registration was dead weight. `install` now writes only `SessionStart`; `check` only verifies `SessionStart`; `remove` still iterates every event in `settings.hooks` so legacy `PreCompact` entries from older installs are cleaned up automatically. Existing settings.json files with both entries remain functional until the next `ml setup claude --remove`/`--install` cycle.
+
 ### Changed
 
 - **`ml onboard` snippet now surfaces the package version** (mulch-391b): the snippet injected into AGENTS.md / CLAUDE.md previously identified itself only with an opaque schema integer (`<!-- mulch-onboard-v:4 -->`), so consumers had no way to correlate the installed snippet with a Mulch release. The marker is now `<!-- mulch-onboard:v<package.version> -->` (resolved at runtime via `getCurrentVersion()`) and the body line reads `This project uses Mulch v<package.version> for structured expertise management.` Outdated detection compares the marker against the running CLI's package version, so any version change (including patch bumps) prompts re-running `ml onboard` — which is the desired UX, since the visible version in CLAUDE.md should track the installed Mulch. Legacy `mulch-onboard-v:N` markers are still detected as outdated and migrated on the next run.
