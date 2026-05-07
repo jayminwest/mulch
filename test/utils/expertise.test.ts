@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BUILTIN_DEFS, buildBuiltinRegistry } from "../../src/registry/builtins.ts";
+import { buildCustomTypeDefinition } from "../../src/registry/custom.ts";
+import { resetRegistry, setRegistry, TypeRegistry } from "../../src/registry/type-registry.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
 	appendRecord,
@@ -73,6 +76,30 @@ describe("expertise utils", () => {
 			const result = await readExpertiseFile(filePath);
 			expect(result).toHaveLength(1);
 			expect(result[0]).toEqual(record);
+		});
+
+		it("rejects malformed JSONL with file:line context", async () => {
+			const filePath = join(tmpDir, "broken.jsonl");
+			const good = makeConvention("ok");
+			// Two valid records, then a corrupted line, then another valid line.
+			const lines = [
+				JSON.stringify(good),
+				JSON.stringify(makeConvention("ok2")),
+				`{"type":"convention","content":"truncated`,
+				JSON.stringify(makeConvention("ok3")),
+			];
+			await writeFile(filePath, `${lines.join("\n")}\n`, "utf-8");
+
+			await expect(readExpertiseFile(filePath)).rejects.toThrow(
+				/Malformed JSONL at .*broken\.jsonl:3/,
+			);
+		});
+
+		it("malformed-line error includes a line preview", async () => {
+			const filePath = join(tmpDir, "preview.jsonl");
+			await writeFile(filePath, "not-json-at-all\n", "utf-8");
+
+			await expect(readExpertiseFile(filePath)).rejects.toThrow(/not-json-at-all/);
 		});
 	});
 
@@ -247,5 +274,84 @@ describe("expertise utils", () => {
 			expect(result[0]).toMatchObject({ content: "Use single quotes" });
 			expect(result[1]).toMatchObject({ name: "atomic-pattern" });
 		});
+	});
+});
+
+describe("readExpertiseFile — unknown-type policy", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-unknown-"));
+	});
+
+	afterEach(async () => {
+		resetRegistry();
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("throws a targeted error for unregistered types by default", async () => {
+		const filePath = join(tmpDir, "x.jsonl");
+		await writeFile(
+			filePath,
+			`${JSON.stringify({
+				type: "hypothesis",
+				id: "mx-abc123",
+				statement: "x",
+				classification: "tactical",
+				recorded_at: "2026-01-01T00:00:00Z",
+			})}\n`,
+			"utf-8",
+		);
+
+		await expect(readExpertiseFile(filePath)).rejects.toThrow(
+			/Unknown record type "hypothesis" at .*x\.jsonl:1 \(id=mx-abc123\)/,
+		);
+	});
+
+	it("passes through unknown-type records when allowUnknownTypes is true", async () => {
+		const filePath = join(tmpDir, "x.jsonl");
+		await writeFile(
+			filePath,
+			`${JSON.stringify({
+				type: "hypothesis",
+				statement: "x",
+				classification: "tactical",
+				recorded_at: "2026-01-01T00:00:00Z",
+			})}\n`,
+			"utf-8",
+		);
+
+		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
+		expect(records).toHaveLength(1);
+		expect((records[0] as unknown as { type: string }).type).toBe("hypothesis");
+	});
+
+	it("rewrites aliased legacy fields to canonical names at read time", async () => {
+		const customDef = buildCustomTypeDefinition("hypothesis", {
+			required: ["statement"],
+			dedup_key: "statement",
+			summary: "{statement}",
+			aliases: { statement: ["claim"] },
+		});
+		const builtinReg = buildBuiltinRegistry();
+		setRegistry(new TypeRegistry([...BUILTIN_DEFS, customDef], builtinReg.definitions));
+
+		const filePath = join(tmpDir, "x.jsonl");
+		await writeFile(
+			filePath,
+			`${JSON.stringify({
+				type: "hypothesis",
+				claim: "the sky is blue",
+				classification: "tactical",
+				recorded_at: "2026-01-01T00:00:00Z",
+			})}\n`,
+			"utf-8",
+		);
+
+		const records = await readExpertiseFile(filePath);
+		expect(records).toHaveLength(1);
+		const r = records[0] as unknown as Record<string, unknown>;
+		expect(r.statement).toBe("the sky is blue");
+		expect(r.claim).toBeUndefined();
 	});
 });

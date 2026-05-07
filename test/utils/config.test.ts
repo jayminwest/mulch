@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import yaml from "js-yaml";
@@ -79,12 +79,53 @@ describe("config utils", () => {
 
 			expect(config).toBeDefined();
 			expect(config.version).toBe("1");
-			expect(Array.isArray(config.domains)).toBe(true);
+			expect(typeof config.domains).toBe("object");
+			expect(Array.isArray(config.domains)).toBe(false);
 			expect(config.governance.max_entries).toBe(100);
 		});
 
 		it("throws when config file does not exist", async () => {
 			await expect(readConfig(tmpDir)).rejects.toThrow();
+		});
+
+		it("backfills missing governance and classification_defaults on a minimal config", async () => {
+			// Hand-written minimal config that omits the schema's required
+			// top-level sections. Consumers (doctor, prune, status, compact, prime)
+			// destructure these directly, so readConfig must apply defaults
+			// instead of crashing downstream with TypeError.
+			await initMulchDir(tmpDir);
+			const minimalYaml = `domains:
+  cli: {}
+`;
+			await writeFile(getConfigPath(tmpDir), minimalYaml, "utf-8");
+
+			const config = await readConfig(tmpDir);
+			expect(config.governance).toEqual(DEFAULT_CONFIG.governance);
+			expect(config.classification_defaults).toEqual(DEFAULT_CONFIG.classification_defaults);
+			expect(config.domains).toEqual({ cli: {} });
+		});
+
+		it("preserves partial governance overrides while filling missing keys", async () => {
+			await initMulchDir(tmpDir);
+			const partialYaml = `domains:
+  cli: {}
+governance:
+  max_entries: 42
+`;
+			await writeFile(getConfigPath(tmpDir), partialYaml, "utf-8");
+
+			const config = await readConfig(tmpDir);
+			expect(config.governance.max_entries).toBe(42);
+			expect(config.governance.warn_entries).toBe(DEFAULT_CONFIG.governance.warn_entries);
+			expect(config.governance.hard_limit).toBe(DEFAULT_CONFIG.governance.hard_limit);
+		});
+
+		it("formats YAML parse errors with a friendly message", async () => {
+			await initMulchDir(tmpDir);
+			// Invalid YAML — unclosed bracket
+			await writeFile(getConfigPath(tmpDir), "domains: {cli: {", "utf-8");
+
+			await expect(readConfig(tmpDir)).rejects.toThrow(/Failed to parse mulch.config.yaml/);
 		});
 	});
 
@@ -157,13 +198,13 @@ describe("config utils", () => {
 
 			const customConfig: MulchConfig = {
 				...DEFAULT_CONFIG,
-				domains: ["testing", "architecture"],
+				domains: { testing: {}, architecture: {} },
 			};
 			await writeConfig(customConfig, tmpDir);
 
 			const rawContent = await readFile(getConfigPath(tmpDir), "utf-8");
 			const parsed = yaml.load(rawContent) as MulchConfig;
-			expect(parsed.domains).toEqual(["testing", "architecture"]);
+			expect(parsed.domains).toEqual({ testing: {}, architecture: {} });
 		});
 
 		it("roundtrips config correctly", async () => {
@@ -171,13 +212,37 @@ describe("config utils", () => {
 
 			const customConfig: MulchConfig = {
 				...DEFAULT_CONFIG,
-				domains: ["frontend", "backend"],
+				domains: { frontend: {}, backend: {} },
 				governance: { max_entries: 50, warn_entries: 75, hard_limit: 100 },
 			};
 			await writeConfig(customConfig, tmpDir);
 			const readBack = await readConfig(tmpDir);
 
 			expect(readBack).toEqual(customConfig);
+		});
+
+		it("normalizes legacy array shape on read", async () => {
+			await initMulchDir(tmpDir);
+
+			// Pre-1.x configs persisted domains as a YAML array. readConfig must
+			// rewrite that to an object map without forcing user migration.
+			const legacyYaml = `version: "1"
+domains:
+  - testing
+  - architecture
+governance:
+  max_entries: 100
+  warn_entries: 150
+  hard_limit: 200
+classification_defaults:
+  shelf_life:
+    tactical: 14
+    observational: 30
+`;
+			await writeFile(getConfigPath(tmpDir), legacyYaml, "utf-8");
+
+			const config = await readConfig(tmpDir);
+			expect(config.domains).toEqual({ testing: {}, architecture: {} });
 		});
 	});
 });

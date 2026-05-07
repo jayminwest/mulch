@@ -19,7 +19,7 @@ describe("deduplication", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-dedup-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 	});
 
 	afterEach(async () => {

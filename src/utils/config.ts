@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import yaml from "js-yaml";
-import type { MulchConfig } from "../schemas/config.ts";
+import type { DomainConfig, MulchConfig } from "../schemas/config.ts";
 import { DEFAULT_CONFIG } from "../schemas/config.ts";
 import { createExpertiseFile } from "./expertise.ts";
 
@@ -36,6 +36,51 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #   # rank higher. 0 disables (pure BM25). Default 0.1: a record with N successes
 #   # gets a (1 + 0.1*N) boost. Override per-call with \`ml search --no-boost\`.
 #   boost_factor: 0.1
+#
+# disabled_types:
+#   # Names of registered types (built-in or custom) that emit a deprecation
+#   # warning on write. Reads still succeed; the type stays in CLI choices so
+#   # peers in shared domains don't hard-fail. Use to retire a type gracefully.
+#   - failure
+#
+# custom_types:
+#   # Project-specific record types. Required + optional fields, dedup_key,
+#   # and a summary template. See README for the full schema.
+#   hypothesis:
+#     required: [statement, prediction]
+#     optional: [evidence_files]
+#     dedup_key: statement
+#     summary: "{statement}"   # tokens use single braces; {{statement}} also accepted
+#     # aliases: rename a field while still reading legacy on-disk records.
+#     # Map canonical (current) name → list of legacy names. At read time,
+#     # legacy fields are rewritten to canonical and dropped from the record.
+#     aliases:
+#       statement: [claim]
+#   # Inherit from a built-in type with extends:. Required/optional arrays
+#   # merge with the parent's (union); dedup_key, summary, compact, section_title,
+#   # extracts_files, and files_field override only when set, otherwise inherit.
+#   # Custom-from-custom is not supported in v1.
+#   adr:
+#     extends: decision
+#     required: [decision_status, deciders]   # added on top of decision's [title, rationale]
+#     summary: "{decision_status}: {title}"   # tokens must be declared fields (parent's included)
+#
+# hooks:
+#   # Lifecycle hook scripts. Each event maps to an ordered list of shell
+#   # commands. Mulch invokes each with the relevant payload as JSON on stdin.
+#   # Exit 0 = continue. Non-zero from a \`pre-*\` hook blocks the action; from
+#   # a \`post-*\` hook emits a warning. Only \`pre-record\` and \`pre-prime\` may
+#   # mutate the payload by printing modified JSON on stdout; \`pre-prune\` is
+#   # block-or-allow only — its stdout is ignored.
+#   #
+#   # pre-record:    [./.mulch/hooks/scan-secrets.sh, ./.mulch/hooks/require-owner.sh]
+#   # post-record:   [./.mulch/hooks/post-to-slack.sh]
+#   # pre-prime:     [./.mulch/hooks/filter-by-team.sh]
+#   # pre-prune:     [./.mulch/hooks/digest-then-confirm.sh]
+#
+# hook_settings:
+#   # Per-hook execution timeout in milliseconds. Default 5000.
+#   timeout_ms: 5000
 `;
 
 export function buildInitialConfigYaml(): string {
@@ -153,6 +198,42 @@ export function getExpertisePath(domain: string, cwd: string = process.cwd()): s
 	return join(getExpertiseDir(cwd), `${domain}.jsonl`);
 }
 
+// Legacy on-disk shape was `domains: [a, b]`; current shape is
+// `domains: { a: {}, b: {} }`. Normalize both to the object map at read time so
+// older configs keep working without user migration.
+function normalizeDomains(raw: unknown): Record<string, DomainConfig> {
+	if (Array.isArray(raw)) {
+		const map: Record<string, DomainConfig> = {};
+		for (const name of raw) {
+			if (typeof name === "string") map[name] = {};
+		}
+		return map;
+	}
+	if (raw && typeof raw === "object") return raw as Record<string, DomainConfig>;
+	return {};
+}
+
+// Backfill required-by-type top-level sections that a hand-written minimal
+// config may omit. Schema marks `governance` and `classification_defaults` as
+// required, but consumers (doctor, prune, status, compact, prime) destructure
+// them directly and would otherwise crash with a TypeError on a config that
+// only declares `domains:`. Shallow-merge so partial user overrides
+// (e.g. `governance: { max_entries: 50 }`) keep the other defaults.
+function applyConfigDefaults(parsed: MulchConfig): MulchConfig {
+	const userGov = (parsed.governance ?? {}) as Partial<MulchConfig["governance"]>;
+	const userCD = (parsed.classification_defaults ?? {}) as Partial<
+		MulchConfig["classification_defaults"]
+	>;
+	const userShelf = (userCD.shelf_life ?? {}) as Partial<
+		MulchConfig["classification_defaults"]["shelf_life"]
+	>;
+	parsed.governance = { ...DEFAULT_CONFIG.governance, ...userGov };
+	parsed.classification_defaults = {
+		shelf_life: { ...DEFAULT_CONFIG.classification_defaults.shelf_life, ...userShelf },
+	};
+	return parsed;
+}
+
 export async function readConfig(cwd: string = process.cwd()): Promise<MulchConfig> {
 	const configPath = getConfigPath(cwd);
 	let content: string;
@@ -164,14 +245,27 @@ export async function readConfig(cwd: string = process.cwd()): Promise<MulchConf
 		}
 		throw err;
 	}
-	return yaml.load(content) as MulchConfig;
+	let parsed: MulchConfig;
+	try {
+		parsed = (yaml.load(content) ?? {}) as MulchConfig;
+	} catch (err) {
+		throw new Error(
+			`Failed to parse mulch.config.yaml: ${(err as Error).message}. Check the YAML syntax.`,
+		);
+	}
+	if (!parsed || typeof parsed !== "object") {
+		// Empty file or scalar at top level — treat as empty object so defaults apply.
+		parsed = {} as MulchConfig;
+	}
+	parsed.domains = normalizeDomains(parsed.domains);
+	return applyConfigDefaults(parsed);
 }
 
 export async function addDomain(domain: string, cwd: string = process.cwd()): Promise<void> {
 	validateDomainName(domain);
 	const config = await readConfig(cwd);
-	if (!config.domains.includes(domain)) {
-		config.domains.push(domain);
+	if (!(domain in config.domains)) {
+		config.domains[domain] = {};
 		await writeConfig(config, cwd);
 	}
 	const filePath = getExpertisePath(domain, cwd);
@@ -183,11 +277,10 @@ export async function addDomain(domain: string, cwd: string = process.cwd()): Pr
 export async function removeDomain(domain: string, cwd: string = process.cwd()): Promise<void> {
 	validateDomainName(domain);
 	const config = await readConfig(cwd);
-	const index = config.domains.indexOf(domain);
-	if (index === -1) {
+	if (!(domain in config.domains)) {
 		throw new Error(`Domain "${domain}" not found in config.`);
 	}
-	config.domains.splice(index, 1);
+	delete config.domains[domain];
 	await writeConfig(config, cwd);
 	const filePath = getExpertisePath(domain, cwd);
 	if (existsSync(filePath)) {

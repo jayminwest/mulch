@@ -4,6 +4,7 @@ import type { Command } from "commander";
 import { getExpertisePath, getMulchDir, readConfig, writeConfig } from "../utils/config.ts";
 import { createExpertiseFile } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { isQuiet } from "../utils/palette.ts";
 
 export function registerAddCommand(program: Command): void {
 	program
@@ -26,7 +27,7 @@ export function registerAddCommand(program: Command): void {
 
 			const config = await readConfig();
 
-			if (config.domains.includes(domain)) {
+			if (domain in config.domains) {
 				if (jsonMode) {
 					outputJsonError("add", `Domain "${domain}" already exists.`);
 				} else {
@@ -39,12 +40,12 @@ export function registerAddCommand(program: Command): void {
 			const expertisePath = getExpertisePath(domain);
 			await createExpertiseFile(expertisePath);
 
-			config.domains.push(domain);
+			config.domains[domain] = {};
 			await writeConfig(config);
 
 			if (jsonMode) {
 				outputJson({ success: true, command: "add", domain });
-			} else {
+			} else if (!isQuiet()) {
 				console.log(chalk.green(`Added domain "${domain}".`));
 			}
 		});

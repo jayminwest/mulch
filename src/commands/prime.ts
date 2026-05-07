@@ -1,5 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import type { Command } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
+import type { ExpertiseRecord } from "../schemas/record.ts";
 import type { DomainRecords } from "../utils/budget.ts";
 import { applyBudget, DEFAULT_BUDGET, formatBudgetSummary } from "../utils/budget.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
@@ -21,6 +23,7 @@ import {
 	getSessionEndReminder,
 } from "../utils/format.ts";
 import { filterByContext, getChangedFiles, isGitRepo } from "../utils/git.ts";
+import { runHooks } from "../utils/hooks.ts";
 import { outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 
@@ -49,30 +52,13 @@ function resolvePrimeFormat(
 
 /**
  * Produce a rough text representation of a record for token estimation.
- * Uses a simple format similar to compact lines.
+ * Delegates to the type registry so custom types and unknown-but-tolerated
+ * types (via --allow-unknown-types) get a non-undefined estimate.
  */
-function estimateRecordText(record: import("../schemas/record.js").ExpertiseRecord): string {
-	switch (record.type) {
-		case "convention":
-			return `[convention] ${record.content}`;
-		case "pattern": {
-			const files = record.files && record.files.length > 0 ? ` (${record.files.join(", ")})` : "";
-			return `[pattern] ${record.name}: ${record.description}${files}`;
-		}
-		case "failure":
-			return `[failure] ${record.description} -> ${record.resolution}`;
-		case "decision":
-			return `[decision] ${record.title}: ${record.rationale}`;
-		case "reference": {
-			const refFiles =
-				record.files && record.files.length > 0
-					? `: ${record.files.join(", ")}`
-					: `: ${record.description}`;
-			return `[reference] ${record.name}${refFiles}`;
-		}
-		case "guide":
-			return `[guide] ${record.name}: ${record.description}`;
-	}
+export function estimateRecordText(record: ExpertiseRecord): string {
+	const def = getRegistry().get(record.type);
+	if (!def) return `[${record.type}]`;
+	return def.formatCompactLine(record);
 }
 
 export function registerPrimeCommand(program: Command): void {
@@ -139,15 +125,15 @@ export function registerPrimeCommand(program: Command): void {
 				const useManifest = effectiveMode === "manifest" && !isScoped;
 
 				for (const d of unique) {
-					if (!config.domains.includes(d)) {
+					if (!(d in config.domains)) {
 						if (jsonMode) {
 							outputJsonError(
 								"prime",
-								`Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 						} else {
 							console.error(
-								`Error: Domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Error: Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 							console.error(
 								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
@@ -160,15 +146,15 @@ export function registerPrimeCommand(program: Command): void {
 
 				const excluded = options.excludeDomain ?? [];
 				for (const d of excluded) {
-					if (!config.domains.includes(d)) {
+					if (!(d in config.domains)) {
 						if (jsonMode) {
 							outputJsonError(
 								"prime",
-								`Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 						} else {
 							console.error(
-								`Error: Excluded domain "${d}" not found in config. Available domains: ${config.domains.join(", ")}`,
+								`Error: Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 							);
 							console.error(
 								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
@@ -179,7 +165,7 @@ export function registerPrimeCommand(program: Command): void {
 					}
 				}
 
-				let targetDomains = unique.length > 0 ? unique : config.domains;
+				let targetDomains = unique.length > 0 ? unique : Object.keys(config.domains);
 
 				targetDomains = targetDomains.filter((d) => !excluded.includes(d));
 
@@ -240,99 +226,144 @@ export function registerPrimeCommand(program: Command): void {
 						output = formatPrimeManifest(manifestDomains, config.governance, format);
 						output += `\n\n${getSessionEndReminder(format)}`;
 					}
-				} else if (jsonMode) {
-					// --json produces structured output — no budget
-					const domains: JsonDomain[] = [];
-					for (const domain of targetDomains) {
-						const filePath = getExpertisePath(domain);
-						let records = await readExpertiseFile(filePath);
-						if (filesToFilter) {
-							records = filterByContext(records, filesToFilter);
-						}
-						if (!filesToFilter || records.length > 0) {
-							domains.push({ domain, entry_count: records.length, records });
-						}
-					}
-					output = formatJsonOutput(domains);
 				} else {
-					// Load all records per domain
-					const allDomainRecords: DomainRecords[] = [];
-					const modTimes = new Map<string, Date | null>();
-
+					// Load records once, fire pre-prime, then dispatch to formatter.
+					// Hook payload is { domains: [{ domain, records }] }; mutation
+					// allowed (script can drop records or whole domains by returning a
+					// filtered list).
+					interface LoadedDomain {
+						domain: string;
+						records: ExpertiseRecord[];
+						lastUpdated: Date | null;
+					}
+					const loaded: LoadedDomain[] = [];
 					for (const domain of targetDomains) {
 						const filePath = getExpertisePath(domain);
 						let records = await readExpertiseFile(filePath);
 						if (filesToFilter) {
 							records = filterByContext(records, filesToFilter);
-							if (records.length === 0) continue;
+							if (records.length === 0 && !jsonMode) continue;
 						}
-						allDomainRecords.push({ domain, records });
 						const lastUpdated = await getFileModTime(filePath);
-						modTimes.set(domain, lastUpdated);
+						loaded.push({ domain, records, lastUpdated });
 					}
 
-					// Apply budget filtering
-					let domainRecordsToFormat: DomainRecords[];
-					let droppedCount = 0;
-					let droppedDomainCount = 0;
+					const hookPayload = {
+						domains: loaded.map(({ domain, records }) => ({ domain, records })),
+					};
+					const hookRes = await runHooks<typeof hookPayload>("pre-prime", hookPayload);
+					if (hookRes.blocked) {
+						const reason = hookRes.blockReason ?? "pre-prime hook blocked output";
+						if (jsonMode) {
+							outputJsonError("prime", reason);
+						} else {
+							console.error(`Error: ${reason}`);
+						}
+						process.exitCode = 1;
+						return;
+					}
+					for (const w of hookRes.warnings) {
+						if (!jsonMode) console.error(`Warning: ${w}`);
+					}
+					// If a hook mutated the payload, replace records on a per-domain
+					// basis (matching original order); a hook-emitted domain not in
+					// `loaded` is ignored to prevent surfacing data the user didn't ask
+					// for in the budget/format paths.
+					const mutatedByDomain = new Map<string, ExpertiseRecord[]>();
+					if (hookRes.ranAny && hookRes.payload?.domains) {
+						for (const d of hookRes.payload.domains) {
+							if (d && typeof d.domain === "string" && Array.isArray(d.records)) {
+								mutatedByDomain.set(d.domain, d.records);
+							}
+						}
+					}
+					const finalLoaded: LoadedDomain[] = loaded.map((l) => {
+						const mut = mutatedByDomain.get(l.domain);
+						return mut ? { ...l, records: mut } : l;
+					});
 
-					if (budgetEnabled) {
-						const result = applyBudget(allDomainRecords, budget, (record) =>
-							estimateRecordText(record),
-						);
-						domainRecordsToFormat = result.kept;
-						droppedCount = result.droppedCount;
-						droppedDomainCount = result.droppedDomainCount;
+					if (jsonMode) {
+						const domains: JsonDomain[] = [];
+						for (const { domain, records } of finalLoaded) {
+							if (!filesToFilter || records.length > 0) {
+								domains.push({ domain, entry_count: records.length, records });
+							}
+						}
+						output = formatJsonOutput(domains);
 					} else {
-						domainRecordsToFormat = allDomainRecords;
-					}
+						// Reconstruct legacy structures for the existing budget+format pipeline.
+						const allDomainRecords: DomainRecords[] = finalLoaded.map(({ domain, records }) => ({
+							domain,
+							records,
+						}));
+						const modTimes = new Map<string, Date | null>();
+						for (const { domain, lastUpdated } of finalLoaded) {
+							modTimes.set(domain, lastUpdated);
+						}
 
-					// Format domain sections
-					const domainSections: string[] = [];
-					for (const { domain, records } of domainRecordsToFormat) {
-						const lastUpdated = modTimes.get(domain) ?? null;
+						// Apply budget filtering
+						let domainRecordsToFormat: DomainRecords[];
+						let droppedCount = 0;
+						let droppedDomainCount = 0;
+
+						if (budgetEnabled) {
+							const result = applyBudget(allDomainRecords, budget, (record) =>
+								estimateRecordText(record),
+							);
+							domainRecordsToFormat = result.kept;
+							droppedCount = result.droppedCount;
+							droppedDomainCount = result.droppedDomainCount;
+						} else {
+							domainRecordsToFormat = allDomainRecords;
+						}
+
+						// Format domain sections
+						const domainSections: string[] = [];
+						for (const { domain, records } of domainRecordsToFormat) {
+							const lastUpdated = modTimes.get(domain) ?? null;
+
+							switch (format) {
+								case "xml":
+									domainSections.push(formatDomainExpertiseXml(domain, records, lastUpdated));
+									break;
+								case "plain":
+									domainSections.push(formatDomainExpertisePlain(domain, records, lastUpdated));
+									break;
+								case "compact":
+									domainSections.push(formatDomainExpertiseCompact(domain, records, lastUpdated));
+									break;
+								default:
+									domainSections.push(
+										formatDomainExpertise(domain, records, lastUpdated, {
+											full: options.full || verbose,
+										}),
+									);
+									break;
+							}
+						}
 
 						switch (format) {
 							case "xml":
-								domainSections.push(formatDomainExpertiseXml(domain, records, lastUpdated));
+								output = formatPrimeOutputXml(domainSections);
 								break;
 							case "plain":
-								domainSections.push(formatDomainExpertisePlain(domain, records, lastUpdated));
+								output = formatPrimeOutputPlain(domainSections);
 								break;
 							case "compact":
-								domainSections.push(formatDomainExpertiseCompact(domain, records, lastUpdated));
+								output = formatPrimeOutputCompact(domainSections);
 								break;
 							default:
-								domainSections.push(
-									formatDomainExpertise(domain, records, lastUpdated, {
-										full: options.full || verbose,
-									}),
-								);
+								output = formatPrimeOutput(domainSections);
 								break;
 						}
-					}
 
-					switch (format) {
-						case "xml":
-							output = formatPrimeOutputXml(domainSections);
-							break;
-						case "plain":
-							output = formatPrimeOutputPlain(domainSections);
-							break;
-						case "compact":
-							output = formatPrimeOutputCompact(domainSections);
-							break;
-						default:
-							output = formatPrimeOutput(domainSections);
-							break;
-					}
+						// Append truncation summary before session reminder
+						if (droppedCount > 0) {
+							output += `\n\n${formatBudgetSummary(droppedCount, droppedDomainCount)}`;
+						}
 
-					// Append truncation summary before session reminder
-					if (droppedCount > 0) {
-						output += `\n\n${formatBudgetSummary(droppedCount, droppedDomainCount)}`;
+						output += `\n\n${getSessionEndReminder(format)}`;
 					}
-
-					output += `\n\n${getSessionEndReminder(format)}`;
 				}
 
 				if (options.export) {

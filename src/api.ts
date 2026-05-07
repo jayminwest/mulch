@@ -87,9 +87,9 @@ export async function recordExpertise(
 	const { force = false, cwd } = options;
 
 	const config = await readConfig(cwd);
-	if (!config.domains.includes(domain)) {
+	if (!(domain in config.domains)) {
 		throw new Error(
-			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+			`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 		);
 	}
 
@@ -131,14 +131,14 @@ export async function searchExpertise(
 
 	let domainsToSearch: string[];
 	if (options.domain) {
-		if (!config.domains.includes(options.domain)) {
+		if (!(options.domain in config.domains)) {
 			throw new Error(
-				`Domain "${options.domain}" not found in config. Available domains: ${config.domains.join(", ")}`,
+				`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
 			);
 		}
 		domainsToSearch = [options.domain];
 	} else {
-		domainsToSearch = config.domains;
+		domainsToSearch = Object.keys(config.domains);
 	}
 
 	const results: SearchResult[] = [];
@@ -180,9 +180,9 @@ export async function queryDomain(
 	const { cwd } = options;
 	const config = await readConfig(cwd);
 
-	if (!config.domains.includes(domain)) {
+	if (!(domain in config.domains)) {
 		throw new Error(
-			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+			`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 		);
 	}
 
@@ -215,9 +215,9 @@ export async function editRecord(
 	const { cwd } = options;
 	const config = await readConfig(cwd);
 
-	if (!config.domains.includes(domain)) {
+	if (!(domain in config.domains)) {
 		throw new Error(
-			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+			`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 		);
 	}
 
@@ -331,9 +331,9 @@ export async function appendOutcome(
 	const { cwd } = options;
 	const config = await readConfig(cwd);
 
-	if (!config.domains.includes(domain)) {
+	if (!(domain in config.domains)) {
 		throw new Error(
-			`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+			`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 		);
 	}
 

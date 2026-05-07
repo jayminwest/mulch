@@ -1,13 +1,71 @@
 version: '1'
 domains:
-  - cli
-  - architecture
-  - testing
-  - typescript
-  - agents
-  - ecosystem
-  - orchestration
-  - lint
+  cli:
+    # cli is the firehose: every record type is in active use.
+    allowed_types:
+      - convention
+      - pattern
+      - failure
+      - decision
+      - reference
+      - guide
+      - release_decision
+  architecture:
+    # Architectural notes lean toward decisions/patterns + occasional references.
+    allowed_types:
+      - decision
+      - pattern
+      - reference
+      - guide
+      - release_decision
+  testing:
+    # Testing surfaces conventions, patterns, and known flakes.
+    allowed_types:
+      - convention
+      - pattern
+      - failure
+      - guide
+      - flake_symptom
+  typescript:
+    # Language-level conventions and the failures that motivated them.
+    allowed_types:
+      - convention
+      - pattern
+      - failure
+      - decision
+  agents:
+    # Agent-watchdog signals are predominantly failure reports.
+    allowed_types:
+      - failure
+      - pattern
+      - convention
+      - flake_symptom
+  ecosystem:
+    # Cross-tool integration notes — keep types broad, require evidence so the
+    # tracker linkage is recorded (every existing record already carries it).
+    allowed_types:
+      - failure
+      - pattern
+      - convention
+      - decision
+      - reference
+    required_fields:
+      - evidence
+  orchestration:
+    # Orchestration patterns + the decisions that produced them.
+    allowed_types:
+      - pattern
+      - decision
+      - convention
+      - reference
+    required_fields:
+      - evidence
+  lint:
+    # Lint policy is decision-shaped today; keep room for conventions/failures.
+    allowed_types:
+      - decision
+      - convention
+      - failure
 governance:
   max_entries: 100
   warn_entries: 150
@@ -16,3 +74,55 @@ classification_defaults:
   shelf_life:
     tactical: 14
     observational: 30
+custom_types:
+  release_decision:
+    extends: decision
+    # Decisions tied to a specific version bump (v0.x → v1.x calls,
+    # breaking-change rationale). Inherits title/rationale from `decision`;
+    # adds `version` (always) and `breaking` (optional, "true"/"false" since
+    # the schema layer types custom-type props as string).
+    required: [version]
+    optional: [breaking]
+    summary: "{title} (v{version})"
+  flake_symptom:
+    extends: failure
+    # Flaky-test reports. `test_path` is required so the failure is anchored
+    # to a real spec; `flake_rate` is optional (we rarely have a stable %).
+    required: [test_path]
+    optional: [flake_rate]
+    aliases:
+      # Older notes referenced the field as `flake_path`. Read-time rewrite
+      # keeps legacy on-disk records loadable.
+      test_path: [flake_path]
+    summary: "{test_path}"
+# Placeholder. Populate with type names (built-in or custom) you want to
+# retire — writes emit a deprecation warning, reads keep working, and peers
+# in shared domains don't hard-fail.
+disabled_types: []
+hooks:
+  # pre-record: append `author:<git-email>` to record.tags[] (uses tags
+  # because record schemas are additionalProperties:false — a top-level
+  # `owner` field would fail re-validation).
+  pre-record:
+    - ./.mulch/hooks/inject-author-tag.sh
+  # pre-prune: print a digest of candidates to stderr before destructive
+  # archive runs (hooks are skipped on `--dry-run`).
+  pre-prune:
+    - ./.mulch/hooks/prune-digest.sh
+  # pre-prime: warn to stderr when the loaded set is large enough that
+  # `--manifest` or `--domain` scoping would save context.
+  pre-prime:
+    - ./.mulch/hooks/prime-budget-warn.sh
+hook_settings:
+  # Per-hook timeout in ms. Default is 5000; pinned explicitly so the value
+  # survives a future default change.
+  timeout_ms: 5000
+decay:
+  # `ml prune --check-anchors` demotes one tier per pass when a record's
+  # files[]/dir_anchors[]/evidence.file resolves below `threshold` AND the
+  # record is older than `grace_days`. `weight` is reserved for the future
+  # R-05g fitness blend; pinned to 1.0 today.
+  anchor_validity:
+    threshold: 0.5
+    grace_days: 7
+    weight: 1.0

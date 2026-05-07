@@ -27,7 +27,7 @@ describe("search command", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-search-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["database", "api"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { database: {}, api: {} } }, tmpDir);
 		const dbPath = getExpertisePath("database", tmpDir);
 		const apiPath = getExpertisePath("api", tmpDir);
 		await createExpertiseFile(dbPath);

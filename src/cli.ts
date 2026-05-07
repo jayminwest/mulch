@@ -17,8 +17,10 @@ import { registerOutcomeCommand } from "./commands/outcome.ts";
 import { registerPrimeCommand } from "./commands/prime.ts";
 import { registerPruneCommand } from "./commands/prune.ts";
 import { registerQueryCommand } from "./commands/query.ts";
+import { registerRankCommand } from "./commands/rank.ts";
 import { registerReadyCommand } from "./commands/ready.ts";
 import { registerRecordCommand } from "./commands/record.ts";
+import { registerRestoreCommand } from "./commands/restore.ts";
 import { registerSearchCommand } from "./commands/search.ts";
 import { registerSetupCommand } from "./commands/setup.ts";
 import { registerStatusCommand } from "./commands/status.ts";
@@ -26,10 +28,34 @@ import { registerSyncCommand } from "./commands/sync.ts";
 import { registerUpdateCommand } from "./commands/update.ts";
 import { registerUpgradeCommand } from "./commands/upgrade.ts";
 import { registerValidateCommand } from "./commands/validate.ts";
+import { initRegistryFromConfig } from "./registry/init.ts";
 import { outputJsonError } from "./utils/json-output.ts";
 import { brand, muted, setQuiet } from "./utils/palette.ts";
+import { setAllowDomainMismatch, setAllowUnknownTypes } from "./utils/runtime-flags.ts";
 
-export const VERSION = "0.7.0";
+// Initialize the type registry from config so any custom_types declared in
+// mulch.config.yaml are first-class. Falls back to built-ins-only when no
+// .mulch/ directory exists yet (e.g., before `ml init`). Wrap any thrown
+// registry-init errors (bad custom_types config, disabled_types referencing
+// unknown types, etc.) so users see a formatted message instead of a Bun stack
+// trace from a top-level await failure.
+try {
+	await initRegistryFromConfig();
+} catch (err) {
+	const wantsJson = process.argv.includes("--json");
+	const message = (err as Error).message;
+	if (wantsJson) {
+		outputJsonError("init", `Config error: ${message}`);
+	} else {
+		process.stderr.write(`${chalk.red("Config error:")} ${message}\n`);
+		process.stderr.write(
+			chalk.dim("Edit .mulch/mulch.config.yaml to resolve, or run `mulch doctor` for details.\n"),
+		);
+	}
+	process.exit(1);
+}
+
+export const VERSION = "0.8.0";
 
 const rawArgs = process.argv.slice(2);
 
@@ -52,6 +78,16 @@ if (rawArgs.includes("--quiet") || rawArgs.includes("-q")) {
 	setQuiet(true);
 }
 
+// Apply --allow-unknown-types early so readers (which run before Commander
+// finishes parsing in some commands) consult the right runtime flag.
+if (rawArgs.includes("--allow-unknown-types")) {
+	setAllowUnknownTypes(true);
+}
+
+if (rawArgs.includes("--allow-domain-mismatch")) {
+	setAllowDomainMismatch(true);
+}
+
 // Detect --timing early (before Commander) so we can measure from startup
 const hasTiming = rawArgs.includes("--timing");
 const startTime = Date.now();
@@ -69,6 +105,14 @@ program
 	.option("-q, --quiet", "Suppress non-error output")
 	.option("--verbose", "Show full details in output")
 	.option("--timing", "Print execution time to stderr")
+	.option(
+		"--allow-unknown-types",
+		"tolerate on-disk records of unregistered types (worktree/CI lag escape hatch)",
+	)
+	.option(
+		"--allow-domain-mismatch",
+		"tolerate records that violate per-domain allowed_types/required_fields (escape hatch for record/validate; ignored by sync)",
+	)
 	.addOption(
 		new Option(
 			"--format <format>",
@@ -139,7 +183,9 @@ registerOnboardCommand(program);
 registerStatusCommand(program);
 registerValidateCommand(program);
 registerPruneCommand(program);
+registerRestoreCommand(program);
 registerSearchCommand(program);
+registerRankCommand(program);
 registerOutcomeCommand(program);
 registerDoctorCommand(program);
 registerReadyCommand(program);

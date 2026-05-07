@@ -27,7 +27,7 @@ describe("programmatic API", () => {
 	beforeEach(async () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-api-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 		await createExpertiseFile(getExpertisePath("testing", tmpDir));
 		await createExpertiseFile(getExpertisePath("architecture", tmpDir));
 	});

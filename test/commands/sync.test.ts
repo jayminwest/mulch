@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
 import { registerSyncCommand } from "../../src/commands/sync.ts";
+import { initRegistryFromConfig } from "../../src/registry/init.ts";
+import { resetRegistry } from "../../src/registry/type-registry.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import { getExpertisePath, initMulchDir, writeConfig } from "../../src/utils/config.ts";
 import { appendRecord, createExpertiseFile } from "../../src/utils/expertise.ts";
@@ -55,7 +57,7 @@ describe("sync command", () => {
 		originalCwd = process.cwd();
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-sync-test-"));
 		await initMulchDir(tmpDir);
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const expertisePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(expertisePath);
 		initGitRepo(tmpDir);
@@ -334,6 +336,280 @@ describe("sync command", () => {
 				expect(parsed.validated).toBe(false);
 			} finally {
 				logSpy.mockRestore();
+			}
+		});
+	});
+
+	describe("registry re-init from on-disk config (Phase 3)", () => {
+		// Simulate worktree/CI lag: a JSONL record of a custom type lands BEFORE
+		// the config that declares it. Sync must re-load the registry from
+		// on-disk config — using whatever was loaded at process start would
+		// keep failing forever even after the config is reconciled.
+		it("validates against fresh config, not the registry loaded at process start", async () => {
+			// Process-start registry has only built-ins: write empty config.
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { research: {} } }, tmpDir);
+			await initRegistryFromConfig(tmpDir);
+
+			const filePath = getExpertisePath("research", tmpDir);
+			await createExpertiseFile(filePath);
+			await writeFile(
+				filePath,
+				`${JSON.stringify({
+					type: "hypothesis",
+					id: "mx-abc123",
+					statement: "x",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				})}\n`,
+				"utf-8",
+			);
+
+			// NOW write the config that declares "hypothesis" — this is the lag
+			// scenario. Sync should pick this up via re-init and validate cleanly.
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { research: {} },
+					custom_types: {
+						hypothesis: {
+							required: ["statement"],
+							dedup_key: "statement",
+							summary: "{statement}",
+						},
+					},
+				},
+				tmpDir,
+			);
+
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "sync", "--no-validate"]);
+				// --no-validate skips the validate step but the registry re-init
+				// must still happen for any subsequent code path. With validate:
+				process.exitCode = 0;
+				const program2 = makeProgram();
+				await program2.parseAsync(["node", "mulch", "sync"]);
+				expect(process.exitCode).toBeFalsy();
+				const errOut = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+				expect(errOut).not.toMatch(/Unknown record type/);
+				expect(errOut).not.toMatch(/Schema validation failed/);
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+				resetRegistry();
+			}
+		});
+
+		it("blocks on domain allowed_types violations and prints retry hint", async () => {
+			// Backwards scenario: write config with allowed_types: [convention],
+			// then write a pattern record on disk. Sync re-reads config from disk,
+			// so even if the in-memory state was permissive, sync re-validates.
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { backend: { allowed_types: ["convention"] } },
+				},
+				tmpDir,
+			);
+			const filePath = getExpertisePath("backend", tmpDir);
+			await createExpertiseFile(filePath);
+			await writeFile(
+				filePath,
+				`${JSON.stringify({
+					type: "pattern",
+					id: "mx-bad1ce",
+					name: "n",
+					description: "d",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				})}\n`,
+				"utf-8",
+			);
+			gitCommitAll(tmpDir, "stage records");
+
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "sync"]);
+				expect(process.exitCode).toBe(1);
+				const errOut = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+				expect(errOut).toMatch(/Validation failed/);
+				expect(errOut).toMatch(/type "pattern"/);
+				expect(errOut).toMatch(/not allowed in domain "backend"/);
+				expect(errOut).toMatch(/id=mx-bad1ce/);
+				expect(errOut).toMatch(/Fix errors and retry/);
+			} finally {
+				errSpy.mockRestore();
+				resetRegistry();
+			}
+		});
+
+		it("blocks on missing domain required_fields", async () => {
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { backend: { required_fields: ["oncall_owner"] } },
+				},
+				tmpDir,
+			);
+			const filePath = getExpertisePath("backend", tmpDir);
+			await createExpertiseFile(filePath);
+			await writeFile(
+				filePath,
+				`${JSON.stringify({
+					type: "convention",
+					id: "mx-deadbe",
+					content: "c",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				})}\n`,
+				"utf-8",
+			);
+			gitCommitAll(tmpDir, "stage records");
+
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "sync"]);
+				expect(process.exitCode).toBe(1);
+				const errOut = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+				expect(errOut).toMatch(/missing required field\(s\) "oncall_owner"/);
+				expect(errOut).toMatch(/id=mx-deadbe/);
+			} finally {
+				errSpy.mockRestore();
+				resetRegistry();
+			}
+		});
+
+		it("re-reads config — record written under permissive config fails after tightening", async () => {
+			// Scenario: record landed before config tightened (worktree/CI lag).
+			// Sync's job is to catch the mismatch once config catches up.
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { backend: {} } }, tmpDir);
+			const filePath = getExpertisePath("backend", tmpDir);
+			await createExpertiseFile(filePath);
+			await writeFile(
+				filePath,
+				`${JSON.stringify({
+					type: "pattern",
+					id: "mx-faceb0",
+					name: "n",
+					description: "d",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				})}\n`,
+				"utf-8",
+			);
+
+			// First sync passes (domain has no rules).
+			const logSpy1 = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "sync"]);
+				expect(process.exitCode).toBeFalsy();
+			} finally {
+				logSpy1.mockRestore();
+				resetRegistry();
+			}
+
+			// Tighten config to disallow pattern records.
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { backend: { allowed_types: ["convention"] } },
+				},
+				tmpDir,
+			);
+
+			process.exitCode = 0;
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "sync"]);
+				expect(process.exitCode).toBe(1);
+				const errOut = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+				expect(errOut).toMatch(/not allowed in domain "backend"/);
+				expect(errOut).toMatch(/id=mx-faceb0/);
+			} finally {
+				errSpy.mockRestore();
+				resetRegistry();
+			}
+		});
+
+		it("ignores --allow-domain-mismatch (sync stays strict)", async () => {
+			// Sync intentionally ignores domain escape hatches: its job is to
+			// gatekeep commits. Same convention as --allow-unknown-types.
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { backend: { allowed_types: ["convention"] } },
+				},
+				tmpDir,
+			);
+			const filePath = getExpertisePath("backend", tmpDir);
+			await createExpertiseFile(filePath);
+			await writeFile(
+				filePath,
+				`${JSON.stringify({
+					type: "pattern",
+					id: "mx-c0ffee",
+					name: "n",
+					description: "d",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				})}\n`,
+				"utf-8",
+			);
+
+			const { setAllowDomainMismatch, resetRuntimeFlags } = await import(
+				"../../src/utils/runtime-flags.ts"
+			);
+			setAllowDomainMismatch(true);
+
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "sync"]);
+				expect(process.exitCode).toBe(1);
+				const errOut = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+				expect(errOut).toMatch(/not allowed in domain "backend"/);
+			} finally {
+				errSpy.mockRestore();
+				resetRuntimeFlags();
+				resetRegistry();
+			}
+		});
+
+		it("emits a targeted unknown-type error when config still doesn't declare the type", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { research: {} } }, tmpDir);
+			await initRegistryFromConfig(tmpDir);
+
+			const filePath = getExpertisePath("research", tmpDir);
+			await createExpertiseFile(filePath);
+			await writeFile(
+				filePath,
+				`${JSON.stringify({
+					type: "ghost",
+					id: "mx-deadbe",
+					content: "x",
+					classification: "tactical",
+					recorded_at: "2026-01-01T00:00:00.000Z",
+				})}\n`,
+				"utf-8",
+			);
+
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "sync"]);
+				expect(process.exitCode).toBe(1);
+				const errOut = errSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+				expect(errOut).toMatch(/Unknown record type "ghost"/);
+				expect(errOut).toMatch(/id=mx-deadbe/);
+			} finally {
+				errSpy.mockRestore();
+				resetRegistry();
 			}
 		});
 	});

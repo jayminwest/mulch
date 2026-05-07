@@ -1,10 +1,50 @@
 import { createHash, randomBytes } from "node:crypto";
 import { appendFile, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import type { Classification, ExpertiseRecord, RecordType } from "../schemas/record.ts";
+import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
+import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
 import { DEFAULT_BM25_PARAMS, searchBM25 } from "./bm25.ts";
+import { isAllowUnknownTypes } from "./runtime-flags.ts";
 import { applyConfirmationBoost } from "./scoring.ts";
 
-export async function readExpertiseFile(filePath: string): Promise<ExpertiseRecord[]> {
+export interface ReadExpertiseFileOptions {
+	// When true, on-disk records whose type is not in the registry are passed
+	// through unchanged instead of throwing. Defaults to the process-wide
+	// runtime flag (set via --allow-unknown-types).
+	allowUnknownTypes?: boolean;
+}
+
+/**
+ * Rewrite legacy field names to their canonical names per a type's aliases map.
+ * Mutates and returns the input. Idempotent: re-running on a record without
+ * legacy fields is a no-op. If both canonical and legacy are present, the
+ * canonical wins and the legacy field is dropped.
+ */
+export function applyAliases(
+	raw: Record<string, unknown>,
+	aliases: Readonly<Record<string, readonly string[]>> | undefined,
+): Record<string, unknown> {
+	if (!aliases) return raw;
+	for (const [canonical, legacyNames] of Object.entries(aliases)) {
+		for (const legacy of legacyNames) {
+			if (!(legacy in raw)) continue;
+			if (
+				!(canonical in raw) ||
+				raw[canonical] === undefined ||
+				raw[canonical] === null ||
+				raw[canonical] === ""
+			) {
+				raw[canonical] = raw[legacy];
+			}
+			delete raw[legacy];
+		}
+	}
+	return raw;
+}
+
+export async function readExpertiseFile(
+	filePath: string,
+	opts?: ReadExpertiseFileOptions,
+): Promise<ExpertiseRecord[]> {
 	let content: string;
 	try {
 		content = await readFile(filePath, "utf-8");
@@ -12,10 +52,27 @@ export async function readExpertiseFile(filePath: string): Promise<ExpertiseReco
 		return [];
 	}
 
+	const allowUnknown = opts?.allowUnknownTypes ?? isAllowUnknownTypes();
+	const registry = getRegistry();
 	const records: ExpertiseRecord[] = [];
-	const lines = content.split("\n").filter((line) => line.trim().length > 0);
-	for (const line of lines) {
-		const raw = JSON.parse(line) as Record<string, unknown>;
+	const allLines = content.split("\n");
+	for (let i = 0; i < allLines.length; i++) {
+		const line = allLines[i] ?? "";
+		const trimmed = line.trim();
+		if (trimmed.length === 0) continue;
+		// Skip comment lines (used by archive-file banners).
+		if (trimmed.startsWith("#")) continue;
+		let raw: Record<string, unknown>;
+		try {
+			raw = JSON.parse(line) as Record<string, unknown>;
+		} catch (err) {
+			// Without context the bare "Unexpected token …" from V8/JSC is unhelpful
+			// — point the operator at the exact file:line, which matters most for
+			// archive files that callers rarely open directly.
+			const reason = err instanceof Error ? err.message : String(err);
+			const preview = trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+			throw new Error(`Malformed JSONL at ${filePath}:${i + 1}: ${reason}. Line: ${preview}`);
+		}
 		// Normalize legacy outcome (singular) to outcomes (array) for backward compat
 		if (
 			"outcome" in raw &&
@@ -34,33 +91,32 @@ export async function readExpertiseFile(filePath: string): Promise<ExpertiseReco
 			];
 			raw.outcome = undefined;
 		}
+
+		const typeName = typeof raw.type === "string" ? raw.type : undefined;
+		let def: TypeDefinition | undefined;
+		if (typeName) def = registry.get(typeName);
+
+		if (typeName && !def && !allowUnknown) {
+			const idPart = typeof raw.id === "string" ? ` (id=${raw.id})` : "";
+			throw new Error(
+				`Unknown record type "${typeName}" at ${filePath}:${i + 1}${idPart}. Register it under custom_types in mulch.config.yaml, remove the record, or pass --allow-unknown-types to bypass.`,
+			);
+		}
+
+		if (def) applyAliases(raw, def.aliases);
+
 		records.push(raw as unknown as ExpertiseRecord);
 	}
 	return records;
 }
 
 export function generateRecordId(record: ExpertiseRecord): string {
-	let key: string;
-	switch (record.type) {
-		case "convention":
-			key = `convention:${record.content}`;
-			break;
-		case "pattern":
-			key = `pattern:${record.name}`;
-			break;
-		case "failure":
-			key = `failure:${record.description}`;
-			break;
-		case "decision":
-			key = `decision:${record.title}`;
-			break;
-		case "reference":
-			key = `reference:${record.name}`;
-			break;
-		case "guide":
-			key = `guide:${record.name}`;
-			break;
+	const def = getRegistry().get(record.type);
+	if (!def) {
+		throw new Error(`Unknown record type: ${record.type}`);
 	}
+	const idValue = (record as unknown as Record<string, unknown>)[def.idKey];
+	const key = `${record.type}:${String(idValue ?? "")}`;
 	return `mx-${createHash("sha256").update(key).digest("hex").slice(0, 6)}`;
 }
 
@@ -139,40 +195,20 @@ export function findDuplicate(
 	existing: ExpertiseRecord[],
 	newRecord: ExpertiseRecord,
 ): { index: number; record: ExpertiseRecord } | null {
+	const registry = getRegistry();
+	const def = registry.get(newRecord.type);
+	if (!def) return null;
+	const dedupKey = def.dedupKey;
+	if (dedupKey === "content_hash") {
+		// Phase 2: content-hash dedup for custom types. No built-in uses this.
+		return null;
+	}
+	const newValue = (newRecord as unknown as Record<string, unknown>)[dedupKey];
 	for (const [i, record] of existing.entries()) {
 		if (record.type !== newRecord.type) continue;
-
-		switch (record.type) {
-			case "pattern":
-				if (newRecord.type === "pattern" && record.name === newRecord.name) {
-					return { index: i, record };
-				}
-				break;
-			case "decision":
-				if (newRecord.type === "decision" && record.title === newRecord.title) {
-					return { index: i, record };
-				}
-				break;
-			case "convention":
-				if (newRecord.type === "convention" && record.content === newRecord.content) {
-					return { index: i, record };
-				}
-				break;
-			case "failure":
-				if (newRecord.type === "failure" && record.description === newRecord.description) {
-					return { index: i, record };
-				}
-				break;
-			case "reference":
-				if (newRecord.type === "reference" && record.name === newRecord.name) {
-					return { index: i, record };
-				}
-				break;
-			case "guide":
-				if (newRecord.type === "guide" && record.name === newRecord.name) {
-					return { index: i, record };
-				}
-				break;
+		const value = (record as unknown as Record<string, unknown>)[dedupKey];
+		if (value === newValue) {
+			return { index: i, record };
 		}
 	}
 	return null;
@@ -257,7 +293,7 @@ export function searchRecords(
 export interface DomainHealth {
 	governance_utilization: number;
 	stale_count: number;
-	type_distribution: Record<RecordType, number>;
+	type_distribution: Record<string, number>;
 	classification_distribution: Record<Classification, number>;
 	oldest_timestamp: string | null;
 	newest_timestamp: string | null;
@@ -301,15 +337,12 @@ export function calculateDomainHealth(
 ): DomainHealth {
 	const now = new Date();
 
-	// Initialize distributions
-	const typeDistribution: Record<RecordType, number> = {
-		convention: 0,
-		pattern: 0,
-		failure: 0,
-		decision: 0,
-		reference: 0,
-		guide: 0,
-	};
+	// Initialize distributions seeded from registry-known type names so custom
+	// types (Phase 2+) appear with zero counts when absent.
+	const typeDistribution: Record<string, number> = {};
+	for (const name of getRegistry().names()) {
+		typeDistribution[name] = 0;
+	}
 
 	const classificationDistribution: Record<Classification, number> = {
 		foundational: 0,
@@ -323,8 +356,9 @@ export function calculateDomainHealth(
 
 	// Calculate metrics
 	for (const record of records) {
-		// Type distribution
-		typeDistribution[record.type]++;
+		// Type distribution — `??` guards against records of types not in the
+		// registry (e.g., Phase 2's --allow-unknown-types escape hatch).
+		typeDistribution[record.type] = (typeDistribution[record.type] ?? 0) + 1;
 
 		// Classification distribution
 		classificationDistribution[record.classification]++;

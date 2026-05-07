@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { ExpertiseRecord } from "../schemas/record.ts";
+import { fileLivesUnderDir } from "./dir-anchors.ts";
 
 export function isGitRepo(cwd: string): boolean {
 	try {
@@ -78,11 +79,21 @@ export function filterByContext(
 	changedFiles: string[],
 ): ExpertiseRecord[] {
 	return records.filter((r) => {
-		// Records without a files field are always relevant (conventions, failures, decisions, guides)
-		if (!("files" in r) || !r.files || r.files.length === 0) {
+		const hasFiles = "files" in r && Array.isArray(r.files) && r.files.length > 0;
+		const hasDirAnchors = Array.isArray(r.dir_anchors) && r.dir_anchors.length > 0;
+
+		// No anchors at all → always relevant (conventions, decisions, failures,
+		// guides; or named records with no scoping declared).
+		if (!hasFiles && !hasDirAnchors) return true;
+
+		if (hasFiles && r.files !== undefined && r.files.some((f) => fileMatchesAny(f, changedFiles))) {
 			return true;
 		}
-		// Records with files: keep if any file matches a changed file
-		return r.files.some((f) => fileMatchesAny(f, changedFiles));
+		if (hasDirAnchors && r.dir_anchors !== undefined) {
+			for (const dir of r.dir_anchors) {
+				if (changedFiles.some((cf) => fileLivesUnderDir(cf, dir))) return true;
+			}
+		}
+		return false;
 	});
 }

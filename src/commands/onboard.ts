@@ -4,14 +4,23 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/markers.ts";
+import { isQuiet } from "../utils/palette.ts";
+import { getCurrentVersion } from "../utils/version.ts";
 
-export const ONBOARD_VERSION = 3;
-export const VERSION_MARKER = `<!-- mulch-onboard-v:${String(ONBOARD_VERSION)} -->`;
+// Single marker carries both display and detection: snippets are considered
+// current iff they include the marker for the running CLI's package version.
+// Patch bumps therefore prompt re-run, which is the desired UX (the visible
+// version in CLAUDE.md should track the installed Mulch).
+export function getVersionMarker(): string {
+	return `<!-- mulch-onboard:v${getCurrentVersion()} -->`;
+}
 
-const SNIPPET_DEFAULT = `## Project Expertise (Mulch)
-${VERSION_MARKER}
+function buildSnippet(): string {
+	const pkgVersion = getCurrentVersion();
+	return `## Project Expertise (Mulch)
+<!-- mulch-onboard:v${pkgVersion} -->
 
-This project uses [Mulch](https://github.com/jayminwest/mulch) for structured expertise management.
+This project uses [Mulch](https://github.com/jayminwest/mulch) v${pkgVersion} for structured expertise management.
 
 **At the start of every session**, run:
 \`\`\`bash
@@ -44,6 +53,11 @@ broken file anchors), \`ml --help\` for the full command list. Write commands us
 atomic writes, so multiple agents can record concurrently. Expertise survives \`git worktree\`
 cleanup — \`.mulch/\` resolves to the main repo.
 
+\`ml prune\` soft-archives stale records to \`.mulch/archive/\` instead of deleting them; pass
+\`--hard\` for true deletion. Restore an archived record with \`ml restore <id>\`. Do not read
+\`.mulch/archive/\` directly — those records are stale by definition. If you need historical
+context, run \`ml search --archived <query>\`.
+
 ### Before You Finish
 
 1. Discover what to record (shows changed files and suggests domains):
@@ -59,16 +73,14 @@ cleanup — \`.mulch/\` resolves to the main repo.
    ml sync
    \`\`\`
 `;
+}
 
 const LEGACY_HEADER = "## Project Expertise (Mulch)";
 const LEGACY_TAIL = 'mulch validate && git add .mulch/ && git commit -m "mulch: record learnings"';
 
-function getSnippet(provider: string | undefined): string {
-	if (!provider || provider === "default") {
-		return SNIPPET_DEFAULT;
-	}
-	// All providers use the same standardized snippet
-	return SNIPPET_DEFAULT;
+function getSnippet(_provider: string | undefined): string {
+	// All providers use the same standardized snippet.
+	return buildSnippet();
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -122,7 +134,7 @@ function replaceLegacySnippet(content: string, newSection: string): string {
 
 function isSnippetCurrent(content: string): boolean {
 	if (!hasMarkerSection(content)) return false;
-	return content.includes(VERSION_MARKER);
+	return content.includes(getVersionMarker());
 }
 
 async function findSnippetLocations(cwd: string): Promise<OnboardTarget[]> {
@@ -263,12 +275,12 @@ export async function runOnboard(options: {
 			};
 			const colorFn = colors[action] ?? chalk.white;
 			const msg = messages[action] ?? action;
-			console.log(colorFn(msg));
+			if (!isQuiet()) console.log(colorFn(msg));
 		}
 
 		if (duplicates.length > 0) {
 			const names = duplicates.map((d) => d.fileName).join(", ");
-			if (!options.jsonMode) {
+			if (!options.jsonMode && !isQuiet()) {
 				console.log(chalk.yellow(`Warning: mulch snippet also found in: ${names}`));
 			}
 		}
@@ -326,12 +338,12 @@ export async function runOnboard(options: {
 			up_to_date: `Mulch snippet in ${target.fileName} is already up to date. No changes made.`,
 		};
 		const color = action === "up_to_date" ? chalk.yellow : chalk.green;
-		console.log(color(messages[action]));
+		if (!isQuiet()) console.log(color(messages[action]));
 	}
 
 	if (duplicates.length > 0) {
 		const names = duplicates.map((d) => d.fileName).join(", ");
-		if (!options.jsonMode) {
+		if (!options.jsonMode && !isQuiet()) {
 			console.log(chalk.yellow(`Warning: mulch snippet also found in: ${names}`));
 		}
 	}

@@ -1,16 +1,21 @@
-import Ajv from "ajv";
 import chalk from "chalk";
 import { type Command, Option } from "commander";
+import { getRegistry } from "../registry/type-registry.ts";
 import type { Classification, ExpertiseRecord, Outcome } from "../schemas/record.ts";
-import { recordSchema } from "../schemas/record-schema.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
 
+// snake_case field name → camelCase Commander option key.
+function fieldToOptionKey(field: string): string {
+	return field.replace(/_(.)/g, (_, c: string) => c.toUpperCase());
+}
+
 export function registerEditCommand(program: Command): void {
-	program
+	const registry = getRegistry();
+	const cmd = program
 		.command("edit")
 		.argument("<domain>", "expertise domain")
 		.argument("<id>", "record ID (e.g. mx-abc123, abc123, or abc)")
@@ -40,194 +45,170 @@ export function registerEditCommand(program: Command): void {
 		)
 		.option("--outcome-duration <ms>", "set outcome duration in milliseconds")
 		.option("--outcome-test-results <text>", "set outcome test results summary")
-		.option("--outcome-agent <agent>", "set outcome agent name")
-		.action(async (domain: string, id: string, options: Record<string, unknown>) => {
-			const jsonMode = program.opts().json === true;
-			try {
-				const config = await readConfig();
+		.option("--outcome-agent <agent>", "set outcome agent name");
 
-				if (!config.domains.includes(domain)) {
+	// Dynamic flags for custom-type fields not already declared by built-ins.
+	const declaredOptionNames = new Set(cmd.options.map((o) => o.name()).concat(["files"]));
+	for (const def of registry.enabled()) {
+		if (def.kind === "builtin") continue;
+		for (const field of [...def.required, ...def.optional]) {
+			const flagName = field.replace(/_/g, "-");
+			if (declaredOptionNames.has(flagName)) continue;
+			declaredOptionNames.add(flagName);
+			cmd.option(`--${flagName} <${field}>`, `update ${def.name} field: ${field}`);
+		}
+	}
+
+	cmd.action(async (domain: string, id: string, options: Record<string, unknown>) => {
+		const jsonMode = program.opts().json === true;
+		try {
+			const config = await readConfig();
+
+			if (!(domain in config.domains)) {
+				if (jsonMode) {
+					outputJsonError(
+						"edit",
+						`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
+					);
+				} else {
+					console.error(chalk.red(`Error: domain "${domain}" not found in config.`));
+					console.error(
+						chalk.red(`Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`),
+					);
+				}
+				process.exitCode = 1;
+				return;
+			}
+
+			const filePath = getExpertisePath(domain);
+			await withFileLock(filePath, async () => {
+				const records = await readExpertiseFile(filePath);
+
+				const resolved = resolveRecordId(records, id);
+				if (!resolved.ok) {
+					if (jsonMode) {
+						outputJsonError("edit", resolved.error);
+					} else {
+						console.error(chalk.red(`Error: ${resolved.error}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+				const targetIndex = resolved.index;
+
+				const original = records[targetIndex];
+				if (!original) {
+					console.error(chalk.red(`Error: Record at index ${targetIndex} not found`));
+					process.exitCode = 1;
+					return;
+				}
+				const record: ExpertiseRecord = { ...original };
+
+				// Apply updates based on record type
+				if (options.classification) {
+					record.classification = options.classification as Classification;
+				}
+				if (typeof options.relatesTo === "string") {
+					record.relates_to = options.relatesTo
+						.split(",")
+						.map((id: string) => id.trim())
+						.filter(Boolean);
+				}
+				if (typeof options.supersedes === "string") {
+					record.supersedes = options.supersedes
+						.split(",")
+						.map((id: string) => id.trim())
+						.filter(Boolean);
+				}
+				if (options.outcomeStatus) {
+					const o: Outcome = {
+						status: options.outcomeStatus as "success" | "failure" | "partial",
+					};
+					if (options.outcomeDuration !== undefined) {
+						o.duration = Number.parseFloat(options.outcomeDuration as string);
+					}
+					if (options.outcomeTestResults) {
+						o.test_results = options.outcomeTestResults as string;
+					}
+					if (options.outcomeAgent) {
+						o.agent = options.outcomeAgent as string;
+					}
+					record.outcomes = [...(record.outcomes ?? []), o];
+				}
+
+				const def = registry.get(record.type);
+				if (def) {
+					const mutable = record as unknown as Record<string, unknown>;
+					for (const field of [...def.required, ...def.optional]) {
+						const optKey = fieldToOptionKey(field);
+						const value = options[optKey];
+						if (value === undefined) continue;
+						if (def.extractsFiles && field === def.filesField && typeof value === "string") {
+							mutable[field] = value
+								.split(",")
+								.map((s) => s.trim())
+								.filter(Boolean);
+						} else {
+							mutable[field] = value;
+						}
+					}
+				}
+
+				// Validate the updated record (cached on registry)
+				const validate = getRegistry().validator;
+				if (!validate(record)) {
+					const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
 					if (jsonMode) {
 						outputJsonError(
 							"edit",
-							`Domain "${domain}" not found in config. Available domains: ${config.domains.join(", ") || "(none)"}`,
+							`Updated record failed schema validation: ${errors.join("; ")}`,
 						);
 					} else {
-						console.error(chalk.red(`Error: domain "${domain}" not found in config.`));
-						console.error(chalk.red(`Available domains: ${config.domains.join(", ") || "(none)"}`));
+						console.error(chalk.red("Error: updated record failed schema validation:"));
+						for (const err of validate.errors ?? []) {
+							console.error(chalk.red(`  ${err.instancePath} ${err.message}`));
+						}
 					}
 					process.exitCode = 1;
 					return;
 				}
 
-				const filePath = getExpertisePath(domain);
-				await withFileLock(filePath, async () => {
-					const records = await readExpertiseFile(filePath);
+				records[targetIndex] = record;
+				await writeExpertiseFile(filePath, records);
 
-					const resolved = resolveRecordId(records, id);
-					if (!resolved.ok) {
-						if (jsonMode) {
-							outputJsonError("edit", resolved.error);
-						} else {
-							console.error(chalk.red(`Error: ${resolved.error}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					const targetIndex = resolved.index;
-
-					const original = records[targetIndex];
-					if (!original) {
-						console.error(chalk.red(`Error: Record at index ${targetIndex} not found`));
-						process.exitCode = 1;
-						return;
-					}
-					const record: ExpertiseRecord = { ...original };
-
-					// Apply updates based on record type
-					if (options.classification) {
-						record.classification = options.classification as Classification;
-					}
-					if (typeof options.relatesTo === "string") {
-						record.relates_to = options.relatesTo
-							.split(",")
-							.map((id: string) => id.trim())
-							.filter(Boolean);
-					}
-					if (typeof options.supersedes === "string") {
-						record.supersedes = options.supersedes
-							.split(",")
-							.map((id: string) => id.trim())
-							.filter(Boolean);
-					}
-					if (options.outcomeStatus) {
-						const o: Outcome = {
-							status: options.outcomeStatus as "success" | "failure" | "partial",
-						};
-						if (options.outcomeDuration !== undefined) {
-							o.duration = Number.parseFloat(options.outcomeDuration as string);
-						}
-						if (options.outcomeTestResults) {
-							o.test_results = options.outcomeTestResults as string;
-						}
-						if (options.outcomeAgent) {
-							o.agent = options.outcomeAgent as string;
-						}
-						record.outcomes = [...(record.outcomes ?? []), o];
-					}
-
-					switch (record.type) {
-						case "convention":
-							if (options.content) {
-								record.content = options.content as string;
-							}
-							break;
-						case "pattern":
-							if (options.name) {
-								record.name = options.name as string;
-							}
-							if (options.description) {
-								record.description = options.description as string;
-							}
-							if (typeof options.files === "string") {
-								record.files = (options.files as string).split(",");
-							}
-							break;
-						case "failure":
-							if (options.description) {
-								record.description = options.description as string;
-							}
-							if (options.resolution) {
-								record.resolution = options.resolution as string;
-							}
-							break;
-						case "decision":
-							if (options.title) {
-								record.title = options.title as string;
-							}
-							if (options.rationale) {
-								record.rationale = options.rationale as string;
-							}
-							break;
-						case "reference":
-							if (options.name) {
-								record.name = options.name as string;
-							}
-							if (options.description) {
-								record.description = options.description as string;
-							}
-							if (typeof options.files === "string") {
-								record.files = (options.files as string).split(",");
-							}
-							break;
-						case "guide":
-							if (options.name) {
-								record.name = options.name as string;
-							}
-							if (options.description) {
-								record.description = options.description as string;
-							}
-							break;
-					}
-
-					// Validate the updated record
-					const ajv = new Ajv();
-					const validate = ajv.compile(recordSchema);
-					if (!validate(record)) {
-						const errors = (validate.errors ?? []).map(
-							(err) => `${err.instancePath} ${err.message}`,
-						);
-						if (jsonMode) {
-							outputJsonError(
-								"edit",
-								`Updated record failed schema validation: ${errors.join("; ")}`,
-							);
-						} else {
-							console.error(chalk.red("Error: updated record failed schema validation:"));
-							for (const err of validate.errors ?? []) {
-								console.error(chalk.red(`  ${err.instancePath} ${err.message}`));
-							}
-						}
-						process.exitCode = 1;
-						return;
-					}
-
-					records[targetIndex] = record;
-					await writeExpertiseFile(filePath, records);
-
-					if (jsonMode) {
-						outputJson({
-							success: true,
-							command: "edit",
-							domain,
-							id: record.id ?? null,
-							type: record.type,
-							record,
-						});
-					} else {
-						if (!isQuiet()) {
-							const id = record.id ? ` ${accent(record.id)}` : "";
-							console.log(
-								`${brand("✓")} ${brand(`Updated ${record.type}`)}${id} ${brand(`in ${domain}`)}`,
-							);
-						}
-					}
-				});
-			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-					if (jsonMode) {
-						outputJsonError("edit", "No .mulch/ directory found. Run `mulch init` first.");
-					} else {
-						console.error("Error: No .mulch/ directory found. Run `mulch init` first.");
-					}
+				if (jsonMode) {
+					outputJson({
+						success: true,
+						command: "edit",
+						domain,
+						id: record.id ?? null,
+						type: record.type,
+						record,
+					});
 				} else {
-					if (jsonMode) {
-						outputJsonError("edit", (err as Error).message);
-					} else {
-						console.error(`Error: ${(err as Error).message}`);
+					if (!isQuiet()) {
+						const id = record.id ? ` ${accent(record.id)}` : "";
+						console.log(
+							`${brand("✓")} ${brand(`Updated ${record.type}`)}${id} ${brand(`in ${domain}`)}`,
+						);
 					}
 				}
-				process.exitCode = 1;
+			});
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+				if (jsonMode) {
+					outputJsonError("edit", "No .mulch/ directory found. Run `mulch init` first.");
+				} else {
+					console.error("Error: No .mulch/ directory found. Run `mulch init` first.");
+				}
+			} else {
+				if (jsonMode) {
+					outputJsonError("edit", (err as Error).message);
+				} else {
+					console.error(`Error: ${(err as Error).message}`);
+				}
 			}
-		});
+			process.exitCode = 1;
+		}
+	});
 }

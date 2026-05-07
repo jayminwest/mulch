@@ -21,7 +21,7 @@ describe("learn command", () => {
 
 	describe("matchFilesToDomains", () => {
 		it("matches changed files to domains via pattern records", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli", "testing"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {}, testing: {} } }, tmpDir);
 			const cliPath = getExpertisePath("cli", tmpDir);
 			const testPath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(cliPath);
@@ -63,7 +63,7 @@ describe("learn command", () => {
 		});
 
 		it("returns all files as unmatched when no records have files", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 			const cliPath = getExpertisePath("cli", tmpDir);
 			await createExpertiseFile(cliPath);
 
@@ -81,7 +81,7 @@ describe("learn command", () => {
 		});
 
 		it("returns empty results for no changed files", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 			const cliPath = getExpertisePath("cli", tmpDir);
 			await createExpertiseFile(cliPath);
 
@@ -92,7 +92,7 @@ describe("learn command", () => {
 		});
 
 		it("sorts domains by match count descending", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["alpha", "beta"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { alpha: {}, beta: {} } }, tmpDir);
 			const alphaPath = getExpertisePath("alpha", tmpDir);
 			const betaPath = getExpertisePath("beta", tmpDir);
 			await createExpertiseFile(alphaPath);
@@ -126,7 +126,7 @@ describe("learn command", () => {
 		});
 
 		it("handles domains with no expertise file", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["empty"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { empty: {} } }, tmpDir);
 			// Don't create expertise file — readExpertiseFile returns [] on ENOENT
 
 			const { matches, unmatched } = await matchFilesToDomains(["src/foo.ts"], tmpDir);
@@ -136,7 +136,7 @@ describe("learn command", () => {
 		});
 
 		it("matches suffix paths (record stores short path)", async () => {
-			await writeConfig({ ...DEFAULT_CONFIG, domains: ["cli"] }, tmpDir);
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 			const cliPath = getExpertisePath("cli", tmpDir);
 			await createExpertiseFile(cliPath);
 

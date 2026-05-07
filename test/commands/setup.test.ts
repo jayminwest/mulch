@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
 	CLAUDE_HOOK_COMMAND,
 	CURSOR_RULE_CONTENT,
@@ -12,6 +12,8 @@ import {
 	removeGitHook,
 } from "../../src/commands/setup.ts";
 import { initMulchDir } from "../../src/utils/config.ts";
+
+const CLI_PATH = resolve(import.meta.dir, "..", "..", "src", "cli.ts");
 
 describe("setup command", () => {
 	let tmpDir: string;
@@ -433,6 +435,211 @@ describe("setup command", () => {
 			const result = await installGitHook(tmpDir);
 			expect(result.success).toBe(false);
 			expect(result.message).toContain("Not a git repository");
+		});
+	});
+
+	// ── Discovery via CLI ──────────────────────────────────────
+
+	describe("recipe discovery", () => {
+		const STUB_TS = `
+const recipe = {
+	async install() { return { success: true, message: "filesystem-ts install" }; },
+	async check() { return { success: true, message: "filesystem-ts check" }; },
+	async remove() { return { success: true, message: "filesystem-ts remove" }; },
+};
+export default recipe;
+`;
+
+		const STUB_SH = `#!/bin/sh
+case "$1" in
+	install) echo "filesystem-sh install"; exit 0 ;;
+	check) echo "filesystem-sh check"; exit 0 ;;
+	remove) echo "filesystem-sh remove"; exit 0 ;;
+esac
+exit 1
+`;
+
+		function runCli(args: string[], cwd: string) {
+			return Bun.spawnSync(["bun", CLI_PATH, ...args], {
+				cwd,
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+		}
+
+		it("--list (json) reports built-ins and filesystem recipes", async () => {
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(join(recipesDir, "internal-ide.ts"), STUB_TS, "utf-8");
+			await writeFile(join(recipesDir, "legacy-bot.sh"), STUB_SH, "utf-8");
+			await chmod(join(recipesDir, "legacy-bot.sh"), 0o755);
+
+			const result = runCli(["--json", "setup", "--list"], tmpDir);
+			expect(result.exitCode).toBe(0);
+
+			const out = JSON.parse(result.stdout.toString());
+			expect(out.success).toBe(true);
+			expect(out.action).toBe("list");
+
+			const names = out.providers.map((p: { name: string }) => p.name);
+			expect(names).toContain("claude");
+			expect(names).toContain("internal-ide");
+			expect(names).toContain("legacy-bot");
+
+			const internal = out.providers.find((p: { name: string }) => p.name === "internal-ide");
+			expect(internal.source).toBe("filesystem-ts");
+			expect(internal.path).toContain(".mulch/recipes/internal-ide.ts");
+
+			const legacy = out.providers.find((p: { name: string }) => p.name === "legacy-bot");
+			expect(legacy.source).toBe("filesystem-sh");
+		});
+
+		it("--list flags built-ins shadowed by filesystem recipes", async () => {
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(join(recipesDir, "claude.ts"), STUB_TS, "utf-8");
+
+			const result = runCli(["--json", "setup", "--list"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			const out = JSON.parse(result.stdout.toString());
+
+			const claudeBuiltin = out.providers.find(
+				(p: { name: string; source: string }) => p.name === "claude" && p.source === "builtin",
+			);
+			expect(claudeBuiltin.shadowed_by).toBe("filesystem-ts");
+		});
+
+		it("setup <name> resolves filesystem-ts recipe and runs install", async () => {
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(join(recipesDir, "internal-ide.ts"), STUB_TS, "utf-8");
+
+			const result = runCli(["--json", "setup", "internal-ide"], tmpDir);
+			expect(result.exitCode).toBe(0);
+
+			const out = JSON.parse(result.stdout.toString());
+			expect(out.success).toBe(true);
+			expect(out.provider).toBe("internal-ide");
+			expect(out.source).toBe("filesystem-ts");
+			expect(out.message).toBe("filesystem-ts install");
+		});
+
+		it("setup <name> resolves filesystem-sh recipe and runs check", async () => {
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(join(recipesDir, "legacy-bot.sh"), STUB_SH, "utf-8");
+			await chmod(join(recipesDir, "legacy-bot.sh"), 0o755);
+
+			const result = runCli(["--json", "setup", "legacy-bot", "--check"], tmpDir);
+			expect(result.exitCode).toBe(0);
+
+			const out = JSON.parse(result.stdout.toString());
+			expect(out.success).toBe(true);
+			expect(out.source).toBe("filesystem-sh");
+			expect(out.message).toBe("filesystem-sh check");
+		});
+
+		it("filesystem recipe shadows built-in when name collides", async () => {
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(join(recipesDir, "claude.ts"), STUB_TS, "utf-8");
+
+			const result = runCli(["--json", "setup", "claude"], tmpDir);
+			expect(result.exitCode).toBe(0);
+
+			const out = JSON.parse(result.stdout.toString());
+			expect(out.source).toBe("filesystem-ts");
+			expect(out.message).toBe("filesystem-ts install");
+		});
+
+		it("setup <unknown> exits non-zero with a discovery hint", async () => {
+			const result = runCli(["--json", "setup", "nonexistent"], tmpDir);
+			expect(result.exitCode).toBe(1);
+
+			const err = JSON.parse(result.stderr.toString());
+			expect(err.success).toBe(false);
+			expect(err.error).toContain('Unknown provider "nonexistent"');
+			expect(err.error).toContain("--list");
+			expect(err.error).toContain(".mulch/recipes/nonexistent");
+			expect(err.error).toContain("mulch-recipe-nonexistent");
+		});
+
+		it("setup with no args, no --hooks, no --list errors", async () => {
+			const result = runCli(["--json", "setup"], tmpDir);
+			expect(result.exitCode).toBe(1);
+
+			const err = JSON.parse(result.stderr.toString());
+			expect(err.error).toContain("--list");
+		});
+
+		it("setup <name> formats a recipe install() throw instead of crashing", async () => {
+			// Regression for mulch-828d: a recipe whose install/check/remove
+			// throws (e.g. fs error mid-way, network failure) used to surface
+			// as a raw Bun stack trace because the action handler awaited the
+			// call without try/catch.
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(
+				join(recipesDir, "boom.ts"),
+				`export default {
+  async install() { throw new Error("intentional install failure"); },
+  async check() { return { success: true, message: "" }; },
+  async remove() { return { success: true, message: "" }; },
+};
+`,
+				"utf-8",
+			);
+
+			const result = runCli(["--json", "setup", "boom"], tmpDir);
+			expect(result.exitCode).toBe(1);
+			const out = JSON.parse(result.stdout.toString());
+			expect(out.success).toBe(false);
+			expect(out.message).toContain("intentional install failure");
+			expect(out.message).toContain("threw");
+			// No raw Bun stack trace in stderr.
+			expect(result.stderr.toString()).not.toContain("at install");
+			expect(result.stderr.toString()).not.toContain("Bun v");
+		});
+
+		it("setup <name> with named-only TS recipe fails with default-export error", async () => {
+			const recipesDir = join(tmpDir, ".mulch", "recipes");
+			await mkdir(recipesDir, { recursive: true });
+			await writeFile(
+				join(recipesDir, "named.ts"),
+				`export const install = async () => ({ success: true, message: "" });
+export const check = async () => ({ success: true, message: "" });
+export const remove = async () => ({ success: true, message: "" });
+`,
+				"utf-8",
+			);
+
+			const result = runCli(["--json", "setup", "named"], tmpDir);
+			expect(result.exitCode).toBe(1);
+			const err = JSON.parse(result.stderr.toString());
+			expect(err.success).toBe(false);
+			expect(err.error).toContain("no default export");
+		});
+
+		it("--list flags built-ins shadowed by an installed npm recipe package", async () => {
+			// Stage a fake mulch-recipe-claude package in node_modules so the
+			// per-builtin npm probe finds it. We don't need to load it — only
+			// require.resolve must succeed.
+			const pkgDir = join(tmpDir, "node_modules", "mulch-recipe-claude");
+			await mkdir(pkgDir, { recursive: true });
+			await writeFile(
+				join(pkgDir, "package.json"),
+				JSON.stringify({ name: "mulch-recipe-claude", main: "index.js" }),
+				"utf-8",
+			);
+			await writeFile(join(pkgDir, "index.js"), "module.exports = {};\n", "utf-8");
+
+			const result = runCli(["--json", "setup", "--list"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			const out = JSON.parse(result.stdout.toString());
+			const claudeBuiltin = out.providers.find(
+				(p: { name: string; source: string }) => p.name === "claude" && p.source === "builtin",
+			);
+			expect(claudeBuiltin.shadowed_by).toBe("npm");
 		});
 	});
 });

@@ -1,16 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
-import Ajv from "ajv";
 import chalk from "chalk";
 import { type Command, Option } from "commander";
-import type {
-	Classification,
-	Evidence,
-	ExpertiseRecord,
-	Outcome,
-	RecordType,
-} from "../schemas/record.ts";
-import { recordSchema } from "../schemas/record-schema.ts";
+import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
+import type { Classification, Evidence, ExpertiseRecord, Outcome } from "../schemas/record.ts";
 import { addDomain, getExpertisePath, readConfig } from "../utils/config.ts";
+import {
+	assertWritableDirAnchor,
+	inferDirAnchors,
+	normalizeDirAnchor,
+} from "../utils/dir-anchors.ts";
+import {
+	findMissingDomainFields,
+	findRejectedRequiredFields,
+	getAllowedTypes,
+	getRequiredFields,
+} from "../utils/domain-rules.ts";
 import {
 	appendRecord,
 	findDuplicate,
@@ -18,18 +22,113 @@ import {
 	writeExpertiseFile,
 } from "../utils/expertise.ts";
 import { getContextFiles, getCurrentCommit } from "../utils/git-context.ts";
+import { runHooks } from "../utils/hooks.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
+import { isAllowDomainMismatch } from "../utils/runtime-flags.ts";
 
-const RECORD_TYPE_REQUIREMENTS: Record<string, string> = {
-	convention: "convention records require: content",
-	pattern: "pattern records require: name, description",
-	failure: "failure records require: description, resolution",
-	decision: "decision records require: title, rationale",
-	reference: "reference records require: name, description",
-	guide: "guide records require: name, description",
-};
+function buildTypeRequirements(): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const def of getRegistry().enabled()) {
+		out[def.name] = `${def.name} records require: ${def.required.join(", ")}`;
+	}
+	return out;
+}
+
+// snake_case field name → camelCase Commander option key (e.g. "test_results" → "testResults").
+function fieldToOptionKey(field: string): string {
+	return field.replace(/_(.)/g, (_, c: string) => c.toUpperCase());
+}
+
+// Returns the positional content fallback for built-in types that historically
+// accept it. Returns null for custom types and built-ins without fallback.
+function positionalFallbackField(def: TypeDefinition): string | null {
+	if (def.kind !== "builtin") return null;
+	if (def.name === "convention") return "content";
+	if (def.name === "pattern" || def.name === "reference" || def.name === "guide") {
+		return "description";
+	}
+	return null;
+}
+
+interface BaseRecordParts {
+	classification: Classification;
+	recorded_at: string;
+	evidence?: Evidence;
+	tags?: string[];
+	relates_to?: string[];
+	supersedes?: string[];
+	outcomes?: Outcome[];
+	dir_anchors?: string[];
+}
+
+function buildRecordFromOptions(
+	def: TypeDefinition,
+	content: string | undefined,
+	options: Record<string, unknown>,
+	base: BaseRecordParts,
+): { record: ExpertiseRecord | null; missing: Array<{ flag: string; placeholder: string }> } {
+	const fallbackField = positionalFallbackField(def);
+	const r: Record<string, unknown> = {
+		type: def.name,
+		classification: base.classification,
+		recorded_at: base.recorded_at,
+	};
+	if (base.evidence) r.evidence = base.evidence;
+	if (base.tags && base.tags.length > 0) r.tags = base.tags;
+	if (base.relates_to && base.relates_to.length > 0) r.relates_to = base.relates_to;
+	if (base.supersedes && base.supersedes.length > 0) r.supersedes = base.supersedes;
+	if (base.outcomes) r.outcomes = base.outcomes;
+	if (base.dir_anchors && base.dir_anchors.length > 0) r.dir_anchors = base.dir_anchors;
+
+	const missing: Array<{ flag: string; placeholder: string }> = [];
+
+	const collectField = (field: string, isRequired: boolean): void => {
+		const optKey = fieldToOptionKey(field);
+		let value: unknown = options[optKey];
+		if (value === undefined && fallbackField === field && content !== undefined) {
+			value = content;
+		}
+		if (value === undefined || value === "") {
+			if (isRequired)
+				missing.push({ flag: `--${field.replace(/_/g, "-")}`, placeholder: `<${field}>` });
+			return;
+		}
+		// extractsFiles: split comma-separated string from --files flag
+		if (def.extractsFiles && field === def.filesField && typeof value === "string") {
+			r[field] = value
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			return;
+		}
+		r[field] = value;
+	};
+
+	for (const field of def.required) collectField(field, true);
+	for (const field of def.optional) collectField(field, false);
+
+	// Auto-populate files from git context for extractsFiles types when not provided.
+	if (def.extractsFiles && r[def.filesField] === undefined) {
+		const ctx = getContextFiles();
+		if (ctx.length > 0) r[def.filesField] = ctx;
+	}
+
+	if (missing.length > 0) return { record: null, missing };
+	return { record: r as unknown as ExpertiseRecord, missing: [] };
+}
+
+function isNamedType(def: TypeDefinition): boolean {
+	// "Named" types upsert on duplicate; "anonymous" types skip on duplicate.
+	// Built-ins: convention/failure are anonymous; pattern/decision/reference/guide are named.
+	if (def.kind === "builtin") {
+		return def.name !== "convention" && def.name !== "failure";
+	}
+	// Custom types: treat as named iff dedup_key isn't content_hash (since
+	// content_hash dedup behaves like an anonymous exact-match check).
+	return def.dedupKey !== "content_hash";
+}
 
 function buildRetryCommand(
 	domain: string,
@@ -51,6 +150,11 @@ function buildRetryCommand(
 	if (options.title) parts.push(`--title ${JSON.stringify(options.title as string)}`);
 	if (options.rationale) parts.push(`--rationale ${JSON.stringify(options.rationale as string)}`);
 	if (options.files) parts.push(`--files ${JSON.stringify(options.files as string)}`);
+	if (Array.isArray(options.dirAnchor)) {
+		for (const dir of options.dirAnchor as string[]) {
+			parts.push(`--dir-anchor ${JSON.stringify(dir)}`);
+		}
+	}
 	if (options.tags) parts.push(`--tags ${JSON.stringify(options.tags as string)}`);
 	if (options.evidenceCommit) parts.push(`--evidence-commit ${options.evidenceCommit as string}`);
 	if (options.evidenceIssue)
@@ -87,10 +191,11 @@ export async function processStdinRecords(
 	updated: number;
 	skipped: number;
 	errors: string[];
+	warnings: string[];
 }> {
 	const config = await readConfig(cwd);
 
-	if (!config.domains.includes(domain)) {
+	if (!(domain in config.domains)) {
 		await addDomain(domain, cwd);
 	}
 
@@ -107,9 +212,10 @@ export async function processStdinRecords(
 		);
 	}
 
-	// Validate each record against schema
-	const ajv = new Ajv();
-	const validate = ajv.compile(recordSchema);
+	// Validate each record against schema (cached on registry)
+	const validate = getRegistry().validator;
+	const allowedTypes = getAllowedTypes(config, domain);
+	const requiredFields = getRequiredFields(config, domain);
 
 	const errors: string[] = [];
 	const validRecords: ExpertiseRecord[] = [];
@@ -135,19 +241,106 @@ export async function processStdinRecords(
 				typeof record === "object" && record !== null
 					? (record as Record<string, unknown>).type
 					: undefined;
+			const requirements = buildTypeRequirements();
 			const typeHint =
-				typeof recordType === "string" && RECORD_TYPE_REQUIREMENTS[recordType]
-					? `. Hint: ${RECORD_TYPE_REQUIREMENTS[recordType]}`
+				typeof recordType === "string" && requirements[recordType]
+					? `. Hint: ${requirements[recordType]}`
 					: "";
-			errors.push(`Record ${i}: ${validationErrors}${typeHint}`);
+			const rejectedRequired = findRejectedRequiredFields(validate.errors, requiredFields);
+			const domainHint =
+				rejectedRequired.length > 0
+					? `. Domain "${domain}" requires field(s) ${rejectedRequired
+							.map((f) => `"${f}"`)
+							.join(
+								", ",
+							)}, but type "${typeof recordType === "string" ? recordType : "?"}" does not declare them. Declare a custom_type that holds these fields, or remove them from required_fields in mulch.config.yaml.`
+					: "";
+			errors.push(`Record ${i}: ${validationErrors}${typeHint}${domainHint}`);
 			continue;
+		}
+
+		const allowDomainMismatch = isAllowDomainMismatch();
+		if (allowedTypes && !allowDomainMismatch) {
+			const recordType = (record as Record<string, unknown>).type;
+			if (typeof recordType === "string" && !allowedTypes.includes(recordType)) {
+				errors.push(
+					`Record ${i}: type "${recordType}" is not allowed in domain "${domain}". Allowed types: ${allowedTypes.join(", ")}.`,
+				);
+				continue;
+			}
+		}
+
+		if (requiredFields && !allowDomainMismatch) {
+			const missing = findMissingDomainFields(record as Record<string, unknown>, requiredFields);
+			if (missing.length > 0) {
+				errors.push(
+					`Record ${i}: domain "${domain}" requires field(s) ${missing.map((f) => `"${f}"`).join(", ")}.`,
+				);
+				continue;
+			}
 		}
 
 		validRecords.push(record as ExpertiseRecord);
 	}
 
+	// Emit one warning per disabled type seen across the batch, not per record.
+	const warnings: string[] = [];
+	const seenDisabledTypes = new Set<string>();
+	for (const r of validRecords) {
+		if (getRegistry().isDisabled(r.type) && !seenDisabledTypes.has(r.type)) {
+			seenDisabledTypes.add(r.type);
+			const msg = `type "${r.type}" is disabled (declared in disabled_types). Records will still be written; consider migrating off this type.`;
+			warnings.push(msg);
+			if (!isQuiet()) {
+				console.error(chalk.yellow(`Warning: ${msg}`));
+			}
+		}
+	}
+
 	if (validRecords.length === 0) {
-		return { created: 0, updated: 0, skipped: 0, errors };
+		return { created: 0, updated: 0, skipped: 0, errors, warnings };
+	}
+
+	// Fire pre-record per record before locking. A blocked hook drops just that
+	// record (added to errors); the rest of the batch still writes. Skipped in
+	// dry-run since hooks shouldn't fire when previewing.
+	const recordsToWrite: ExpertiseRecord[] = [];
+	if (dryRun) {
+		recordsToWrite.push(...validRecords);
+	} else {
+		for (let i = 0; i < validRecords.length; i++) {
+			const r = validRecords[i];
+			if (!r) continue;
+			const preRes = await runHooks<{ domain: string; record: ExpertiseRecord }>(
+				"pre-record",
+				{ domain, record: r },
+				{ cwd },
+			);
+			warnings.push(...preRes.warnings);
+			if (preRes.blocked) {
+				errors.push(`Record ${i}: ${preRes.blockReason ?? "pre-record hook blocked the write"}`);
+				continue;
+			}
+			let final = r;
+			if (preRes.ranAny && preRes.payload?.record) {
+				const mutated = preRes.payload.record;
+				if (mutated !== r) {
+					if (!validate(mutated)) {
+						const errs = (validate.errors ?? [])
+							.map((e) => `${e.instancePath} ${e.message}`)
+							.join("; ");
+						errors.push(`Record ${i}: pre-record hook produced an invalid record: ${errs}`);
+						continue;
+					}
+					final = mutated;
+				}
+			}
+			recordsToWrite.push(final);
+		}
+	}
+
+	if (recordsToWrite.length === 0) {
+		return { created: 0, updated: 0, skipped: 0, errors, warnings };
 	}
 
 	// Process valid records with file locking (skip write in dry-run mode)
@@ -156,22 +349,30 @@ export async function processStdinRecords(
 	let updated = 0;
 	let skipped = 0;
 
+	const registry = getRegistry();
+	const isNamedRecord = (record: ExpertiseRecord): boolean => {
+		const def = registry.get(record.type);
+		return def ? isNamedType(def) : false;
+	};
+
+	// Track records that were actually written so post-record can fire on each
+	// after the lock releases.
+	const writtenForPostHook: Array<{
+		domain: string;
+		record: ExpertiseRecord;
+		action: "created" | "updated";
+	}> = [];
+
 	if (dryRun) {
 		// Dry-run: check for duplicates without writing
 		const existing = await readExpertiseFile(filePath);
 		const currentRecords = [...existing];
 
-		for (const record of validRecords) {
+		for (const record of recordsToWrite) {
 			const dup = findDuplicate(currentRecords, record);
 
 			if (dup && !force) {
-				const isNamed =
-					record.type === "pattern" ||
-					record.type === "decision" ||
-					record.type === "reference" ||
-					record.type === "guide";
-
-				if (isNamed) {
+				if (isNamedRecord(record)) {
 					updated++;
 				} else {
 					skipped++;
@@ -186,23 +387,19 @@ export async function processStdinRecords(
 			const existing = await readExpertiseFile(filePath);
 			const currentRecords = [...existing];
 
-			for (const record of validRecords) {
+			for (const record of recordsToWrite) {
 				const dup = findDuplicate(currentRecords, record);
 
 				if (dup && !force) {
-					const isNamed =
-						record.type === "pattern" ||
-						record.type === "decision" ||
-						record.type === "reference" ||
-						record.type === "guide";
-
-					if (isNamed) {
+					if (isNamedRecord(record)) {
 						// Upsert: replace in place, merging outcomes from existing
 						const existingRecord = currentRecords[dup.index];
 						if (!existingRecord) continue;
 						const mergedOutcomes = [...(existingRecord.outcomes ?? []), ...(record.outcomes ?? [])];
-						currentRecords[dup.index] =
+						const upsertRecord =
 							mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
+						currentRecords[dup.index] = upsertRecord;
+						writtenForPostHook.push({ domain, record: upsertRecord, action: "updated" });
 						updated++;
 					} else {
 						// Exact match: skip
@@ -211,6 +408,7 @@ export async function processStdinRecords(
 				} else {
 					// New record: append
 					currentRecords.push(record);
+					writtenForPostHook.push({ domain, record, action: "created" });
 					created++;
 				}
 			}
@@ -222,25 +420,25 @@ export async function processStdinRecords(
 		});
 	}
 
-	return { created, updated, skipped, errors };
+	// Fire post-record outside the lock for each actual write.
+	for (const written of writtenForPostHook) {
+		const postRes = await runHooks("post-record", written, { cwd });
+		warnings.push(...postRes.warnings);
+	}
+
+	return { created, updated, skipped, errors, warnings };
 }
 
 export function registerRecordCommand(program: Command): void {
-	program
+	const registry = getRegistry();
+	const typeChoices = registry.names();
+
+	const cmd = program
 		.command("record")
 		.argument("<domain>", "expertise domain")
 		.argument("[content]", "record content")
 		.description("Record an expertise record")
-		.addOption(
-			new Option("--type <type>", "record type").choices([
-				"convention",
-				"pattern",
-				"failure",
-				"decision",
-				"reference",
-				"guide",
-			]),
-		)
+		.addOption(new Option("--type <type>", "record type").choices(typeChoices))
 		.addOption(
 			new Option("--classification <classification>", "classification level")
 				.choices(["foundational", "tactical", "observational"])
@@ -252,6 +450,12 @@ export function registerRecordCommand(program: Command): void {
 		.option("--title <title>", "title for decision records")
 		.option("--rationale <rationale>", "rationale for decision records")
 		.option("--files <files>", "related files (comma-separated)")
+		.option(
+			"--dir-anchor <path>",
+			"repo-relative directory the record applies to (repeatable; auto-populated from changed files when omitted)",
+			(value: string, prev: string[] = []) => [...prev, value],
+			[] as string[],
+		)
 		.option("--tags <tags>", "comma-separated tags")
 		.option(
 			"--evidence-commit <commit>",
@@ -295,703 +499,693 @@ Batch recording examples:
   ml record cli --batch records.json --dry-run
   echo '[{"type":"convention","content":"test"}]' > batch.json && ml record cli --batch batch.json
 `,
-		)
-		.action(
-			async (domain: string, content: string | undefined, options: Record<string, unknown>) => {
-				const jsonMode = program.opts().json === true;
+		);
 
-				// Handle --batch mode
-				if (options.batch) {
-					const batchFile = options.batch as string;
-					const dryRun = options.dryRun === true;
+	// Dynamically register --<field> flags for custom-type fields not already
+	// covered by the built-in flag set. This makes Phase 2 custom_types
+	// (declared in mulch.config.yaml) feel first-class on the CLI.
+	const declaredOptionNames = new Set(
+		cmd.options.map((o) => o.name()).concat(["files"]), // --files declared above
+	);
+	for (const def of registry.enabled()) {
+		if (def.kind === "builtin") continue;
+		for (const field of [...def.required, ...def.optional]) {
+			const flagName = field.replace(/_/g, "-");
+			if (declaredOptionNames.has(flagName)) continue;
+			declaredOptionNames.add(flagName);
+			cmd.option(`--${flagName} <${field}>`, `${def.name} field: ${field}`);
+		}
+	}
 
-					if (!existsSync(batchFile)) {
-						if (jsonMode) {
-							outputJsonError("record", `Batch file not found: ${batchFile}`);
-						} else {
-							console.error(chalk.red(`Error: batch file not found: ${batchFile}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
+	cmd.action(
+		async (domain: string, content: string | undefined, options: Record<string, unknown>) => {
+			const jsonMode = program.opts().json === true;
 
-					try {
-						const fileContent = readFileSync(batchFile, "utf-8");
-						const result = await processStdinRecords(
-							domain,
-							jsonMode,
-							options.force === true,
-							dryRun,
-							fileContent,
-						);
-
-						if (result.errors.length > 0) {
-							if (jsonMode) {
-								outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
-							} else {
-								console.error(chalk.red("Validation errors:"));
-								for (const error of result.errors) {
-									console.error(chalk.red(`  ${error}`));
-								}
-							}
-						}
-
-						if (jsonMode) {
-							outputJson({
-								success: result.errors.length === 0 || result.created + result.updated > 0,
-								command: "record",
-								action: dryRun ? "dry-run" : "batch",
-								domain,
-								created: result.created,
-								updated: result.updated,
-								skipped: result.skipped,
-								errors: result.errors,
-							});
-						} else {
-							if (dryRun) {
-								const total = result.created + result.updated;
-								if (total > 0 || result.skipped > 0) {
-									if (!isQuiet())
-										console.log(
-											`${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
-										);
-									if (result.created > 0) {
-										if (!isQuiet()) console.log(chalk.dim(`  Create: ${result.created}`));
-									}
-									if (result.updated > 0) {
-										if (!isQuiet()) console.log(chalk.dim(`  Update: ${result.updated}`));
-									}
-									if (result.skipped > 0) {
-										if (!isQuiet()) console.log(chalk.dim(`  Skip: ${result.skipped}`));
-									}
-									if (!isQuiet())
-										console.log(chalk.dim("  Run without --dry-run to apply changes."));
-								} else {
-									if (!isQuiet()) console.log(chalk.yellow("No records would be processed."));
-								}
-							} else {
-								if (result.created > 0) {
-									if (!isQuiet())
-										console.log(
-											`${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
-										);
-								}
-								if (result.updated > 0) {
-									if (!isQuiet())
-										console.log(
-											`${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
-										);
-								}
-								if (result.skipped > 0) {
-									if (!isQuiet())
-										console.log(
-											chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`),
-										);
-								}
-							}
-						}
-
-						if (result.errors.length > 0 && result.created + result.updated === 0) {
-							process.exitCode = 1;
-						}
-					} catch (err) {
-						if (jsonMode) {
-							outputJsonError("record", err instanceof Error ? err.message : String(err));
-						} else {
-							console.error(
-								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
-							);
-						}
-						process.exitCode = 1;
-					}
-					return;
-				}
-
-				// Handle --stdin mode
-				if (options.stdin === true) {
-					const dryRun = options.dryRun === true;
-
-					try {
-						const result = await processStdinRecords(
-							domain,
-							jsonMode,
-							options.force === true,
-							dryRun,
-						);
-
-						if (result.errors.length > 0) {
-							if (jsonMode) {
-								outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
-							} else {
-								console.error(chalk.red("Validation errors:"));
-								for (const error of result.errors) {
-									console.error(chalk.red(`  ${error}`));
-								}
-							}
-						}
-
-						if (jsonMode) {
-							outputJson({
-								success: result.errors.length === 0 || result.created + result.updated > 0,
-								command: "record",
-								action: dryRun ? "dry-run" : "stdin",
-								domain,
-								created: result.created,
-								updated: result.updated,
-								skipped: result.skipped,
-								errors: result.errors,
-							});
-						} else {
-							if (dryRun) {
-								const total = result.created + result.updated;
-								if (total > 0 || result.skipped > 0) {
-									if (!isQuiet())
-										console.log(
-											`${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
-										);
-									if (result.created > 0) {
-										if (!isQuiet()) console.log(chalk.dim(`  Create: ${result.created}`));
-									}
-									if (result.updated > 0) {
-										if (!isQuiet()) console.log(chalk.dim(`  Update: ${result.updated}`));
-									}
-									if (result.skipped > 0) {
-										if (!isQuiet()) console.log(chalk.dim(`  Skip: ${result.skipped}`));
-									}
-									if (!isQuiet())
-										console.log(chalk.dim("  Run without --dry-run to apply changes."));
-								} else {
-									if (!isQuiet()) console.log(chalk.yellow("No records would be processed."));
-								}
-							} else {
-								if (result.created > 0) {
-									if (!isQuiet())
-										console.log(
-											`${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
-										);
-								}
-								if (result.updated > 0) {
-									if (!isQuiet())
-										console.log(
-											`${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
-										);
-								}
-								if (result.skipped > 0) {
-									if (!isQuiet())
-										console.log(
-											chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`),
-										);
-								}
-							}
-						}
-
-						if (result.errors.length > 0 && result.created + result.updated === 0) {
-							process.exitCode = 1;
-						}
-					} catch (err) {
-						if (jsonMode) {
-							outputJsonError("record", err instanceof Error ? err.message : String(err));
-						} else {
-							console.error(
-								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
-							);
-						}
-						process.exitCode = 1;
-					}
-					return;
-				}
-				const config = await readConfig();
-
-				if (!config.domains.includes(domain)) {
-					await addDomain(domain);
-					if (!isQuiet()) {
-						console.log(`${brand("✓")} ${brand(`Auto-created domain "${domain}"`)}`);
-					}
-				}
-
-				// Validate --type is provided for non-stdin mode
-				if (!options.type) {
-					if (jsonMode) {
-						outputJsonError(
-							"record",
-							"--type is required (convention, pattern, failure, decision, reference, guide)",
-						);
-					} else {
-						console.error(
-							chalk.red(
-								"Error: --type is required (convention, pattern, failure, decision, reference, guide)",
-							),
-						);
-					}
-					process.exitCode = 1;
-					return;
-				}
-
-				const recordType = options.type as RecordType;
-				const classification = (options.classification as Classification) ?? "tactical";
-				const recordedAt = new Date().toISOString();
-
-				// Build evidence if any evidence option is provided
-				let evidence: Evidence | undefined;
-				if (
-					options.evidenceCommit ||
-					options.evidenceIssue ||
-					options.evidenceFile ||
-					options.evidenceBead ||
-					options.evidenceSeeds ||
-					options.evidenceGh ||
-					options.evidenceLinear
-				) {
-					evidence = {};
-					if (options.evidenceCommit) evidence.commit = options.evidenceCommit as string;
-					if (options.evidenceIssue) evidence.issue = options.evidenceIssue as string;
-					if (options.evidenceFile) evidence.file = options.evidenceFile as string;
-					if (options.evidenceBead) evidence.bead = options.evidenceBead as string;
-					if (options.evidenceSeeds) evidence.seeds = options.evidenceSeeds as string;
-					if (options.evidenceGh) evidence.gh = options.evidenceGh as string;
-					if (options.evidenceLinear) evidence.linear = options.evidenceLinear as string;
-				}
-
-				// Auto-populate evidence.commit from git HEAD if not explicitly provided
-				if (!options.evidenceCommit) {
-					const autoCommit = getCurrentCommit();
-					if (autoCommit) {
-						evidence = evidence ?? {};
-						evidence.commit = autoCommit;
-					}
-				}
-
-				const tags =
-					typeof options.tags === "string"
-						? options.tags
-								.split(",")
-								.map((t) => (t as string).trim())
-								.filter(Boolean)
-						: undefined;
-
-				const relatesTo =
-					typeof options.relatesTo === "string"
-						? options.relatesTo
-								.split(",")
-								.map((id: string) => id.trim())
-								.filter(Boolean)
-						: undefined;
-
-				const supersedes =
-					typeof options.supersedes === "string"
-						? options.supersedes
-								.split(",")
-								.map((id: string) => id.trim())
-								.filter(Boolean)
-						: undefined;
-
-				let outcomes: Outcome[] | undefined;
-				if (options.outcomeStatus) {
-					const o: Outcome = {
-						status: options.outcomeStatus as "success" | "failure" | "partial",
-					};
-					if (options.outcomeDuration !== undefined) {
-						o.duration = Number.parseFloat(options.outcomeDuration as string);
-					}
-					if (options.outcomeTestResults) {
-						o.test_results = options.outcomeTestResults as string;
-					}
-					if (options.outcomeAgent) {
-						o.agent = options.outcomeAgent as string;
-					}
-					outcomes = [o];
-				}
-
-				let record: ExpertiseRecord;
-
-				switch (recordType) {
-					case "convention": {
-						const conventionContent = content ?? (options.description as string | undefined);
-						if (!conventionContent) {
-							if (jsonMode) {
-								outputJsonError(
-									"record",
-									"Convention records require content (positional argument or --description).",
-								);
-							} else {
-								console.error(
-									chalk.red(
-										"Error: convention records require content (positional argument or --description).",
-									),
-								);
-								const retryCmd = buildRetryCommand(domain, content, options, [
-									{ flag: "--description", placeholder: "<content>" },
-								]);
-								console.error(chalk.dim(`  Retry: ${retryCmd}`));
-							}
-							process.exitCode = 1;
-							return;
-						}
-						record = {
-							type: "convention",
-							content: conventionContent,
-							classification,
-							recorded_at: recordedAt,
-							...(evidence && { evidence }),
-							...(tags && tags.length > 0 && { tags }),
-							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
-							...(supersedes && supersedes.length > 0 && { supersedes }),
-							...(outcomes && { outcomes }),
-						};
-						break;
-					}
-
-					case "pattern": {
-						const patternName = options.name as string | undefined;
-						const patternDesc = (options.description as string | undefined) ?? content;
-						if (!patternName || !patternDesc) {
-							const missing: Array<{ flag: string; placeholder: string }> = [];
-							if (!patternName) missing.push({ flag: "--name", placeholder: "<name>" });
-							if (!patternDesc)
-								missing.push({ flag: "--description", placeholder: "<description>" });
-							if (jsonMode) {
-								outputJsonError(
-									"record",
-									"Pattern records require --name and --description (or positional content).",
-								);
-							} else {
-								console.error(
-									chalk.red(
-										"Error: pattern records require --name and --description (or positional content).",
-									),
-								);
-								const retryCmd = buildRetryCommand(domain, content, options, missing);
-								console.error(chalk.dim(`  Retry: ${retryCmd}`));
-							}
-							process.exitCode = 1;
-							return;
-						}
-						const patternFiles =
-							typeof options.files === "string" ? options.files.split(",") : getContextFiles();
-						record = {
-							type: "pattern",
-							name: patternName,
-							description: patternDesc,
-							classification,
-							recorded_at: recordedAt,
-							...(evidence && { evidence }),
-							...(patternFiles.length > 0 && { files: patternFiles }),
-							...(tags && tags.length > 0 && { tags }),
-							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
-							...(supersedes && supersedes.length > 0 && { supersedes }),
-							...(outcomes && { outcomes }),
-						};
-						break;
-					}
-
-					case "failure": {
-						const failureDesc = options.description as string | undefined;
-						const failureResolution = options.resolution as string | undefined;
-						if (!failureDesc || !failureResolution) {
-							const missing: Array<{ flag: string; placeholder: string }> = [];
-							if (!failureDesc)
-								missing.push({ flag: "--description", placeholder: "<description>" });
-							if (!failureResolution)
-								missing.push({ flag: "--resolution", placeholder: "<resolution>" });
-							if (jsonMode) {
-								outputJsonError(
-									"record",
-									"Failure records require --description and --resolution.",
-								);
-							} else {
-								console.error(
-									chalk.red("Error: failure records require --description and --resolution."),
-								);
-								const retryCmd = buildRetryCommand(domain, content, options, missing);
-								console.error(chalk.dim(`  Retry: ${retryCmd}`));
-							}
-							process.exitCode = 1;
-							return;
-						}
-						record = {
-							type: "failure",
-							description: failureDesc,
-							resolution: failureResolution,
-							classification,
-							recorded_at: recordedAt,
-							...(evidence && { evidence }),
-							...(tags && tags.length > 0 && { tags }),
-							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
-							...(supersedes && supersedes.length > 0 && { supersedes }),
-							...(outcomes && { outcomes }),
-						};
-						break;
-					}
-
-					case "decision": {
-						const decisionTitle = options.title as string | undefined;
-						const decisionRationale = options.rationale as string | undefined;
-						if (!decisionTitle || !decisionRationale) {
-							const missing: Array<{ flag: string; placeholder: string }> = [];
-							if (!decisionTitle) missing.push({ flag: "--title", placeholder: "<title>" });
-							if (!decisionRationale)
-								missing.push({ flag: "--rationale", placeholder: "<rationale>" });
-							if (jsonMode) {
-								outputJsonError("record", "Decision records require --title and --rationale.");
-							} else {
-								console.error(
-									chalk.red("Error: decision records require --title and --rationale."),
-								);
-								const retryCmd = buildRetryCommand(domain, content, options, missing);
-								console.error(chalk.dim(`  Retry: ${retryCmd}`));
-							}
-							process.exitCode = 1;
-							return;
-						}
-						record = {
-							type: "decision",
-							title: decisionTitle,
-							rationale: decisionRationale,
-							classification,
-							recorded_at: recordedAt,
-							...(evidence && { evidence }),
-							...(tags && tags.length > 0 && { tags }),
-							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
-							...(supersedes && supersedes.length > 0 && { supersedes }),
-							...(outcomes && { outcomes }),
-						};
-						break;
-					}
-
-					case "reference": {
-						const refName = options.name as string | undefined;
-						const refDesc = (options.description as string | undefined) ?? content;
-						if (!refName || !refDesc) {
-							const missing: Array<{ flag: string; placeholder: string }> = [];
-							if (!refName) missing.push({ flag: "--name", placeholder: "<name>" });
-							if (!refDesc) missing.push({ flag: "--description", placeholder: "<description>" });
-							if (jsonMode) {
-								outputJsonError(
-									"record",
-									"Reference records require --name and --description (or positional content).",
-								);
-							} else {
-								console.error(
-									chalk.red(
-										"Error: reference records require --name and --description (or positional content).",
-									),
-								);
-								const retryCmd = buildRetryCommand(domain, content, options, missing);
-								console.error(chalk.dim(`  Retry: ${retryCmd}`));
-							}
-							process.exitCode = 1;
-							return;
-						}
-						const refFiles =
-							typeof options.files === "string" ? options.files.split(",") : getContextFiles();
-						record = {
-							type: "reference",
-							name: refName,
-							description: refDesc,
-							classification,
-							recorded_at: recordedAt,
-							...(evidence && { evidence }),
-							...(refFiles.length > 0 && { files: refFiles }),
-							...(tags && tags.length > 0 && { tags }),
-							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
-							...(supersedes && supersedes.length > 0 && { supersedes }),
-							...(outcomes && { outcomes }),
-						};
-						break;
-					}
-
-					case "guide": {
-						const guideName = options.name as string | undefined;
-						const guideDesc = (options.description as string | undefined) ?? content;
-						if (!guideName || !guideDesc) {
-							const missing: Array<{ flag: string; placeholder: string }> = [];
-							if (!guideName) missing.push({ flag: "--name", placeholder: "<name>" });
-							if (!guideDesc) missing.push({ flag: "--description", placeholder: "<description>" });
-							if (jsonMode) {
-								outputJsonError(
-									"record",
-									"Guide records require --name and --description (or positional content).",
-								);
-							} else {
-								console.error(
-									chalk.red(
-										"Error: guide records require --name and --description (or positional content).",
-									),
-								);
-								const retryCmd = buildRetryCommand(domain, content, options, missing);
-								console.error(chalk.dim(`  Retry: ${retryCmd}`));
-							}
-							process.exitCode = 1;
-							return;
-						}
-						record = {
-							type: "guide",
-							name: guideName,
-							description: guideDesc,
-							classification,
-							recorded_at: recordedAt,
-							...(evidence && { evidence }),
-							...(tags && tags.length > 0 && { tags }),
-							...(relatesTo && relatesTo.length > 0 && { relates_to: relatesTo }),
-							...(supersedes && supersedes.length > 0 && { supersedes }),
-							...(outcomes && { outcomes }),
-						};
-						break;
-					}
-				}
-
-				// Validate against JSON schema
-				const ajv = new Ajv();
-				const validate = ajv.compile(recordSchema);
-				if (!validate(record)) {
-					const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
-					const typeHint = RECORD_TYPE_REQUIREMENTS[recordType]
-						? `. Hint: ${RECORD_TYPE_REQUIREMENTS[recordType]}`
-						: "";
-					if (jsonMode) {
-						outputJsonError("record", `Schema validation failed: ${errors.join("; ")}${typeHint}`);
-					} else {
-						console.error(chalk.red("Error: record failed schema validation:"));
-						for (const err of validate.errors ?? []) {
-							console.error(chalk.red(`  ${err.instancePath} ${err.message}`));
-						}
-						if (typeHint) {
-							console.error(chalk.yellow(`Hint: ${RECORD_TYPE_REQUIREMENTS[recordType]}`));
-						}
-					}
-					process.exitCode = 1;
-					return;
-				}
-
-				const filePath = getExpertisePath(domain);
+			// Handle --batch mode
+			if (options.batch) {
+				const batchFile = options.batch as string;
 				const dryRun = options.dryRun === true;
 
-				if (dryRun) {
-					// Dry-run: check for duplicates without writing
-					const existing = await readExpertiseFile(filePath);
-					const dup = findDuplicate(existing, record);
+				if (!existsSync(batchFile)) {
+					if (jsonMode) {
+						outputJsonError("record", `Batch file not found: ${batchFile}`);
+					} else {
+						console.error(chalk.red(`Error: batch file not found: ${batchFile}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
 
-					let action = "created";
-					if (dup && !options.force) {
-						const isNamed =
-							record.type === "pattern" ||
-							record.type === "decision" ||
-							record.type === "reference" ||
-							record.type === "guide";
+				try {
+					const fileContent = readFileSync(batchFile, "utf-8");
+					const result = await processStdinRecords(
+						domain,
+						jsonMode,
+						options.force === true,
+						dryRun,
+						fileContent,
+					);
 
-						action = isNamed ? "updated" : "skipped";
+					if (result.errors.length > 0) {
+						if (jsonMode) {
+							outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
+						} else {
+							console.error(chalk.red("Validation errors:"));
+							for (const error of result.errors) {
+								console.error(chalk.red(`  ${error}`));
+							}
+						}
 					}
 
 					if (jsonMode) {
 						outputJson({
-							success: true,
+							success: result.errors.length === 0 || result.created + result.updated > 0,
 							command: "record",
-							action: "dry-run",
-							wouldDo: action,
+							action: dryRun ? "dry-run" : "batch",
 							domain,
-							type: recordType,
-							record,
+							created: result.created,
+							updated: result.updated,
+							skipped: result.skipped,
+							errors: result.errors,
+							warnings: result.warnings,
 						});
 					} else {
-						if (action === "created") {
-							if (!isQuiet())
-								console.log(
-									`${brand("✓")} ${brand(`Dry-run: Would create ${recordType} in ${domain}`)}`,
-								);
-						} else if (action === "updated") {
-							if (!isQuiet())
-								console.log(
-									`${brand("✓")} ${brand(`Dry-run: Would update existing ${recordType} in ${domain}`)}`,
-								);
+						if (dryRun) {
+							const total = result.created + result.updated;
+							if (total > 0 || result.skipped > 0) {
+								if (!isQuiet())
+									console.log(
+										`${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
+									);
+								if (result.created > 0) {
+									if (!isQuiet()) console.log(chalk.dim(`  Create: ${result.created}`));
+								}
+								if (result.updated > 0) {
+									if (!isQuiet()) console.log(chalk.dim(`  Update: ${result.updated}`));
+								}
+								if (result.skipped > 0) {
+									if (!isQuiet()) console.log(chalk.dim(`  Skip: ${result.skipped}`));
+								}
+								if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
+							} else {
+								if (!isQuiet()) console.log(chalk.yellow("No records would be processed."));
+							}
 						} else {
-							if (!isQuiet())
-								console.log(
-									chalk.yellow(
-										`Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`,
-									),
-								);
+							if (result.created > 0) {
+								if (!isQuiet())
+									console.log(
+										`${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
+									);
+							}
+							if (result.updated > 0) {
+								if (!isQuiet())
+									console.log(
+										`${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
+									);
+							}
+							if (result.skipped > 0) {
+								if (!isQuiet())
+									console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
+							}
 						}
-						if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
+					}
+
+					if (result.errors.length > 0 && result.created + result.updated === 0) {
+						process.exitCode = 1;
+					}
+				} catch (err) {
+					if (jsonMode) {
+						outputJsonError("record", err instanceof Error ? err.message : String(err));
+					} else {
+						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+					}
+					process.exitCode = 1;
+				}
+				return;
+			}
+
+			// Handle --stdin mode
+			if (options.stdin === true) {
+				const dryRun = options.dryRun === true;
+
+				try {
+					const result = await processStdinRecords(
+						domain,
+						jsonMode,
+						options.force === true,
+						dryRun,
+					);
+
+					if (result.errors.length > 0) {
+						if (jsonMode) {
+							outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
+						} else {
+							console.error(chalk.red("Validation errors:"));
+							for (const error of result.errors) {
+								console.error(chalk.red(`  ${error}`));
+							}
+						}
+					}
+
+					if (jsonMode) {
+						outputJson({
+							success: result.errors.length === 0 || result.created + result.updated > 0,
+							command: "record",
+							action: dryRun ? "dry-run" : "stdin",
+							domain,
+							created: result.created,
+							updated: result.updated,
+							skipped: result.skipped,
+							errors: result.errors,
+							warnings: result.warnings,
+						});
+					} else {
+						if (dryRun) {
+							const total = result.created + result.updated;
+							if (total > 0 || result.skipped > 0) {
+								if (!isQuiet())
+									console.log(
+										`${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
+									);
+								if (result.created > 0) {
+									if (!isQuiet()) console.log(chalk.dim(`  Create: ${result.created}`));
+								}
+								if (result.updated > 0) {
+									if (!isQuiet()) console.log(chalk.dim(`  Update: ${result.updated}`));
+								}
+								if (result.skipped > 0) {
+									if (!isQuiet()) console.log(chalk.dim(`  Skip: ${result.skipped}`));
+								}
+								if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
+							} else {
+								if (!isQuiet()) console.log(chalk.yellow("No records would be processed."));
+							}
+						} else {
+							if (result.created > 0) {
+								if (!isQuiet())
+									console.log(
+										`${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
+									);
+							}
+							if (result.updated > 0) {
+								if (!isQuiet())
+									console.log(
+										`${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
+									);
+							}
+							if (result.skipped > 0) {
+								if (!isQuiet())
+									console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
+							}
+						}
+					}
+
+					if (result.errors.length > 0 && result.created + result.updated === 0) {
+						process.exitCode = 1;
+					}
+				} catch (err) {
+					if (jsonMode) {
+						outputJsonError("record", err instanceof Error ? err.message : String(err));
+					} else {
+						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+					}
+					process.exitCode = 1;
+				}
+				return;
+			}
+			const config = await readConfig();
+
+			if (!(domain in config.domains)) {
+				await addDomain(domain);
+				if (!isQuiet()) {
+					console.log(`${brand("✓")} ${brand(`Auto-created domain "${domain}"`)}`);
+				}
+			}
+
+			// Validate --type is provided for non-stdin mode
+			if (!options.type) {
+				const choicesMsg = `--type is required (${typeChoices.join(", ")})`;
+				if (jsonMode) {
+					outputJsonError("record", choicesMsg);
+				} else {
+					console.error(chalk.red(`Error: ${choicesMsg}`));
+				}
+				process.exitCode = 1;
+				return;
+			}
+
+			const recordType = options.type as string;
+			const classification = (options.classification as Classification) ?? "tactical";
+			const recordedAt = new Date().toISOString();
+
+			// Build evidence if any evidence option is provided
+			let evidence: Evidence | undefined;
+			if (
+				options.evidenceCommit ||
+				options.evidenceIssue ||
+				options.evidenceFile ||
+				options.evidenceBead ||
+				options.evidenceSeeds ||
+				options.evidenceGh ||
+				options.evidenceLinear
+			) {
+				evidence = {};
+				if (options.evidenceCommit) evidence.commit = options.evidenceCommit as string;
+				if (options.evidenceIssue) evidence.issue = options.evidenceIssue as string;
+				if (options.evidenceFile) evidence.file = options.evidenceFile as string;
+				if (options.evidenceBead) evidence.bead = options.evidenceBead as string;
+				if (options.evidenceSeeds) evidence.seeds = options.evidenceSeeds as string;
+				if (options.evidenceGh) evidence.gh = options.evidenceGh as string;
+				if (options.evidenceLinear) evidence.linear = options.evidenceLinear as string;
+			}
+
+			// Auto-populate evidence.commit from git HEAD if not explicitly provided
+			if (!options.evidenceCommit) {
+				const autoCommit = getCurrentCommit();
+				if (autoCommit) {
+					evidence = evidence ?? {};
+					evidence.commit = autoCommit;
+				}
+			}
+
+			const tags =
+				typeof options.tags === "string"
+					? options.tags
+							.split(",")
+							.map((t) => (t as string).trim())
+							.filter(Boolean)
+					: undefined;
+
+			const relatesTo =
+				typeof options.relatesTo === "string"
+					? options.relatesTo
+							.split(",")
+							.map((id: string) => id.trim())
+							.filter(Boolean)
+					: undefined;
+
+			const supersedes =
+				typeof options.supersedes === "string"
+					? options.supersedes
+							.split(",")
+							.map((id: string) => id.trim())
+							.filter(Boolean)
+					: undefined;
+
+			let outcomes: Outcome[] | undefined;
+			if (options.outcomeStatus) {
+				const o: Outcome = {
+					status: options.outcomeStatus as "success" | "failure" | "partial",
+				};
+				if (options.outcomeDuration !== undefined) {
+					o.duration = Number.parseFloat(options.outcomeDuration as string);
+				}
+				if (options.outcomeTestResults) {
+					o.test_results = options.outcomeTestResults as string;
+				}
+				if (options.outcomeAgent) {
+					o.agent = options.outcomeAgent as string;
+				}
+				outcomes = [o];
+			}
+
+			// dir_anchors: explicit --dir-anchor wins; otherwise infer from changed
+			// files (3+ files sharing a parent directory). Normalized to drop
+			// trailing slashes and a leading "./"; "." / repo root collapses to
+			// nothing stored. Absolute paths and ".." traversal are rejected with
+			// a formatted error before validation builds the record.
+			let explicitDirAnchors: string[] = [];
+			if (Array.isArray(options.dirAnchor)) {
+				try {
+					for (const raw of options.dirAnchor as string[]) {
+						assertWritableDirAnchor(raw);
+					}
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					if (jsonMode) {
+						outputJsonError("record", msg);
+					} else {
+						console.error(chalk.red(`Error: ${msg}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+				explicitDirAnchors = (options.dirAnchor as string[])
+					.map((p) => normalizeDirAnchor(p))
+					.filter((p) => p.length > 0);
+			}
+			let dirAnchors: string[] | undefined;
+			if (explicitDirAnchors.length > 0) {
+				dirAnchors = [...new Set(explicitDirAnchors)].sort();
+			} else if (options.files === undefined) {
+				const inferred = inferDirAnchors(getContextFiles());
+				if (inferred.length > 0) dirAnchors = inferred;
+			}
+
+			const def = getRegistry().get(recordType);
+			if (!def) {
+				const msg = `Unknown record type "${recordType}". Available: ${typeChoices.join(", ")}.`;
+				if (jsonMode) {
+					outputJsonError("record", msg);
+				} else {
+					console.error(chalk.red(`Error: ${msg}`));
+				}
+				process.exitCode = 1;
+				return;
+			}
+
+			// Per-domain allowed_types gate. Empty/missing means all registered
+			// types allowed (back-compat). disabled_types is independent — a type
+			// in allowed_types still writes (with deprecation warning) even when
+			// also disabled; cross-project peers in shared domains shouldn't
+			// hard-fail on an upstream config change. --allow-domain-mismatch
+			// skips this gate (worktree/CI lag escape hatch).
+			const allowDomainMismatch = isAllowDomainMismatch();
+			const allowedTypes = getAllowedTypes(config, domain);
+			if (allowedTypes && !allowDomainMismatch && !allowedTypes.includes(recordType)) {
+				const allowedList = allowedTypes.join(", ");
+				const msg = `type "${recordType}" is not allowed in domain "${domain}". Allowed types: ${allowedList}.`;
+				if (jsonMode) {
+					outputJsonError("record", msg);
+				} else {
+					console.error(chalk.red(`Error: ${msg}`));
+					const suggestedType = allowedTypes[0] ?? recordType;
+					const retryCmd = buildRetryCommand(
+						domain,
+						content,
+						{ ...options, type: suggestedType },
+						[],
+					);
+					console.error(chalk.dim(`  Retry: ${retryCmd}`));
+				}
+				process.exitCode = 1;
+				return;
+			}
+
+			// Phase 3: disabled types still write but emit a deprecation warning.
+			const disabledWarning = getRegistry().isDisabled(recordType)
+				? `type "${recordType}" is disabled (declared in disabled_types). Records will still be written; consider migrating off this type.`
+				: null;
+			if (disabledWarning && !isQuiet() && !jsonMode) {
+				console.error(chalk.yellow(`Warning: ${disabledWarning}`));
+			}
+
+			const built = buildRecordFromOptions(def, content, options, {
+				classification,
+				recorded_at: recordedAt,
+				evidence,
+				tags,
+				relates_to: relatesTo,
+				supersedes,
+				outcomes,
+				dir_anchors: dirAnchors,
+			});
+
+			if (!built.record) {
+				const requireList = def.required.join(", ");
+				const fallback = positionalFallbackField(def);
+				const fallbackHint = fallback ? ` (or positional content for ${fallback})` : "";
+				const msg = `${def.name} records require: ${requireList}${fallbackHint}.`;
+				if (jsonMode) {
+					outputJsonError("record", msg);
+				} else {
+					console.error(chalk.red(`Error: ${msg}`));
+					const retryCmd = buildRetryCommand(domain, content, options, built.missing);
+					console.error(chalk.dim(`  Retry: ${retryCmd}`));
+				}
+				process.exitCode = 1;
+				return;
+			}
+
+			let record: ExpertiseRecord = built.record;
+
+			// Validate against JSON schema (cached on registry)
+			const validate = getRegistry().validator;
+			// Pre-fetch required_fields so we can rewrite the AJV error when a
+			// rejected additionalProperty is one the domain demands — otherwise
+			// users see a confusing oneOf/additionalProperties soup with no hint
+			// that the real cause is the closed schema vs. domain rule mismatch.
+			const requiredFields = getRequiredFields(config, domain);
+			if (!validate(record)) {
+				const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
+				const requirements = buildTypeRequirements();
+				const typeHint = requirements[recordType] ? `. Hint: ${requirements[recordType]}` : "";
+				const rejectedRequired = findRejectedRequiredFields(validate.errors, requiredFields);
+				const domainHint =
+					rejectedRequired.length > 0
+						? `Domain "${domain}" requires field(s) ${rejectedRequired
+								.map((f) => `"${f}"`)
+								.join(
+									", ",
+								)}, but type "${recordType}" does not declare them. Declare a custom_type that holds these fields, or remove them from required_fields in mulch.config.yaml.`
+						: "";
+				if (jsonMode) {
+					const suffix = domainHint ? `. ${domainHint}` : "";
+					outputJsonError(
+						"record",
+						`Schema validation failed: ${errors.join("; ")}${typeHint}${suffix}`,
+					);
+				} else {
+					console.error(chalk.red("Error: record failed schema validation:"));
+					for (const err of validate.errors ?? []) {
+						console.error(chalk.red(`  ${err.instancePath} ${err.message}`));
+					}
+					if (requirements[recordType]) {
+						console.error(chalk.yellow(`Hint: ${requirements[recordType]}`));
+					}
+					if (domainHint) {
+						console.error(chalk.yellow(`Hint: ${domainHint}`));
+					}
+				}
+				process.exitCode = 1;
+				return;
+			}
+
+			// Per-domain required_fields gate. Stacks on top of per-type required
+			// fields enforced by the schema above. Lists all missing fields in a
+			// single error so users fix the config in one pass.
+			// --allow-domain-mismatch skips this gate (worktree/CI lag escape hatch).
+			if (requiredFields && !allowDomainMismatch) {
+				const missingFields = findMissingDomainFields(
+					record as unknown as Record<string, unknown>,
+					requiredFields,
+				);
+				if (missingFields.length > 0) {
+					const fieldList = missingFields.map((f) => `"${f}"`).join(", ");
+					const msg = `domain "${domain}" requires field(s) ${fieldList}.`;
+					if (jsonMode) {
+						outputJsonError("record", msg);
+					} else {
+						console.error(chalk.red(`Error: ${msg}`));
+						const retryCmd = buildRetryCommand(
+							domain,
+							content,
+							options,
+							missingFields.map((f) => ({
+								flag: `--${f.replace(/_/g, "-")}`,
+								placeholder: `<${f}>`,
+							})),
+						);
+						console.error(chalk.dim(`  Retry: ${retryCmd}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+			}
+
+			const filePath = getExpertisePath(domain);
+			const dryRun = options.dryRun === true;
+
+			// Fire pre-record hook outside the file lock. Skipped in dry-run since
+			// dry-run shouldn't trigger external side effects (slack, scanners, etc).
+			let preRecordWarnings: string[] = [];
+			if (!dryRun) {
+				const preResult = await runHooks<{ domain: string; record: ExpertiseRecord }>(
+					"pre-record",
+					{ domain, record },
+				);
+				if (preResult.blocked) {
+					const reason = preResult.blockReason ?? "pre-record hook blocked the write";
+					if (jsonMode) {
+						outputJsonError("record", reason);
+					} else {
+						console.error(chalk.red(`Error: ${reason}`));
+					}
+					process.exitCode = 1;
+					return;
+				}
+				preRecordWarnings = preResult.warnings;
+				if (preResult.ranAny && preResult.payload?.record) {
+					const mutated = preResult.payload.record;
+					if (mutated !== record) {
+						if (!validate(mutated)) {
+							const errs = (validate.errors ?? [])
+								.map((e) => `${e.instancePath} ${e.message}`)
+								.join("; ");
+							const msg = `pre-record hook produced an invalid record: ${errs}`;
+							if (jsonMode) {
+								outputJsonError("record", msg);
+							} else {
+								console.error(chalk.red(`Error: ${msg}`));
+							}
+							process.exitCode = 1;
+							return;
+						}
+						record = mutated;
+					}
+				}
+			}
+
+			if (dryRun) {
+				// Dry-run: check for duplicates without writing
+				const existing = await readExpertiseFile(filePath);
+				const dup = findDuplicate(existing, record);
+
+				let action = "created";
+				if (dup && !options.force) {
+					action = isNamedType(def) ? "updated" : "skipped";
+				}
+
+				if (jsonMode) {
+					outputJson({
+						success: true,
+						command: "record",
+						action: "dry-run",
+						wouldDo: action,
+						domain,
+						type: recordType,
+						record,
+						...(disabledWarning ? { warnings: [disabledWarning] } : {}),
+					});
+				} else {
+					if (action === "created") {
+						if (!isQuiet())
+							console.log(
+								`${brand("✓")} ${brand(`Dry-run: Would create ${recordType} in ${domain}`)}`,
+							);
+					} else if (action === "updated") {
+						if (!isQuiet())
+							console.log(
+								`${brand("✓")} ${brand(`Dry-run: Would update existing ${recordType} in ${domain}`)}`,
+							);
+					} else {
+						if (!isQuiet())
+							console.log(
+								chalk.yellow(
+									`Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`,
+								),
+							);
+					}
+					if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
+				}
+			} else {
+				// Normal mode: write with file locking, then fire post-record outside
+				// the lock so observation hooks (slack notifications, etc.) can't
+				// stall holders or risk re-entrant deadlock.
+				type WriteOutcome =
+					| { action: "created"; record: ExpertiseRecord }
+					| { action: "updated"; record: ExpertiseRecord; index: number }
+					| { action: "skipped"; index: number };
+
+				const outcome = await withFileLock<WriteOutcome | null>(filePath, async () => {
+					const existing = await readExpertiseFile(filePath);
+					const dup = findDuplicate(existing, record);
+
+					if (dup && !options.force) {
+						if (isNamedType(def)) {
+							const existingRecord = existing[dup.index];
+							if (!existingRecord) return null;
+							const mergedOutcomes = [
+								...(existingRecord.outcomes ?? []),
+								...(record.outcomes ?? []),
+							];
+							const upsertRecord =
+								mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
+							existing[dup.index] = upsertRecord;
+							await writeExpertiseFile(filePath, existing);
+							return { action: "updated", record: upsertRecord, index: dup.index };
+						}
+						return { action: "skipped", index: dup.index };
+					}
+					await appendRecord(filePath, record);
+					return { action: "created", record };
+				});
+
+				if (!outcome) return;
+
+				// Post-record only fires for actual writes (created/updated). Skipped
+				// duplicates are no-ops by design.
+				const postWarnings: string[] = [];
+				if (outcome.action === "created" || outcome.action === "updated") {
+					const postResult = await runHooks("post-record", {
+						domain,
+						record: outcome.record,
+						action: outcome.action,
+					});
+					postWarnings.push(...postResult.warnings);
+				}
+
+				const collectedWarnings = [
+					...(disabledWarning ? [disabledWarning] : []),
+					...preRecordWarnings,
+					...postWarnings,
+				];
+
+				if (jsonMode) {
+					if (outcome.action === "updated") {
+						outputJson({
+							success: true,
+							command: "record",
+							action: "updated",
+							domain,
+							type: recordType,
+							index: outcome.index + 1,
+							record: outcome.record,
+							...(collectedWarnings.length > 0 ? { warnings: collectedWarnings } : {}),
+						});
+					} else if (outcome.action === "skipped") {
+						outputJson({
+							success: true,
+							command: "record",
+							action: "skipped",
+							domain,
+							type: recordType,
+							index: outcome.index + 1,
+							...(collectedWarnings.length > 0 ? { warnings: collectedWarnings } : {}),
+						});
+					} else {
+						outputJson({
+							success: true,
+							command: "record",
+							action: "created",
+							domain,
+							type: recordType,
+							record: outcome.record,
+							...(collectedWarnings.length > 0 ? { warnings: collectedWarnings } : {}),
+						});
 					}
 				} else {
-					// Normal mode: write with file locking
-					await withFileLock(filePath, async () => {
-						const existing = await readExpertiseFile(filePath);
-						const dup = findDuplicate(existing, record);
-
-						if (dup && !options.force) {
-							const isNamed =
-								record.type === "pattern" ||
-								record.type === "decision" ||
-								record.type === "reference" ||
-								record.type === "guide";
-
-							if (isNamed) {
-								// Upsert: replace in place, merging outcomes from existing
-								const existingRecord = existing[dup.index];
-								if (!existingRecord) return;
-								const mergedOutcomes = [
-									...(existingRecord.outcomes ?? []),
-									...(record.outcomes ?? []),
-								];
-								const upsertRecord =
-									mergedOutcomes.length > 0 ? { ...record, outcomes: mergedOutcomes } : record;
-								existing[dup.index] = upsertRecord;
-								await writeExpertiseFile(filePath, existing);
-								if (jsonMode) {
-									outputJson({
-										success: true,
-										command: "record",
-										action: "updated",
-										domain,
-										type: recordType,
-										index: dup.index + 1,
-										record: upsertRecord,
-									});
-								} else {
-									if (!isQuiet())
-										console.log(
-											`${brand("✓")} ${brand(`Updated existing ${recordType} in ${domain} (record #${dup.index + 1})`)}`,
-										);
-								}
-							} else {
-								// Exact match: skip
-								if (jsonMode) {
-									outputJson({
-										success: true,
-										command: "record",
-										action: "skipped",
-										domain,
-										type: recordType,
-										index: dup.index + 1,
-									});
-								} else {
-									if (!isQuiet())
-										console.log(
-											chalk.yellow(
-												`Duplicate ${recordType} already exists in ${domain} (record #${dup.index + 1}). Use --force to add anyway.`,
-											),
-										);
-								}
-							}
-						} else {
-							await appendRecord(filePath, record);
-							if (jsonMode) {
-								outputJson({
-									success: true,
-									command: "record",
-									action: "created",
-									domain,
-									type: recordType,
-									record,
-								});
-							} else {
-								if (!isQuiet())
-									console.log(`${brand("✓")} ${brand(`Recorded ${recordType} in ${domain}`)}`);
-							}
-						}
-					});
+					if (outcome.action === "updated") {
+						if (!isQuiet())
+							console.log(
+								`${brand("✓")} ${brand(`Updated existing ${recordType} in ${domain} (record #${outcome.index + 1})`)}`,
+							);
+					} else if (outcome.action === "skipped") {
+						if (!isQuiet())
+							console.log(
+								chalk.yellow(
+									`Duplicate ${recordType} already exists in ${domain} (record #${outcome.index + 1}). Use --force to add anyway.`,
+								),
+							);
+					} else {
+						if (!isQuiet())
+							console.log(`${brand("✓")} ${brand(`Recorded ${recordType} in ${domain}`)}`);
+					}
+					for (const w of [...preRecordWarnings, ...postWarnings]) {
+						console.error(chalk.yellow(`Warning: ${w}`));
+					}
 				}
-			},
-		);
+			}
+		},
+	);
 }

@@ -32,7 +32,7 @@ export function registerStatusCommand(program: Command): void {
 			const config = await readConfig();
 
 			const domainStats = await Promise.all(
-				config.domains.map(async (domain) => {
+				Object.keys(config.domains).map(async (domain) => {
 					const filePath = getExpertisePath(domain);
 					const records = await readExpertiseFile(filePath);
 					const lastUpdated = await getFileModTime(filePath);

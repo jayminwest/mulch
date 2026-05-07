@@ -68,14 +68,16 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
 | `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--no-boost`, `--format`) |
+| `ml rank [domain]` | Rank records by confirmation-frequency score, highest first (`--type`, `--limit`, `--min-score`, `--json`) — pure score ranking with no text query, useful for context-constrained consumers |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
 | `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
 | `ml validate` | Schema validation across all files |
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
-| `ml setup [provider]` | Install provider-specific hooks (claude, cursor, codex, gemini, windsurf, aider) |
+| `ml setup [provider]` | Install provider-specific hooks (built-ins: claude, cursor, codex, gemini, windsurf, aider — or any name discovered via `.mulch/recipes/` or `mulch-recipe-*`; `--list` shows everything) |
 | `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
-| `ml prune` | Remove stale tactical/observational entries |
+| `ml prune` | Soft-archive stale tactical/observational records to `.mulch/archive/`, plus tier-demote records superseded by another live record (`--hard` for true delete, `--aggressive` to collapse superseded records straight to archive, `--dry-run`) |
+| `ml restore <id>` | Restore a soft-archived record back to live expertise |
 | `ml ready` | Show recently added or updated records (`--since`, `--domain`, `--limit`) |
 | `ml sync` | Validate, stage, and commit `.mulch/` changes |
 | `ml outcome <domain> <id>` | Append an outcome to a record (`--status`, `--duration`, `--agent`, `--notes`), or view outcomes |
@@ -137,6 +139,134 @@ Everything is git-tracked. Clone a repo and your agents immediately have the pro
 
 All records support optional `--classification` (foundational / tactical / observational), evidence flags (`--evidence-commit`, `--evidence-issue`, `--evidence-file`, plus tracker-specific `--evidence-bead`, `--evidence-seeds`, `--evidence-gh`, `--evidence-linear`), `--tags`, `--relates-to`, `--supersedes` for linking, and `--outcome-status` (success/failure) for tracking application results. Cross-domain references use `domain:mx-hash` format (e.g., `--relates-to api:mx-abc123`). When `evidence.commit` or `files[]` are omitted, `ml record` auto-populates them from the current git context.
 
+#### File and directory anchors
+
+Any record type can attach to specific files or directories so `ml prime --files <path>` and `ml prime --context` only surface the records relevant to what you're touching:
+
+- **`files[]`** (pattern + reference, plus any custom type with `extracts_files: true`) — list of repo-relative file paths. Use when the record is about specific files. Auto-populated from the current git context when `--files` is omitted. Invalidated by file rename/move.
+- **`dir_anchors[]`** (any record type) — list of repo-relative directory paths. Use when the record applies to a whole directory and should survive file churn within it. Set explicitly with `--dir-anchor <path>` (repeatable) or auto-populated when 3+ changed files share a parent directory. Trailing slashes are normalized away on write.
+
+A record matches `ml prime --files src/foo/bar.ts` when *either* `files[]` lists the path *or* any `dir_anchors[]` entry is an ancestor directory. Reach for `dir_anchors` when the wisdom belongs to a module/folder more than to any individual file; reach for `files[]` when the record cites specific lines or APIs that move with the file.
+
+### Custom Types
+
+Project-specific record types declared under `custom_types:` in `.mulch/mulch.config.yaml` get full registry treatment — CLI flags, validation, dedup, formatters. Each definition declares required + optional fields, a dedup key, and a summary template:
+
+```yaml
+custom_types:
+  hypothesis:
+    required: [statement, prediction]
+    optional: [evidence_files]
+    dedup_key: statement
+    summary: "{statement} → {prediction}"
+```
+
+`ml record research --type hypothesis --statement "..." --prediction "..."` then writes a first-class record indistinguishable from a built-in. Summary templates accept either `{field}` or `{{field}}`; tokens must be declared fields on the type (or inherited via `extends`) — unknown tokens are rejected at registry load.
+
+#### Inheriting from a built-in
+
+Set `extends: <builtin>` to inherit `required` / `optional` / `dedup_key` / `id_key` / `summary` / `compact` / `section_title` / `extracts_files` / `files_field` from one of the six built-in types. Override only what differs; arrays merge as a union.
+
+```yaml
+custom_types:
+  adr:
+    extends: decision
+    required: [decision_status, deciders]   # adds on top of decision's [title, rationale]
+    summary: "{decision_status}: {title}"   # overrides decision's default summary
+```
+
+Inheritance keeps corpora portable: an agent reading an `adr` record from a repo whose registry doesn't know `adr` falls back to `decision` semantics under `--allow-unknown-types`. Custom-from-custom is not supported in v1; `extends` must reference a built-in. Listing a parent's optional field under the child's `required` promotes it (and removes it from the optional list). `extends`-ing a type that's also in `disabled_types` is a hard error.
+
+### Per-Domain Allowed Types
+
+Gate which record types may be written into a domain by listing them under that domain's `allowed_types`:
+
+```yaml
+domains:
+  backend:
+    allowed_types: [convention, pattern, decision]
+  frontend:
+    allowed_types: [convention, pattern]
+  notes: {}   # empty/missing allowed_types ⇒ all registered types allowed
+```
+
+`ml record` rejects any write whose `--type` isn't in the list and prints a copy-paste retry hint with the first allowed type filled in. Empty or missing `allowed_types` preserves back-compat behavior (any registered type is accepted).
+
+`disabled_types` wins on overlap — if a domain allows `failure` but `disabled_types: [failure]` is also set, the write still succeeds with the disabled-type deprecation warning, so peer agents in shared domains don't hard-fail when a type is being retired.
+
+### Per-Domain Required Fields
+
+Require additional top-level fields on every record written into a domain by listing them under `required_fields`:
+
+```yaml
+domains:
+  backend:
+    allowed_types: [task]
+    required_fields: [oncall_owner]
+custom_types:
+  task:
+    required: [description]
+    optional: [oncall_owner]
+    dedup_key: description
+    summary: "{description}"
+```
+
+`ml record` rejects writes that omit any listed field and prints a single retry hint with all missing fields filled in. `required_fields` stacks on top of the per-type required fields enforced by the schema — it adds, never replaces. Top-level field names only; nested paths (`evidence.commit`, etc.) are out of scope. Empty or missing `required_fields` preserves back-compat behavior.
+
+### Doctor and Sync Re-Validation
+
+`ml doctor` surfaces existing records that violate domain rules so worktree/CI lag (records landing before config catches up via `merge=union`) doesn't sit silently:
+
+- **`domain-conformance`** (informational) — per-domain summary of conforming vs. violating records. Runs whether or not the domain has rules; domains with no rules report all records as conforming.
+- **`domain-violations`** (failing) — lists each offending record with `domain:line [id] (type)` and the rule it broke (type not in `allowed_types`, or missing `required_fields`). No `--fix` in v1: violations require human judgment (rewrite the record vs. relax the rule).
+
+`ml sync` re-reads `mulch.config.yaml` and re-validates every on-disk record against the current rules before staging. This is the worktree/CI lag escape valve: once config catches up, sync reconciles without a restart. Sync intentionally ignores `--allow-domain-mismatch` — like `--allow-unknown-types`, escape hatches stop at the commit gate.
+
+The `--allow-domain-mismatch` global flag is the same kind of escape hatch as `--allow-unknown-types`, and is honored by `ml record` and `ml validate` only:
+
+```bash
+ml record backend --type pattern --name x --description y --allow-domain-mismatch
+ml validate --allow-domain-mismatch    # tolerate rule violations during the lag window
+ml sync                                 # gatekeeps commits — ignores the flag
+```
+
+### Disabled Types
+
+Mark a type as deprecated to retire it gracefully across shared domains:
+
+```yaml
+disabled_types: [failure]
+```
+
+Writes still succeed and the type stays in CLI choices (so peers in shared domains aren't broken), but each write emits a stderr warning. `--quiet` suppresses the warning. Reads ignore the disabled flag entirely.
+
+### Aliases (Schema Evolution)
+
+When you rename a field on a custom type, declare aliases to keep existing JSONL readable:
+
+```yaml
+custom_types:
+  hypothesis:
+    required: [statement, prediction]
+    dedup_key: statement
+    summary: "{statement}"
+    aliases:
+      statement: [claim, assertion]   # canonical → [legacy_names]
+```
+
+At read time, legacy field names are rewritten to canonical (canonical wins on conflict, legacy is dropped). Writes always use canonical. No migration script needed.
+
+### Unknown-Type Policy
+
+Readers refuse on-disk records whose type isn't registered, raising a targeted error with file, line, and ID. The `--allow-unknown-types` global flag is the escape hatch for the worktree/CI window where a JSONL record (which `merge=union` accepts) lands before `mulch.config.yaml` catches up:
+
+```bash
+ml validate --allow-unknown-types     # validate everything else; defer reconciliation
+ml sync                                # gatekeeps commits — ignores the flag
+```
+
+`ml sync` re-loads the registry from disk before validating, so once config is reconciled, sync passes without a restart. `ml doctor` lists registered types (built-in vs custom, per-type counts) and surfaces unknown-type records as a failing check.
+
 ## Example Output
 
 ```
@@ -178,8 +308,8 @@ Mulch is designed for multi-agent workflows where several agents record expertis
 
 | Safety level | Commands | Notes |
 |---|---|---|
-| **Fully safe** (read-only) | `prime`, `query`, `search`, `status`, `validate`, `learn`, `ready` | No file writes. Any number of agents, any time. |
-| **Safe** (locked writes) | `record`, `edit`, `delete`, `delete-domain`, `compact`, `prune`, `doctor` | Acquire per-file lock before writing. Multiple agents can target the same domain — the lock serializes access automatically. |
+| **Fully safe** (read-only) | `prime`, `query`, `search`, `rank`, `status`, `validate`, `learn`, `ready` | No file writes. Any number of agents, any time. |
+| **Safe** (locked writes) | `record`, `edit`, `delete`, `delete-domain`, `compact`, `prune`, `restore`, `doctor` | Acquire per-file lock before writing. Multiple agents can target the same domain — the lock serializes access automatically. |
 | **Serialize** (setup ops) | `init`, `add`, `onboard`, `setup` | Modify config or external files (CLAUDE.md, git hooks). Run once during project setup, not during parallel agent work. |
 
 ### Swarm patterns
@@ -232,6 +362,132 @@ The `--apply`, default (non-dry-run), and `--fix` variants acquire locks and are
 - **Stale locks**: Locks older than 30 seconds are automatically cleaned up (e.g., after a crash).
 - **`ml sync`**: Uses git's own locking for commits. Multiple agents syncing on the same branch will contend on git's ref lock — coordinate sync timing or use per-agent branches.
 - **`prime --export`**: Multiple agents exporting to the same file path will race. Use unique filenames per agent.
+
+## Lifecycle Hooks
+
+Mulch invokes user-supplied shell scripts at key lifecycle events so org-specific behavior (secret scanning, owner enforcement, Slack notifications, team-scoped filtering) can land as config rather than a fork.
+
+### Events
+
+| Event | When it fires | Block on non-zero | Mutation via stdout |
+|---|---|---|---|
+| `pre-record` | Before each record is written | yes | yes |
+| `post-record` | After a successful create/update | warn only | no |
+| `pre-prime` | Before `ml prime` emits output | yes | yes |
+| `pre-prune` | Before `ml prune` removes records | yes | no |
+
+### Contract
+
+- Each script is invoked with the payload as JSON on **stdin**.
+- Exit `0` to continue; non-zero **blocks** for `pre-*` events and emits a **warning** for `post-*` events.
+- For mutable events (`pre-record`, `pre-prime`), the script may print a modified payload as JSON on **stdout** to rewrite it in place. The next script in the array (and the eventual write) sees the mutated payload.
+- Stderr is forwarded to the user; stdin is the only input channel.
+- Scripts are run via `sh -c`, with cwd set to the mulch project root and `MULCH_HOOK=1` in the environment.
+- Hooks **do not fire** in `--dry-run` mode (record, prune) — previews shouldn't trigger external side effects.
+
+### Configuration
+
+```yaml
+# .mulch/mulch.config.yaml
+hooks:
+  pre-record:    [./.mulch/hooks/scan-secrets.sh, ./.mulch/hooks/require-owner.sh]
+  post-record:   [./.mulch/hooks/post-to-slack.sh]
+  pre-prime:     [./.mulch/hooks/filter-by-team.sh]
+  pre-prune:     [./.mulch/hooks/digest-then-confirm.sh]
+
+hook_settings:
+  timeout_ms: 5000   # default; per-script SIGKILL after this
+```
+
+### Example: secret scanning at record time
+
+```sh
+#!/bin/sh
+# .mulch/hooks/scan-secrets.sh
+input=$(cat)
+if echo "$input" | grep -qE 'sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}'; then
+  echo "Refusing to record: payload contains an API key shape." >&2
+  exit 1
+fi
+```
+
+### Example: pre-record mutation (redacting tokens)
+
+```sh
+#!/bin/sh
+# .mulch/hooks/redact-tokens.sh
+input=$(cat)
+echo "$input" | bun -e "
+const { event, payload } = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+if (payload.record.content) {
+  payload.record.content = payload.record.content.replace(/sk-[A-Za-z0-9]+/g, '<REDACTED>');
+}
+console.log(JSON.stringify({ event, payload }));
+"
+```
+
+The hook returns either the full `{ event, payload }` envelope or just the inner payload object — both shapes are accepted. Multiple `pre-record` hooks compose in array order; output of script N becomes input of script N+1.
+
+## Provider Recipes
+
+`ml setup <provider>` installs the wiring for an agent provider — Claude hooks, a Cursor rule, an `AGENTS.md` section, etc. Six providers ship in the box (`claude`, `cursor`, `codex`, `gemini`, `windsurf`, `aider`), but you can add your own without forking mulch.
+
+### Discovery order
+
+When you run `ml setup <name>`, mulch resolves the recipe in this order:
+
+1. **Filesystem** — `.mulch/recipes/<name>.ts` or `.mulch/recipes/<name>.sh`
+2. **npm** — a package named `mulch-recipe-<name>` resolvable from your project root
+3. **Built-in** — the six recipes shipped with mulch
+
+Filesystem wins over npm wins over built-in, so you can override a built-in recipe by writing a `.mulch/recipes/claude.ts`.
+
+Run `ml setup --list` (or `ml setup --list --json`) to see every discovered provider, with its source and any built-in it shadows.
+
+### Filesystem recipes
+
+A TypeScript recipe is a module whose default export implements the `ProviderRecipe` interface:
+
+```ts
+// .mulch/recipes/internal-ide.ts
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+export default {
+  async install(cwd: string) {
+    const path = join(cwd, ".internal-ide", "mulch.config");
+    await mkdir(join(cwd, ".internal-ide"), { recursive: true });
+    await writeFile(path, "ml prime\n", "utf-8");
+    return { success: true, message: `Installed ${path}` };
+  },
+  async check(cwd: string) {
+    return { success: true, message: "Internal IDE integration installed." };
+  },
+  async remove(cwd: string) {
+    return { success: true, message: "Internal IDE integration removed." };
+  },
+};
+```
+
+Bun loads `.ts` recipes natively. Each method takes the project `cwd` and returns `{ success: boolean; message: string }` — same contract the built-ins use.
+
+A shell recipe is invoked as `<script> install|check|remove` with `cwd` set to the project root. Stdout becomes the success message; non-zero exit signals failure (with stderr surfaced):
+
+```sh
+#!/bin/sh
+# .mulch/recipes/legacy-bot.sh
+case "$1" in
+  install) echo "Installed legacy-bot integration" ;;
+  check)   test -f legacy-bot.config && echo "ok" || { echo "missing config" 1>&2; exit 1; } ;;
+  remove)  rm -f legacy-bot.config && echo "Removed" ;;
+esac
+```
+
+Recipes are run as the user in `cwd` with no extra sandboxing — they live in `.mulch/`, which is git-tracked, so the trust model is "review before commit." See `examples/recipes/` for templates.
+
+### npm recipes
+
+To share a recipe across orgs, publish it as `mulch-recipe-<name>` with a default export of `ProviderRecipe`. `ml setup <name>` resolves it via `require.resolve('mulch-recipe-<name>')` from the project root, so normal `package.json` `dependencies` resolution applies.
 
 ## Programmatic API
 

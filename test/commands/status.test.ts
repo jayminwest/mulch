@@ -51,7 +51,7 @@ describe("status command", () => {
 	});
 
 	it("shows status with a domain and entries", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -78,7 +78,7 @@ describe("status command", () => {
 	});
 
 	it("shows multiple domains in status", async () => {
-		await writeConfig({ ...DEFAULT_CONFIG, domains: ["testing", "architecture"] }, tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {}, architecture: {} } }, tmpDir);
 
 		const testingPath = getExpertisePath("testing", tmpDir);
 		const archPath = getExpertisePath("architecture", tmpDir);
@@ -108,7 +108,7 @@ describe("status command", () => {
 
 		const config = await readConfig(tmpDir);
 		const domainStats = await Promise.all(
-			config.domains.map(async (domain) => {
+			Object.keys(config.domains).map(async (domain) => {
 				const filePath = getExpertisePath(domain, tmpDir);
 				const records = await readExpertiseFile(filePath);
 				const lastUpdated = await getFileModTime(filePath);
