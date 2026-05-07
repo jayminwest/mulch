@@ -55,6 +55,8 @@ const BASE_RECORD_FIELDS: ReadonlySet<string> = new Set([
 	"outcomes",
 	"dir_anchors",
 	"supersession_demoted_at",
+	"owner",
+	"status",
 ]);
 
 // Detect required_fields entries that no allowed type can hold. Built-in (and

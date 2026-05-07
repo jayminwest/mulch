@@ -69,6 +69,10 @@ const baseSchemaProps = {
 	dir_anchors: { type: "array", items: { type: "string" } },
 	supersession_demoted_at: { type: "string" },
 	anchor_decay_demoted_at: { type: "string" },
+	owner: { type: "string" },
+	// "archived" is intentionally absent — soft-archived records bypass AJV
+	// (they live under .mulch/archive/) and live records may not carry it.
+	status: { type: "string", enum: ["draft", "active", "deprecated"] },
 } as const;
 
 // --- convention ---

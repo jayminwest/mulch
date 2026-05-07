@@ -43,10 +43,14 @@ interface BaseRecord {
 	supersedes?: string[];
 	outcomes?: Outcome[];
 	dir_anchors?: string[];
-	// Soft-archive lifecycle fields. Only set on records that live under
-	// .mulch/archive/<domain>.jsonl; live expertise records never carry these
-	// (and the AJV schemas reject them via additionalProperties: false).
-	status?: "archived";
+	// R-06 ownership: opaque handle (e.g. "@user" or "@team"). Stamped by the
+	// owner-resolution chain at write time (mulch-41e1) and consumed by
+	// `ml review` (mulch-8cce). No internal validation in v1.
+	owner?: string;
+	// Lifecycle status. "draft" / "active" / "deprecated" are author-set on
+	// live records; "archived" is set by `ml prune` soft-archive (lives only
+	// under .mulch/archive/<domain>.jsonl) and the live AJV schemas reject it.
+	status?: "draft" | "active" | "deprecated" | "archived";
 	archived_at?: string;
 	// Set by `ml prune` when supersession decay (R-05e) demotes a record one
 	// classification tier. Lives on the record across the demotion until

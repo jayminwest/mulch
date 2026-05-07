@@ -324,6 +324,8 @@ export function buildCustomTypeDefinition(name: string, cfg: CustomTypeConfig): 
 		dir_anchors: { type: "array", items: { type: "string" } },
 		supersession_demoted_at: { type: "string" },
 		anchor_decay_demoted_at: { type: "string" },
+		owner: { type: "string" },
+		status: { type: "string", enum: ["draft", "active", "deprecated"] },
 	};
 
 	for (const f of [...required, ...optional]) {
