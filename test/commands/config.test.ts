@@ -266,4 +266,116 @@ describe("config command", () => {
 			expect(b.stdout.toString()).toBe(a.stdout.toString());
 		});
 	});
+
+	describe("config set", () => {
+		const baseConfig = [
+			"version: '1'",
+			"domains: {}",
+			"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+			"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+			"",
+		].join("\n");
+
+		it("sets a numeric leaf and round-trips through `ml config show`", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const set = runCli(["config", "set", "governance.max_entries", "50"], tmpDir);
+			expect(set.exitCode).toBe(0);
+			const show = runCli(["config", "show", "--path", "governance.max_entries"], tmpDir);
+			expect(show.exitCode).toBe(0);
+			expect(JSON.parse(show.stdout.toString())).toBe(50);
+		});
+
+		it("YAML-parses the value (boolean, list, object)", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+
+			// list
+			const list = runCli(
+				["config", "set", "domains.warren", "{ allowed_types: [convention, pattern] }"],
+				tmpDir,
+			);
+			expect(list.exitCode).toBe(0);
+			const showList = runCli(["config", "show", "--path", "domains.warren.allowed_types"], tmpDir);
+			expect(showList.exitCode).toBe(0);
+			expect(JSON.parse(showList.stdout.toString())).toEqual(["convention", "pattern"]);
+
+			// number-as-string is preserved as a number when YAML parses it as such
+			const num = runCli(["config", "set", "search.boost_factor", "0.25"], tmpDir);
+			expect(num.exitCode).toBe(0);
+			const showNum = runCli(["config", "show", "--path", "search.boost_factor"], tmpDir);
+			expect(JSON.parse(showNum.stdout.toString())).toBe(0.25);
+		});
+
+		it("rejects unknown closed-shape paths with a list of known keys", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "set", "governance.typo", "5"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			const stderr = result.stderr.toString();
+			expect(stderr).toContain("Unknown config path");
+			expect(stderr).toContain("max_entries");
+		});
+
+		it("rejects values that fail schema validation with a schema-titled error", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "set", "governance.max_entries", '"oops"'], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			const stderr = result.stderr.toString();
+			expect(stderr).toContain("Invalid config after set");
+			expect(stderr).toContain("must be integer");
+			expect(stderr).toContain("Soft target");
+		});
+
+		it("rejects empty <path>", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "set", ".", "5"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("must not be empty");
+		});
+
+		it("rejects invalid YAML for <value>", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "set", "governance.max_entries", "{unbalanced: ["], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("Invalid YAML");
+		});
+
+		it("errors with the standard 'No .mulch/' message when run outside a project", () => {
+			const result = runCli(["config", "set", "governance.max_entries", "50"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("No .mulch/ directory");
+		});
+
+		it("creates intermediate objects through open maps (domains.<name>)", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(
+				["config", "set", "domains.brand-new.required_fields", "[owner]"],
+				tmpDir,
+			);
+			expect(result.exitCode).toBe(0);
+			const show = runCli(
+				["config", "show", "--path", "domains.brand-new.required_fields"],
+				tmpDir,
+			);
+			expect(show.exitCode).toBe(0);
+			expect(JSON.parse(show.stdout.toString())).toEqual(["owner"]);
+		});
+
+		it("does not leave the .tmp file behind on success", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "set", "governance.max_entries", "75"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			const { readdir } = await import("node:fs/promises");
+			const files = await readdir(join(tmpDir, ".mulch"));
+			const stragglers = files.filter((f) => f.includes(".tmp.") || f.endsWith(".lock"));
+			expect(stragglers).toEqual([]);
+		});
+
+		it("rejects a closed-shape replacement that violates required fields", async () => {
+			// Replacing the whole governance section with an object missing required
+			// fields must fail schema validation, not silently strip required keys.
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "set", "governance", "{ max_entries: 50 }"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("Invalid config after set");
+		});
+	});
 });
