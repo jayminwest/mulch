@@ -15,6 +15,12 @@ function runCli(args: string[], cwd: string) {
 	});
 }
 
+async function initMulchProject(cwd: string, configYaml: string): Promise<void> {
+	const mulchDir = join(cwd, ".mulch");
+	await mkdir(join(mulchDir, "expertise"), { recursive: true });
+	await writeFile(join(mulchDir, "mulch.config.yaml"), configYaml, "utf-8");
+}
+
 describe("config command", () => {
 	let tmpDir: string;
 
@@ -105,6 +111,159 @@ describe("config command", () => {
 			for (const prop of expectedProps) {
 				expect(schema.properties[prop]).toBeDefined();
 			}
+		});
+	});
+
+	describe("config show", () => {
+		it("emits the on-disk config (with applied defaults) as JSON", async () => {
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: { warren: {}, mulch: {} }",
+					"governance: { max_entries: 50, warn_entries: 75, hard_limit: 100 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"search: { boost_factor: 0.25 }",
+					"",
+				].join("\n"),
+			);
+			const result = runCli(["config", "show"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			const parsed = JSON.parse(result.stdout.toString()) as {
+				version: string;
+				domains: Record<string, unknown>;
+				governance: { max_entries: number };
+				search?: { boost_factor: number };
+			};
+			expect(parsed.version).toBe("1");
+			expect(parsed.domains.warren).toEqual({});
+			expect(parsed.governance.max_entries).toBe(50);
+			expect(parsed.search?.boost_factor).toBe(0.25);
+		});
+
+		it("--path returns a single user-set knob", async () => {
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 42, warn_entries: 60, hard_limit: 80 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"",
+				].join("\n"),
+			);
+			const result = runCli(["config", "show", "--path", "governance.max_entries"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			expect(JSON.parse(result.stdout.toString())).toBe(42);
+		});
+
+		it("--path falls back to the schema default when the knob is unset", async () => {
+			// search.boost_factor is omitted; schema default is 0.1.
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"",
+				].join("\n"),
+			);
+			const result = runCli(["config", "show", "--path", "search.boost_factor"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			expect(JSON.parse(result.stdout.toString())).toBe(0.1);
+		});
+
+		it("--path on an unset section synthesizes an object from leaf defaults", async () => {
+			// `prime` (whole section) is unset; schema has prime.default_mode default 'full'.
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"",
+				].join("\n"),
+			);
+			const result = runCli(["config", "show", "--path", "prime"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			expect(JSON.parse(result.stdout.toString())).toEqual({ default_mode: "full" });
+		});
+
+		it("returns a nested user-set value", async () => {
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+					"classification_defaults: { shelf_life: { tactical: 7, observational: 14 } }",
+					"",
+				].join("\n"),
+			);
+			const result = runCli(
+				["config", "show", "--path", "classification_defaults.shelf_life.tactical"],
+				tmpDir,
+			);
+			expect(result.exitCode).toBe(0);
+			expect(JSON.parse(result.stdout.toString())).toBe(7);
+		});
+
+		it("errors when --path targets an unknown closed-shape knob", async () => {
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"",
+				].join("\n"),
+			);
+			const result = runCli(["config", "show", "--path", "governance.typo"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("not found");
+		});
+
+		it("errors when --path is empty", async () => {
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"",
+				].join("\n"),
+			);
+			const result = runCli(["config", "show", "--path", "."], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("must not be empty");
+		});
+
+		it("errors with the standard 'No .mulch/' message when run outside a project", () => {
+			const result = runCli(["config", "show"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("No .mulch/ directory");
+		});
+
+		it("global --json flag is accepted as a no-op (output is unconditionally JSON)", async () => {
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"",
+				].join("\n"),
+			);
+			const a = runCli(["config", "show"], tmpDir);
+			const b = runCli(["config", "show", "--json"], tmpDir);
+			expect(a.exitCode).toBe(0);
+			expect(b.exitCode).toBe(0);
+			expect(b.stdout.toString()).toBe(a.stdout.toString());
 		});
 	});
 });
