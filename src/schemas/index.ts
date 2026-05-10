@@ -1,5 +1,6 @@
 export type { MulchConfig } from "./config.ts";
 export { DEFAULT_CONFIG } from "./config.ts";
+export { configSchema } from "./config-schema.ts";
 export type {
 	BuiltinRecordType,
 	Classification,
@@ -14,5 +15,4 @@ export type {
 	RecordType,
 	ReferenceRecord,
 } from "./record.ts";
-
 export { recordSchema } from "./record-schema.ts";

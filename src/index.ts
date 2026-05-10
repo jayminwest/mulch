@@ -19,6 +19,8 @@ export {
 	recordExpertise,
 	searchExpertise,
 } from "./api.ts";
+// Schema exports
+export { configSchema } from "./schemas/config-schema.ts";
 export type {
 	Classification,
 	ConventionRecord,
@@ -34,7 +36,6 @@ export type {
 	ReferenceRecord,
 } from "./schemas/index.ts";
 export { DEFAULT_CONFIG } from "./schemas/index.ts";
-// Schema exports
 export { recordSchema } from "./schemas/record-schema.ts";
 // Config utilities
 export { getExpertisePath, readConfig } from "./utils/config.ts";
