@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -15,10 +16,27 @@ function runCli(args: string[], cwd: string) {
 	});
 }
 
+function runCliAsync(args: string[], cwd: string) {
+	const proc = Bun.spawn(["bun", CLI_PATH, ...args], {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	return Promise.all([
+		proc.exited,
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	]).then(([exitCode, stdout, stderr]) => ({ exitCode, stdout, stderr }));
+}
+
 async function initMulchProject(cwd: string, configYaml: string): Promise<void> {
 	const mulchDir = join(cwd, ".mulch");
 	await mkdir(join(mulchDir, "expertise"), { recursive: true });
 	await writeFile(join(mulchDir, "mulch.config.yaml"), configYaml, "utf-8");
+}
+
+function git(args: string[], cwd: string): void {
+	execFileSync("git", args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
 }
 
 describe("config command", () => {
@@ -495,5 +513,301 @@ describe("config command", () => {
 			const afterUnset = runCli(["config", "show", "--path", "search.boost_factor"], tmpDir);
 			expect(JSON.parse(afterUnset.stdout.toString())).toBe(0.1);
 		});
+	});
+});
+
+describe("config command — worktree integration", () => {
+	let tmpDir: string;
+	let mainRepo: string;
+	let worktreeDir: string;
+
+	const baseConfig = [
+		"version: '1'",
+		"domains: { warren: { allowed_types: [convention] } }",
+		"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+		"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+		"search: { boost_factor: 0.25 }",
+		"",
+	].join("\n");
+
+	beforeEach(async () => {
+		// realpath needed on macOS where /tmp is a symlink to /private/tmp.
+		// getMulchDir resolves the worktree's main root via `git rev-parse
+		// --git-common-dir`, which returns the resolved path; comparing with
+		// the unresolved tmpDir would silently fail.
+		tmpDir = await realpath(await mkdtemp(join(tmpdir(), "mulch-config-wt-test-")));
+		mainRepo = join(tmpDir, "main");
+		worktreeDir = join(tmpDir, "worktree");
+
+		await mkdir(mainRepo, { recursive: true });
+		git(["init", "-q"], mainRepo);
+		git(["config", "user.email", "test@test.com"], mainRepo);
+		git(["config", "user.name", "Test"], mainRepo);
+		await writeFile(join(mainRepo, "dummy.txt"), "hello", "utf-8");
+		git(["add", "."], mainRepo);
+		git(["commit", "-q", "-m", "init"], mainRepo);
+
+		await initMulchProject(mainRepo, baseConfig);
+		git(["add", "."], mainRepo);
+		git(["commit", "-q", "-m", "add mulch"], mainRepo);
+
+		git(["worktree", "add", "-q", worktreeDir, "-b", "test-branch"], mainRepo);
+	});
+
+	afterEach(async () => {
+		try {
+			git(["worktree", "remove", "--force", worktreeDir], mainRepo);
+		} catch {
+			// already removed
+		}
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("`config schema` works from a worktree (read-only, config-independent)", () => {
+		const result = runCli(["config", "schema"], worktreeDir);
+		expect(result.exitCode).toBe(0);
+		// Parses as JSON Schema with the expected top-level shape.
+		const parsed = JSON.parse(result.stdout.toString()) as {
+			properties?: Record<string, unknown>;
+		};
+		expect(parsed.properties?.governance).toBeDefined();
+	});
+
+	it("`config show` from a worktree reads the main repo's config", () => {
+		const result = runCli(["config", "show", "--path", "search.boost_factor"], worktreeDir);
+		expect(result.exitCode).toBe(0);
+		expect(JSON.parse(result.stdout.toString())).toBe(0.25);
+	});
+
+	it("`config set` from a worktree writes to the main repo's config (not the worktree's checkout)", async () => {
+		// The worktree contains its own checkout of .mulch/mulch.config.yaml
+		// (a copy from the source branch). Snapshot it so we can confirm it
+		// stays untouched while the write lands in the main repo's copy —
+		// that's what makes config writes survive `git worktree remove`.
+		const worktreeConfigBefore = await readFile(
+			join(worktreeDir, ".mulch", "mulch.config.yaml"),
+			"utf-8",
+		);
+
+		const result = runCli(["config", "set", "governance.max_entries", "55"], worktreeDir);
+		expect(result.exitCode).toBe(0);
+
+		const mainConfigYaml = await readFile(join(mainRepo, ".mulch", "mulch.config.yaml"), "utf-8");
+		expect(mainConfigYaml).toContain("max_entries: 55");
+
+		// The worktree's checkout copy must NOT have been written through.
+		const worktreeConfigAfter = await readFile(
+			join(worktreeDir, ".mulch", "mulch.config.yaml"),
+			"utf-8",
+		);
+		expect(worktreeConfigAfter).toBe(worktreeConfigBefore);
+
+		// Round-trip via `show` from the worktree to confirm the update is visible.
+		const show = runCli(["config", "show", "--path", "governance.max_entries"], worktreeDir);
+		expect(JSON.parse(show.stdout.toString())).toBe(55);
+	});
+
+	it("`config unset` from a worktree updates the main repo's config (not the worktree's checkout)", async () => {
+		const worktreeConfigBefore = await readFile(
+			join(worktreeDir, ".mulch", "mulch.config.yaml"),
+			"utf-8",
+		);
+
+		const result = runCli(["config", "unset", "search.boost_factor"], worktreeDir);
+		expect(result.exitCode).toBe(0);
+
+		const mainConfigYaml = await readFile(join(mainRepo, ".mulch", "mulch.config.yaml"), "utf-8");
+		// `search.boost_factor` was the only key under `search`, so the empty
+		// parent should have been pruned by unsetAtPath.
+		expect(mainConfigYaml).not.toContain("search:");
+
+		const worktreeConfigAfter = await readFile(
+			join(worktreeDir, ".mulch", "mulch.config.yaml"),
+			"utf-8",
+		);
+		expect(worktreeConfigAfter).toBe(worktreeConfigBefore);
+	});
+
+	it("set/unset stragglers (.tmp, .lock) land in main .mulch/ and are cleaned up", async () => {
+		const set = runCli(["config", "set", "governance.max_entries", "77"], worktreeDir);
+		expect(set.exitCode).toBe(0);
+		const unset = runCli(["config", "unset", "search.boost_factor"], worktreeDir);
+		expect(unset.exitCode).toBe(0);
+
+		const mainFiles = await readdir(join(mainRepo, ".mulch"));
+		const mainStragglers = mainFiles.filter((f) => f.includes(".tmp.") || f.endsWith(".lock"));
+		expect(mainStragglers).toEqual([]);
+
+		// And no straggler files in the worktree's checkout copy of .mulch/ either.
+		const worktreeFiles = await readdir(join(worktreeDir, ".mulch"));
+		const worktreeStragglers = worktreeFiles.filter(
+			(f) => f.includes(".tmp.") || f.endsWith(".lock"),
+		);
+		expect(worktreeStragglers).toEqual([]);
+	});
+
+	it("concurrent set from the worktree and main both land (lock spans worktree boundary)", async () => {
+		// Same lock file (main repo's config path) serializes both processes.
+		const [a, b] = await Promise.all([
+			runCliAsync(["config", "set", "governance.max_entries", "111"], worktreeDir),
+			runCliAsync(["config", "set", "governance.warn_entries", "222"], mainRepo),
+		]);
+		expect(a.exitCode).toBe(0);
+		expect(b.exitCode).toBe(0);
+
+		const showMax = runCli(["config", "show", "--path", "governance.max_entries"], mainRepo);
+		const showWarn = runCli(["config", "show", "--path", "governance.warn_entries"], mainRepo);
+		expect(JSON.parse(showMax.stdout.toString())).toBe(111);
+		expect(JSON.parse(showWarn.stdout.toString())).toBe(222);
+	});
+});
+
+describe("config command — concurrency", () => {
+	let tmpDir: string;
+
+	const baseConfig = [
+		"version: '1'",
+		"domains: {}",
+		"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+		"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+		"",
+	].join("\n");
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-config-conc-test-"));
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("concurrent set on disjoint keys: every value lands (no lost writes)", async () => {
+		await initMulchProject(tmpDir, baseConfig);
+
+		// 8 disjoint domain entries written concurrently. The advisory file
+		// lock serializes the read-modify-write cycle, so each process sees
+		// every prior set when it runs and includes it in its YAML dump.
+		const writes = Array.from({ length: 8 }, (_, i) =>
+			runCliAsync(["config", "set", `domains.d${i}`, `{ allowed_types: [convention] }`], tmpDir),
+		);
+		const results = await Promise.all(writes);
+		for (const r of results) {
+			expect(r.exitCode).toBe(0);
+		}
+
+		const show = runCli(["config", "show", "--path", "domains"], tmpDir);
+		expect(show.exitCode).toBe(0);
+		const domains = JSON.parse(show.stdout.toString()) as Record<string, unknown>;
+		for (let i = 0; i < 8; i++) {
+			expect(domains[`d${i}`]).toEqual({ allowed_types: ["convention"] });
+		}
+	});
+
+	it("concurrent set on the same key: last-writer-wins, value is one of the inputs", async () => {
+		await initMulchProject(tmpDir, baseConfig);
+
+		const candidates = [10, 20, 30, 40, 50, 60, 70, 80];
+		const writes = candidates.map((v) =>
+			runCliAsync(["config", "set", "governance.max_entries", String(v)], tmpDir),
+		);
+		const results = await Promise.all(writes);
+		for (const r of results) {
+			expect(r.exitCode).toBe(0);
+		}
+
+		const show = runCli(["config", "show", "--path", "governance.max_entries"], tmpDir);
+		expect(show.exitCode).toBe(0);
+		const final = JSON.parse(show.stdout.toString()) as number;
+		// The contract is "last-writer-wins under concurrent writes" — we
+		// can't predict which writer wins, only that the result is exactly
+		// one of the inputs (no truncated/garbled YAML, no value composition).
+		expect(candidates).toContain(final);
+	});
+
+	it("concurrent set + unset on disjoint keys: both apply atomically", async () => {
+		const seeded = [
+			"version: '1'",
+			"domains: {}",
+			"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+			"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+			"search: { boost_factor: 0.25 }",
+			"",
+		].join("\n");
+		await initMulchProject(tmpDir, seeded);
+
+		const [set, unset] = await Promise.all([
+			runCliAsync(["config", "set", "governance.max_entries", "42"], tmpDir),
+			runCliAsync(["config", "unset", "search.boost_factor"], tmpDir),
+		]);
+		expect(set.exitCode).toBe(0);
+		expect(unset.exitCode).toBe(0);
+
+		const showMax = runCli(["config", "show", "--path", "governance.max_entries"], tmpDir);
+		expect(JSON.parse(showMax.stdout.toString())).toBe(42);
+
+		const showBoost = runCli(["config", "show", "--path", "search.boost_factor"], tmpDir);
+		// search.boost_factor falls back to the schema default after unset.
+		expect(JSON.parse(showBoost.stdout.toString())).toBe(0.1);
+	});
+
+	it("concurrent invalid + valid set: invalid is rejected, valid is preserved", async () => {
+		await initMulchProject(tmpDir, baseConfig);
+
+		const [bad, good] = await Promise.all([
+			runCliAsync(["config", "set", "governance.max_entries", '"not-a-number"'], tmpDir),
+			runCliAsync(["config", "set", "governance.warn_entries", "175"], tmpDir),
+		]);
+		expect(bad.exitCode).not.toBe(0);
+		expect(bad.stderr).toContain("Invalid config after set");
+		expect(good.exitCode).toBe(0);
+
+		// Bad write must NOT have corrupted on-disk config.
+		const showMax = runCli(["config", "show", "--path", "governance.max_entries"], tmpDir);
+		expect(JSON.parse(showMax.stdout.toString())).toBe(100);
+
+		const showWarn = runCli(["config", "show", "--path", "governance.warn_entries"], tmpDir);
+		expect(JSON.parse(showWarn.stdout.toString())).toBe(175);
+	});
+
+	it("after concurrent writes: no .lock or .tmp stragglers", async () => {
+		await initMulchProject(tmpDir, baseConfig);
+
+		const writes = Array.from({ length: 6 }, (_, i) =>
+			runCliAsync(["config", "set", "governance.max_entries", String(50 + i)], tmpDir),
+		);
+		await Promise.all(writes);
+
+		const files = await readdir(join(tmpDir, ".mulch"));
+		const stragglers = files.filter((f) => f.includes(".tmp.") || f.endsWith(".lock"));
+		expect(stragglers).toEqual([]);
+	});
+
+	it("YAML on disk stays parseable and schema-valid after concurrent writes", async () => {
+		await initMulchProject(tmpDir, baseConfig);
+
+		const writes: Promise<unknown>[] = [];
+		for (let i = 0; i < 5; i++) {
+			writes.push(runCliAsync(["config", "set", `domains.d${i}`, "{}"], tmpDir));
+			writes.push(
+				runCliAsync(["config", "set", "governance.max_entries", String(50 + i * 10)], tmpDir),
+			);
+		}
+		await Promise.all(writes);
+
+		// Final on-disk config must round-trip through `ml config show` (which
+		// re-reads + re-validates via readConfig + applyConfigDefaults).
+		const result = runCli(["config", "show"], tmpDir);
+		expect(result.exitCode).toBe(0);
+		const cfg = JSON.parse(result.stdout.toString()) as {
+			version: string;
+			governance: { max_entries: number };
+			domains: Record<string, unknown>;
+		};
+		expect(cfg.version).toBe("1");
+		expect(typeof cfg.governance.max_entries).toBe("number");
+		// Every disjoint domain set should have landed.
+		for (let i = 0; i < 5; i++) {
+			expect(cfg.domains[`d${i}`]).toBeDefined();
+		}
 	});
 });
