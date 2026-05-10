@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-10
+
+A warren-integration release: a full `ml config` family (schema + show/set/unset) gives config-UI consumers atomic, schema-validated reads and writes; `ml prime --dry-run` returns a JSON token-budget preview without rendering record content; `owner` and `status` join `BaseRecord` as built-in optional fields. The Codex provider recipe gains a real `SessionStart` hook (so `ml prime` finally runs on Codex), and the `aider` / `gemini` / `windsurf` built-in recipes are removed after an audit found all three writing to paths the runtimes don't read. 1225 tests across 61 files / 3047 expect() calls (up from 1120 / 58 in 0.8.0).
+
 ### Removed
 
 - **Built-in recipes for `aider`, `gemini`, and `windsurf`**: an audit against the providers' current docs found all three writing to paths the runtime doesn't actually read, so `ml setup <one of these>` was silently a no-op. `ml setup aider|gemini|windsurf` now fails with the standard unknown-provider hint pointing at `--list`, `.mulch/recipes/<name>.{ts,sh}`, and `mulch-recipe-<name>`. Users who relied on the old paths can re-create the same behavior as a filesystem recipe in their own repo.
@@ -628,7 +632,8 @@ Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provid
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/jayminwest/mulch/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/jayminwest/mulch/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jayminwest/mulch/compare/v0.6.5...v0.7.0
 [0.6.5]: https://github.com/jayminwest/mulch/compare/v0.6.4...v0.6.5

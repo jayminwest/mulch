@@ -71,6 +71,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml rank [domain]` | Rank records by confirmation-frequency score, highest first (`--type`, `--limit`, `--min-score`, `--json`) — pure score ranking with no text query, useful for context-constrained consumers |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
+| `ml config <subcommand>` | Inspect and edit `.mulch/mulch.config.yaml` (`schema`, `show [--path <p>]`, `set <path> <value>`, `unset <path>`) — atomic, schema-validated writes for warren and other config-UI consumers |
 | `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
 | `ml validate` | Schema validation across all files |
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |

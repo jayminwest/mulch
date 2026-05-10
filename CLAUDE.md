@@ -62,7 +62,7 @@ Three classifications with shelf lives for pruning: `foundational` (permanent), 
 
 ### Command Pattern
 
-Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 26 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
+Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 27 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
 
 ### Concurrency Safety
 
@@ -77,7 +77,7 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 ### Provider Integration (setup command)
 
-`src/commands/setup.ts` contains provider-specific "recipes" (claude, cursor, codex). Each recipe implements idempotent `install()`, `check()`, and `remove()` operations. The Codex recipe writes both an `AGENTS.md` mulch section (fallback prose) and a `[[hooks.SessionStart]]` block in `.codex/config.toml` fenced by `# mulch:start` / `# mulch:end` line comments for idempotency. The Claude recipe registers only `SessionStart` (the empty matcher covers startup/resume/clear/compact); `PreCompact` is intentionally not registered because its stdout is discarded across compaction.
+`src/commands/setup.ts` contains the three built-in provider "recipes" (claude, cursor, codex). Each recipe implements idempotent `install()`, `check()`, and `remove()` operations. The Codex recipe writes both an `AGENTS.md` mulch section (fallback prose) and a `[[hooks.SessionStart]]` block in `.codex/config.toml` fenced by `# mulch:start` / `# mulch:end` line comments for idempotency. The Claude recipe registers only `SessionStart` (the empty matcher covers startup/resume/clear/compact); `PreCompact` is intentionally not registered because its stdout is discarded across compaction. The previous `aider`, `gemini`, and `windsurf` built-ins were removed in v0.9.0 after an audit found all three writing to paths the runtimes don't read; users who relied on them can re-create the same behavior as a filesystem recipe under `.mulch/recipes/<name>.{ts,sh}`.
 
 ## TypeScript Conventions
 
@@ -95,9 +95,9 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 <!-- mulch:start -->
 ## Project Expertise (Mulch)
-<!-- mulch-onboard:v0.8.0 -->
+<!-- mulch-onboard:v0.9.0 -->
 
-This project uses [Mulch](https://github.com/jayminwest/mulch) v0.8.0 for structured expertise management.
+This project uses [Mulch](https://github.com/jayminwest/mulch) v0.9.0 for structured expertise management.
 
 **At the start of every session**, run:
 ```bash
