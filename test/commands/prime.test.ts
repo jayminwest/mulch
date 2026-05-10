@@ -278,7 +278,9 @@ describe("prime command", () => {
 		const section = formatDomainExpertisePlain("testing", records, lastUpdated);
 		const output = formatPrimeOutputPlain([section]);
 
-		expect(output).toContain("Project Expertise (via Mulch)");
+		// Spawn-injection contract: no decorative document title, no underline.
+		expect(output).not.toContain("Project Expertise (via Mulch)");
+		expect(output).not.toMatch(/^=+$/m);
 		expect(output).toContain("[testing]");
 		expect(output).toContain("Conventions:");
 		expect(output).toMatch(/- \[mx-[0-9a-f]+\] Use vitest/);
@@ -2734,8 +2736,13 @@ describe("prime command", () => {
 				const program = makeProgram();
 				await program.parseAsync(["node", "mulch", "--format", "plain", "prime"]);
 				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
-				expect(output).toContain("Project Expertise (via Mulch)");
+				// Spawn-injection contract: no decorative title, no underline,
+				// no Session Close trailer (warren handles framing contextually).
+				expect(output).not.toContain("Project Expertise (via Mulch)");
+				expect(output).not.toMatch(/^=+$/m);
+				expect(output).not.toContain("SESSION CLOSE PROTOCOL");
 				expect(output).toContain("[cli]");
+				expect(output).toContain("Use bun");
 				expect(output).not.toContain("<expertise>");
 				expect(output).not.toContain("###");
 			} finally {
@@ -2783,6 +2790,259 @@ describe("prime command", () => {
 				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
 				expect(output).toContain("<expertise>");
 				expect(output).not.toContain("### Conventions");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+	});
+
+	describe("--dry-run", () => {
+		let originalCwd: string;
+
+		beforeEach(() => {
+			originalCwd = process.cwd();
+		});
+
+		afterEach(() => {
+			process.chdir(originalCwd);
+			process.exitCode = 0;
+		});
+
+		function makeProgram(): Command {
+			const program = new Command();
+			program
+				.name("mulch")
+				.option("--json", "output as structured JSON")
+				.option("--format <format>", "global format")
+				.exitOverride();
+			registerPrimeCommand(program);
+			return program;
+		}
+
+		async function seedTwoDomains(): Promise<void> {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {}, testing: {} } }, tmpDir);
+			const cliPath = getExpertisePath("cli", tmpDir);
+			const testingPath = getExpertisePath("testing", tmpDir);
+			await createExpertiseFile(cliPath);
+			await createExpertiseFile(testingPath);
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Use bun",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "init-flow",
+				description: "How init wires up files",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(testingPath, {
+				type: "convention",
+				content: "No mocks",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+		}
+
+		interface DryRunPayload {
+			wouldPrime: { id: string; type: string; domain: string; tokens: number }[];
+			totalTokens: number;
+			budgetUsed: number | null;
+			budgetTotal: number | null;
+		}
+
+		function parseDryRun(logSpy: ReturnType<typeof spyOn>): DryRunPayload {
+			const output = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+			return JSON.parse(output) as DryRunPayload;
+		}
+
+		it("emits JSON summary with id/type/domain/tokens per kept record", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run"]);
+				const payload = parseDryRun(logSpy);
+				expect(payload.wouldPrime).toHaveLength(3);
+				for (const r of payload.wouldPrime) {
+					expect(r.id).toMatch(/^mx-[0-9a-f]+$/);
+					expect(["convention", "pattern"]).toContain(r.type);
+					expect(["cli", "testing"]).toContain(r.domain);
+					expect(r.tokens).toBeGreaterThan(0);
+				}
+				expect(payload.totalTokens).toBe(payload.wouldPrime.reduce((s, r) => s + r.tokens, 0));
+				expect(payload.budgetTotal).toBe(DEFAULT_BUDGET);
+				expect(payload.budgetUsed).toBeCloseTo(payload.totalTokens / DEFAULT_BUDGET, 6);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("respects --budget and only lists records that fit", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				// Tiny budget — only the cheapest top-priority record should fit.
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run", "--budget", "5"]);
+				const payload = parseDryRun(logSpy);
+				expect(payload.budgetTotal).toBe(5);
+				expect(payload.wouldPrime.length).toBeLessThan(3);
+				expect(payload.totalTokens).toBeLessThanOrEqual(5);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--no-limit disables the budget (budgetTotal/budgetUsed null, all records listed)", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run", "--no-limit"]);
+				const payload = parseDryRun(logSpy);
+				expect(payload.budgetTotal).toBeNull();
+				expect(payload.budgetUsed).toBeNull();
+				expect(payload.wouldPrime).toHaveLength(3);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("composes with --domain (scopes to one domain)", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run", "cli"]);
+				const payload = parseDryRun(logSpy);
+				expect(payload.wouldPrime.every((r) => r.domain === "cli")).toBe(true);
+				expect(payload.wouldPrime).toHaveLength(2);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("composes with --exclude-domain", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync([
+					"node",
+					"mulch",
+					"prime",
+					"--dry-run",
+					"--exclude-domain",
+					"cli",
+				]);
+				const payload = parseDryRun(logSpy);
+				expect(payload.wouldPrime.every((r) => r.domain === "testing")).toBe(true);
+				expect(payload.wouldPrime).toHaveLength(1);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("composes with --files (filters by file anchor)", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
+			const cliPath = getExpertisePath("cli", tmpDir);
+			await createExpertiseFile(cliPath);
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "init-pattern",
+				description: "init wiring",
+				files: ["src/init.ts"],
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "other-pattern",
+				description: "unrelated",
+				files: ["src/other.ts"],
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run", "--files", "src/init.ts"]);
+				const payload = parseDryRun(logSpy);
+				expect(payload.wouldPrime).toHaveLength(1);
+				expect(payload.wouldPrime[0]?.type).toBe("pattern");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--format plain --dry-run returns JSON (format ignored when dry-running)", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--format", "plain", "prime", "--dry-run"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				// Output is JSON, not plain text.
+				expect(() => JSON.parse(output)).not.toThrow();
+				const payload = JSON.parse(output) as DryRunPayload;
+				expect(Array.isArray(payload.wouldPrime)).toBe(true);
+				// No plain-format artifacts.
+				expect(output).not.toContain("Conventions:");
+				expect(output).not.toContain("[cli] ");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--dry-run + --manifest is rejected with a clear error", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run", "--manifest"]);
+				expect(process.exitCode).toBe(1);
+				const errors = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errors).toContain("Cannot combine --dry-run with --manifest");
+			} finally {
+				errorSpy.mockRestore();
+				process.exitCode = 0;
+			}
+		});
+
+		it("dry-run token counts match real prime budget accounting", async () => {
+			await seedTwoDomains();
+			process.chdir(tmpDir);
+
+			// Real prime: read back the records, run them through the same
+			// applyBudget+estimateRecordText pipeline and confirm dry-run agrees.
+			const cliPath = getExpertisePath("cli", tmpDir);
+			const testingPath = getExpertisePath("testing", tmpDir);
+			const allDomainRecords: DomainRecords[] = [
+				{ domain: "cli", records: await readExpertiseFile(cliPath) },
+				{ domain: "testing", records: await readExpertiseFile(testingPath) },
+			];
+			const { kept } = applyBudget(allDomainRecords, DEFAULT_BUDGET, (r) => estimateRecordText(r));
+			const expectedTokens = kept
+				.flatMap((d) => d.records)
+				.reduce((s, r) => s + estimateTokens(estimateRecordText(r)), 0);
+
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run"]);
+				const payload = parseDryRun(logSpy);
+				expect(payload.totalTokens).toBe(expectedTokens);
 			} finally {
 				logSpy.mockRestore();
 			}

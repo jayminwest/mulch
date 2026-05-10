@@ -66,7 +66,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml delete <domain> [id]` | Delete records by ID, `--records <ids>`, or `--all-except <ids>` (`--dry-run`) |
 | `ml delete-domain <domain>` | Remove a domain from config and delete its expertise JSONL file (`--yes`, `--dry-run`) |
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
-| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`) |
+| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`, `--dry-run`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--no-boost`, `--format`) |
 | `ml rank [domain]` | Rank records by confirmation-frequency score, highest first (`--type`, `--limit`, `--min-score`, `--json`) — pure score ranking with no text query, useful for context-constrained consumers |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
@@ -87,15 +87,38 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 
 ### Global Output Format
 
-All record-rendering commands (`ml prime`, `ml query`, `ml search`) accept a global `--format <markdown|compact|xml|plain>` flag that selects the output formatter. `xml` is Claude-optimized; `plain` is Codex-optimized; `compact` emits one-liner records (default for `ml prime`); `markdown` emits the full, sectioned layout. Per-command `--format` flags (e.g. `ml query --format ids`) take precedence over the global flag.
+All record-rendering commands (`ml prime`, `ml query`, `ml search`) accept a global `--format <markdown|compact|xml|plain>` flag that selects the output formatter. `xml` is Claude-optimized; `plain` is the spawn-injection contract — clean structured prose (per-domain sections, bulleted records, no decorative title, no Session Close trailer) suitable for concatenation into another tool's system prompt; `compact` emits one-liner records (default for `ml prime`); `markdown` emits the full, sectioned layout. Per-command `--format` flags (e.g. `ml query --format ids`) take precedence over the global flag.
 
 ```bash
 ml --format xml prime testing      # XML expertise tree (Claude-friendly)
-ml --format plain prime testing    # plain text (Codex-friendly)
+ml --format plain prime testing    # plain text for system-prompt injection
 ml --format compact query testing  # compact one-liners
 ml prime --full                    # alias for --format markdown
 ml prime --compact                 # alias for --format compact
 ```
+
+#### Spawn-time Preview (`--dry-run`)
+
+`ml prime --dry-run` emits a JSON summary of which records would be primed (id, type, domain, per-record token estimate) and how the result fits within `--budget`, without rendering record content. Useful for editor previews and orchestrators that want to show "would prime: N records, K tokens" before actually shelling out for the full output. Composes with `--domain`, `--files`, `--budget`, `--no-limit`, `--exclude-domain`. `pre-prime` hooks are skipped (preview must not trigger Slack posts or `digest-then-confirm` confirmations). When combined with `--format plain` the format is ignored and JSON is returned.
+
+```bash
+ml prime --dry-run                            # preview default prime
+ml prime --dry-run --domain cli --budget 8000 # scoped preview against a specific budget
+ml prime --dry-run --files src/foo.ts         # what would prime --files emit?
+```
+
+```json
+{
+  "wouldPrime": [
+    { "id": "mx-94901b", "type": "convention", "domain": "cli", "tokens": 240 }
+  ],
+  "totalTokens": 240,
+  "budgetUsed": 0.03,
+  "budgetTotal": 8000
+}
+```
+
+`budgetUsed` and `budgetTotal` are `null` when invoked with `--no-limit`.
 
 ## Architecture
 

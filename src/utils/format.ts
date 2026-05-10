@@ -401,19 +401,16 @@ export function formatDomainExpertisePlain(
 	return lines.join("\n").trimEnd();
 }
 
+// Plain format is the spawn-injection contract: clean text suitable for
+// concatenation into another tool's system prompt. No decorative document
+// title, no underlines, no markdown — only the per-domain sections (which
+// already lead with `[domain] N records` metadata). Empty-state stays as a
+// single bare line.
 export function formatPrimeOutputPlain(domainSections: string[]): string {
-	const lines: string[] = [];
-	lines.push("Project Expertise (via Mulch)");
-	lines.push("============================");
-	lines.push("");
-
 	if (domainSections.length === 0) {
-		lines.push("No expertise recorded yet. Use `ml add <domain>` and `ml record` to get started.");
-	} else {
-		lines.push(domainSections.join("\n\n"));
+		return "No expertise recorded yet. Use `ml add <domain>` and `ml record` to get started.";
 	}
-
-	return lines.join("\n");
+	return domainSections.join("\n\n");
 }
 
 export interface JsonDomain {

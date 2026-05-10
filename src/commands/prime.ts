@@ -3,7 +3,12 @@ import type { Command } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
 import type { DomainRecords } from "../utils/budget.ts";
-import { applyBudget, DEFAULT_BUDGET, formatBudgetSummary } from "../utils/budget.ts";
+import {
+	applyBudget,
+	DEFAULT_BUDGET,
+	estimateTokens,
+	formatBudgetSummary,
+} from "../utils/budget.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { getFileModTime, readExpertiseFile } from "../utils/expertise.ts";
 import type { JsonDomain, ManifestDomain, PrimeFormat } from "../utils/format.ts";
@@ -37,7 +42,24 @@ interface PrimeOptions {
 	context?: boolean;
 	files?: string[];
 	budget?: string;
-	noLimit?: boolean;
+	// Commander parses `--no-limit` as `limit=false` (defaults true), not as
+	// `noLimit=true`. Field name follows Commander's parsed-attribute convention.
+	limit?: boolean;
+	dryRun?: boolean;
+}
+
+interface DryRunRecordSummary {
+	id: string;
+	type: string;
+	domain: string;
+	tokens: number;
+}
+
+interface DryRunPayload {
+	wouldPrime: DryRunRecordSummary[];
+	totalTokens: number;
+	budgetUsed: number | null;
+	budgetTotal: number | null;
 }
 
 function resolvePrimeFormat(
@@ -76,6 +98,10 @@ export function registerPrimeCommand(program: Command): void {
 		.option("--export <path>", "export output to a file")
 		.option("--budget <tokens>", `token budget for output (default: ${DEFAULT_BUDGET})`)
 		.option("--no-limit", "disable token budget limit")
+		.option(
+			"--dry-run",
+			"emit JSON summary of records that would be primed (id, type, domain, tokens) without rendering content; respects --budget and skips pre-prime hooks",
+		)
 		.action(async (domainsArg: string[], options: PrimeOptions) => {
 			const globalOpts = program.opts();
 			const jsonMode = globalOpts.json === true;
@@ -86,6 +112,18 @@ export function registerPrimeCommand(program: Command): void {
 
 				if (options.manifest && options.full) {
 					const msg = "Cannot combine --manifest with --full.";
+					if (jsonMode) {
+						outputJsonError("prime", msg);
+					} else {
+						console.error(`Error: ${msg}`);
+					}
+					process.exitCode = 1;
+					return;
+				}
+
+				if (options.dryRun && options.manifest) {
+					const msg =
+						"Cannot combine --dry-run with --manifest. Manifest mode lists domains, not records; --dry-run previews which records would be primed.";
 					if (jsonMode) {
 						outputJsonError("prime", msg);
 					} else {
@@ -197,7 +235,7 @@ export function registerPrimeCommand(program: Command): void {
 				}
 
 				// Determine budget settings
-				const budgetEnabled = !jsonMode && options.noLimit !== true;
+				const budgetEnabled = !jsonMode && options.limit !== false;
 				const budget = options.budget ? Number.parseInt(options.budget, 10) : DEFAULT_BUDGET;
 
 				let output: string;
@@ -224,7 +262,12 @@ export function registerPrimeCommand(program: Command): void {
 						);
 					} else {
 						output = formatPrimeManifest(manifestDomains, config.governance, format);
-						output += `\n\n${getSessionEndReminder(format)}`;
+						// Plain format is the spawn-injection contract — warren / other
+						// embedders handle session framing in their own dispatch, so the
+						// reminder would be redundant noise inside a system prompt.
+						if (format !== "plain") {
+							output += `\n\n${getSessionEndReminder(format)}`;
+						}
 					}
 				} else {
 					// Load records once, fire pre-prime, then dispatch to formatter.
@@ -246,6 +289,53 @@ export function registerPrimeCommand(program: Command): void {
 						}
 						const lastUpdated = await getFileModTime(filePath);
 						loaded.push({ domain, records, lastUpdated });
+					}
+
+					// --dry-run short-circuits: skip pre-prime hooks (they may have side
+					// effects like Slack posts) and emit a JSON summary of which records
+					// would be primed under the same budget rules as a real run. Format
+					// is irrelevant when dry-running — output is always JSON.
+					if (options.dryRun) {
+						const dryRunBudget = budgetEnabled ? budget : null;
+						const allDomainRecords: DomainRecords[] = loaded.map(({ domain, records }) => ({
+							domain,
+							records,
+						}));
+						const keptByDomain = budgetEnabled
+							? applyBudget(allDomainRecords, budget, (record) => estimateRecordText(record)).kept
+							: allDomainRecords;
+
+						const wouldPrime: DryRunRecordSummary[] = [];
+						let totalTokens = 0;
+						for (const { domain, records } of keptByDomain) {
+							for (const record of records) {
+								const tokens = estimateTokens(estimateRecordText(record));
+								wouldPrime.push({
+									id: record.id ?? "",
+									type: record.type,
+									domain,
+									tokens,
+								});
+								totalTokens += tokens;
+							}
+						}
+						const payload: DryRunPayload = {
+							wouldPrime,
+							totalTokens,
+							budgetUsed: dryRunBudget !== null ? totalTokens / dryRunBudget : null,
+							budgetTotal: dryRunBudget,
+						};
+						output = JSON.stringify(payload, null, 2);
+
+						if (options.export) {
+							await writeFile(options.export, `${output}\n`, "utf-8");
+							if (!jsonMode && !isQuiet()) {
+								console.log(`${brand("✓")} ${brand(`Exported to ${options.export}`)}`);
+							}
+						} else {
+							console.log(output);
+						}
+						return;
 					}
 
 					const hookPayload = {
@@ -362,7 +452,12 @@ export function registerPrimeCommand(program: Command): void {
 							output += `\n\n${formatBudgetSummary(droppedCount, droppedDomainCount)}`;
 						}
 
-						output += `\n\n${getSessionEndReminder(format)}`;
+						// Plain format is the spawn-injection contract — warren / other
+						// embedders handle session framing in their own dispatch, so the
+						// reminder would be redundant noise inside a system prompt.
+						if (format !== "plain") {
+							output += `\n\n${getSessionEndReminder(format)}`;
+						}
 					}
 				}
 
