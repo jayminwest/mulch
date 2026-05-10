@@ -378,4 +378,122 @@ describe("config command", () => {
 			expect(result.stderr.toString()).toContain("Invalid config after set");
 		});
 	});
+
+	describe("config unset", () => {
+		const baseConfig = [
+			"version: '1'",
+			"domains: { warren: { allowed_types: [convention] } }",
+			"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+			"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+			"search: { boost_factor: 0.25 }",
+			"",
+		].join("\n");
+
+		it("removes an optional knob and `show --path` falls back to the schema default", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const unset = runCli(["config", "unset", "search.boost_factor"], tmpDir);
+			expect(unset.exitCode).toBe(0);
+
+			const show = runCli(["config", "show", "--path", "search.boost_factor"], tmpDir);
+			expect(show.exitCode).toBe(0);
+			expect(JSON.parse(show.stdout.toString())).toBe(0.1);
+
+			// Empty parent (`search: {}`) is pruned so the YAML stays minimal
+			// AND the schema's `required: [boost_factor]` under `search` doesn't
+			// reject the next read.
+			const configYaml = await readFile(join(tmpDir, ".mulch", "mulch.config.yaml"), "utf-8");
+			expect(configYaml).not.toContain("search:");
+		});
+
+		it("removes an entry from an open map (domains.<name>)", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const unset = runCli(["config", "unset", "domains.warren"], tmpDir);
+			expect(unset.exitCode).toBe(0);
+
+			const show = runCli(["config", "show", "--path", "domains"], tmpDir);
+			expect(show.exitCode).toBe(0);
+			expect(JSON.parse(show.stdout.toString())).toEqual({});
+		});
+
+		it("is idempotent — unsetting a never-set path succeeds silently and does not rewrite the file", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const before = await readFile(join(tmpDir, ".mulch", "mulch.config.yaml"), "utf-8");
+			const unset = runCli(["config", "unset", "prime.default_mode"], tmpDir);
+			expect(unset.exitCode).toBe(0);
+			const after = await readFile(join(tmpDir, ".mulch", "mulch.config.yaml"), "utf-8");
+			expect(after).toBe(before);
+		});
+
+		it("is idempotent — unsetting through a missing parent succeeds silently", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const unset = runCli(["config", "unset", "hooks.pre-record"], tmpDir);
+			expect(unset.exitCode).toBe(0);
+		});
+
+		it("rejects removal of a required field with a schema-titled error", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "unset", "governance.max_entries"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			const stderr = result.stderr.toString();
+			expect(stderr).toContain("Invalid config after unset");
+			// `required` errors report the parent's instancePath, so the schema
+			// title appended to the AJV message is the section title.
+			expect(stderr).toContain("must have required property 'max_entries'");
+			expect(stderr).toContain("Governance limits");
+		});
+
+		it("rejects unknown closed-shape paths", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "unset", "governance.typo"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			const stderr = result.stderr.toString();
+			expect(stderr).toContain("Unknown config path");
+			expect(stderr).toContain("max_entries");
+		});
+
+		it("rejects empty <path>", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "unset", "."], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("must not be empty");
+		});
+
+		it("errors with the standard 'No .mulch/' message when run outside a project", () => {
+			const result = runCli(["config", "unset", "search.boost_factor"], tmpDir);
+			expect(result.exitCode).not.toBe(0);
+			expect(result.stderr.toString()).toContain("No .mulch/ directory");
+		});
+
+		it("does not leave the .tmp file behind on success", async () => {
+			await initMulchProject(tmpDir, baseConfig);
+			const result = runCli(["config", "unset", "search.boost_factor"], tmpDir);
+			expect(result.exitCode).toBe(0);
+			const { readdir } = await import("node:fs/promises");
+			const files = await readdir(join(tmpDir, ".mulch"));
+			const stragglers = files.filter((f) => f.includes(".tmp.") || f.endsWith(".lock"));
+			expect(stragglers).toEqual([]);
+		});
+
+		it("round-trips with `ml config set` — set then unset reverts to the schema default", async () => {
+			await initMulchProject(
+				tmpDir,
+				[
+					"version: '1'",
+					"domains: {}",
+					"governance: { max_entries: 100, warn_entries: 150, hard_limit: 200 }",
+					"classification_defaults: { shelf_life: { tactical: 14, observational: 30 } }",
+					"",
+				].join("\n"),
+			);
+			const set = runCli(["config", "set", "search.boost_factor", "0.25"], tmpDir);
+			expect(set.exitCode).toBe(0);
+			const afterSet = runCli(["config", "show", "--path", "search.boost_factor"], tmpDir);
+			expect(JSON.parse(afterSet.stdout.toString())).toBe(0.25);
+
+			const unset = runCli(["config", "unset", "search.boost_factor"], tmpDir);
+			expect(unset.exitCode).toBe(0);
+			const afterUnset = runCli(["config", "show", "--path", "search.boost_factor"], tmpDir);
+			expect(JSON.parse(afterUnset.stdout.toString())).toBe(0.1);
+		});
+	});
 });

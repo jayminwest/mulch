@@ -76,6 +76,24 @@ export function registerConfigCommand(program: Command): void {
 				process.exitCode = 1;
 			}
 		});
+
+	config
+		.command("unset")
+		.description(
+			"Remove a config knob via dot-notation path so subsequent reads fall back to the schema default. Empty parent objects along the unset path are pruned when the schema allows the parent to be omitted; required-field removals are rejected with a schema-referenced error (use `ml config set` to override). Idempotent — unsetting a never-set path is a silent no-op. Atomic write under a file lock.",
+		)
+		.argument(
+			"<path>",
+			"Dot-notation path (e.g. search.boost_factor, domains.warren, hooks.pre-record)",
+		)
+		.action(async (path: string) => {
+			try {
+				await runConfigUnset(path);
+			} catch (err) {
+				process.stderr.write(`${(err as Error).message}\n`);
+				process.exitCode = 1;
+			}
+		});
 }
 
 async function runConfigSet(rawPath: string, rawValue: string): Promise<void> {
@@ -121,6 +139,44 @@ async function runConfigSet(rawPath: string, rawValue: string): Promise<void> {
 	});
 }
 
+async function runConfigUnset(rawPath: string): Promise<void> {
+	const segments = rawPath.split(".").filter((s) => s.length > 0);
+	if (segments.length === 0) {
+		throw new Error("<path> must not be empty.");
+	}
+
+	const configPath = getConfigPath();
+	if (!existsSync(configPath)) {
+		throw new Error(
+			"No .mulch/ directory found. Run `mulch init` to set up this project before `ml config unset`.",
+		);
+	}
+
+	// Same closed-shape gate as `ml config set`: catches typos like
+	// `governance.typo` before we touch the file.
+	validatePathInSchema(segments);
+
+	await withFileLock(configPath, async () => {
+		const cfg = (await readConfig()) as unknown as Record<string, unknown>;
+		const changed = unsetAtPath(cfg, segments);
+		if (!changed) {
+			// Idempotent: the knob wasn't set, nothing to write.
+			return;
+		}
+
+		const ajv = new Ajv({ allErrors: true, strict: false });
+		const validate = ajv.compile(configSchema);
+		if (!validate(cfg)) {
+			const errs = validate.errors ?? [];
+			const lines = errs.map(formatAjvError);
+			throw new Error(`Invalid config after unset:\n${lines.join("\n")}`);
+		}
+
+		const dumped = yaml.dump(cfg, { lineWidth: -1 });
+		await writeFileAtomic(configPath, dumped);
+	});
+}
+
 function validatePathInSchema(segments: string[]): void {
 	let cur: unknown = configSchema;
 	for (let i = 0; i < segments.length; i++) {
@@ -147,6 +203,62 @@ function validatePathInSchema(segments: string[]): void {
 			`Unknown config path: '${segments.slice(0, i + 1).join(".")}' is not a known knob. Known keys at '${parent}': ${known}.`,
 		);
 	}
+}
+
+// Returns true if the leaf was actually present and removed. Prunes empty
+// ancestor objects walking up the unset path, but stops at any ancestor whose
+// key is in its parent schema node's `required` list — those must remain in
+// the on-disk shape (validation catches the case where the leaf itself was
+// required).
+function unsetAtPath(cfg: Record<string, unknown>, segments: string[]): boolean {
+	const ancestors: Record<string, unknown>[] = [cfg];
+	for (let i = 0; i < segments.length - 1; i++) {
+		const seg = segments[i] as string;
+		const parent = ancestors[ancestors.length - 1] as Record<string, unknown>;
+		const next = parent[seg];
+		if (next === null || typeof next !== "object" || Array.isArray(next)) {
+			return false;
+		}
+		ancestors.push(next as Record<string, unknown>);
+	}
+	const leafKey = segments[segments.length - 1] as string;
+	const leafParent = ancestors[ancestors.length - 1] as Record<string, unknown>;
+	if (!Object.hasOwn(leafParent, leafKey)) {
+		return false;
+	}
+	delete leafParent[leafKey];
+
+	for (let i = ancestors.length - 1; i >= 1; i--) {
+		const node = ancestors[i] as Record<string, unknown>;
+		if (Object.keys(node).length > 0) break;
+		const parent = ancestors[i - 1] as Record<string, unknown>;
+		const keyInParent = segments[i - 1] as string;
+		if (isRequiredInSchema(segments.slice(0, i - 1), keyInParent)) break;
+		delete parent[keyInParent];
+	}
+	return true;
+}
+
+function isRequiredInSchema(parentSegments: string[], key: string): boolean {
+	let cur: unknown = configSchema;
+	for (const seg of parentSegments) {
+		if (!cur || typeof cur !== "object") return false;
+		const node = cur as Record<string, unknown>;
+		const props = node.properties as Record<string, unknown> | undefined;
+		if (props && Object.hasOwn(props, seg)) {
+			cur = props[seg];
+			continue;
+		}
+		const additional = node.additionalProperties;
+		if (additional && typeof additional === "object") {
+			cur = additional;
+			continue;
+		}
+		return false;
+	}
+	if (!cur || typeof cur !== "object") return false;
+	const required = (cur as { required?: unknown }).required;
+	return Array.isArray(required) && required.includes(key);
 }
 
 function setAtPath(obj: Record<string, unknown>, segments: string[], value: unknown): void {
