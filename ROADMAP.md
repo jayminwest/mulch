@@ -231,12 +231,55 @@ Archive below 0.3, delete below 0.05. `ml fitness <id>` shows per-axis breakdown
   `mulch.config.yaml` (defaults: `threshold: 0.5`, `grace_days: 7`).
 - **R-05g — Continuous fitness formula.** The unifying mechanism above. Weights in
   `mulch.config.yaml`, `ml fitness <id>` for transparency, `ml prune --explain` for debugging.
+  Tracked as mulch-9047. Targeted for **v1.0**: the formula needs the v0.11 schema additions
+  (`recorded_by`, `freshness_score`, the auto-emitted outcomes from R-11) to feed real signal
+  into `w_conf` and `w_use`. Shipping it earlier means publishing weights against thin data.
+
+### Curation surface evolution (v0.10 → v0.11 → v1.0)
+
+The R-05 sub-items above describe the *signals* prune consumes. The *user-facing surface* of
+prune (and its sibling commands archive/compact/curate) evolves on a parallel three-release
+arc, captured here so the seeds tracking each slice stay anchored in the roadmap:
+
+- **v0.10 (in flight, mulch-105d / pl-0752 rev 2).** The curation primitives land:
+  - `archive_reason` field on archived records (mulch-b41a) — auditable archival metadata
+    (`stale | superseded | anchor_decay | manual | compacted`). Lives only on
+    `.mulch/archive/<domain>.jsonl` rows; live `BaseRecord` envelope unchanged so the v1.0
+    freeze constraint holds.
+  - `ml archive <domain> <id|--records> --reason "..."` (mulch-d563) — direct archive without
+    waiting for prune to mark a record stale. Symmetric to `ml restore`.
+  - `ml prune --dry-run` granular default summary (mulch-5ce3) — per-record IDs + reasons +
+    tier transitions print by default; `--explain` keeps its current responsibility (anchor
+    breakdown). Inverts today's safety contract (default output should *show* what changes,
+    not hide it behind a flag).
+  - `ml compact` overhaul (mulch-184b) — archive originals to `.mulch/archive/` with
+    `archive_reason: "compacted"` instead of silently dropping them, plus a new `pre-compact`
+    lifecycle hook that may return a summarized replacement body (provider-neutral; no LLM
+    bundled in mulch core). Mechanical merge stays as the back-compat fallback.
+- **v0.11.** Curation surfaces compose into:
+  - `ml curate` (mulch-7303) — interactive cluster view: dedup-key collisions, anchor-overlap
+    clusters, type+domain bloat above `governance.warn_entries`, optional semantic clusters
+    (subsumes mulch-e2bd's TF-IDF / trigram-overlap stub). `--apply <cluster-id>` executes
+    the recommendation against the v0.10 archive/compact primitives.
+  - `ml prune --auto-archive` cadence (V1_PLAN §4.4) — wired into `ml prime --maybe-prune`
+    via a `.mulch/.last-prune` stamp file so cleanup happens reliably without depending on
+    agent discipline.
+- **v1.0.** R-05g (mulch-9047) lands. Prune's binary keep-or-delete becomes a fitness-driven
+  surface backed by the v0.11 schema additions. `ml fitness <id>` exposes the per-axis
+  breakdown. Prune at this point is no longer "this is 30 days old, archive it" — it surfaces
+  the high-leverage cleanup decisions a curator would make, then archives or hard-deletes
+  accordingly. The other curation commands (archive / compact / curate) still exist; prune
+  becomes the autonomous loop, the others become the manual-override toolkit.
+
+The throughline: every release adds *one* thing prune knows, and every release adds *one*
+manual-override surface so curators stay in the loop while the autonomous behavior matures.
 
 **Open questions.**
 - Default fitness weights per record type? Foundational records probably weight `confirmation`
   and `supersede` higher than `age`.
 - Is archive timestamped per-archival or does the live record carry an `archived_at` and live
-  in the archive file?
+  in the archive file? (Resolved as of R-05a: per-archival `archived_at`, supplemented by
+  `archive_reason` in v0.10.)
 - How are auto-emitted outcomes (R-11) discounted in `confirmation_signal`?
 
 ---
