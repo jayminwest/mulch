@@ -36,17 +36,19 @@ Shipping everything in a single v1.0 release is wrong because two of the new con
 
 **v0.11 — Schema additions, gates off (~6 weeks):** Add `recorded_by`, `freshness_score`, `note` type, the active-work resolver chain, `ml confirm` / `ml challenge` / `ml supersede` commands, `ml prune --auto-archive` mode, and write-side gates (`--because`, identifier-content rejector). All gates ship config-default off. Teams opt in. The schema additions are technically present but their contract is "may change in v1.0."
 
-**v1.0.0 — Freeze + opinionated defaults (~10 weeks):** Lock the schema. Flip selected gates to default-on (rule-density check, evidence requirement for foundational, `--because` for conventions). Cut `ml migrate` for any v0.x corpus to upgrade. Tag.
+**v1.0.0 — Freeze + opinionated defaults (~10 weeks):** Lock the schema. Flip selected gates to default-on (rule-density check, evidence requirement for foundational, identifier-content rejector for conventions). `--because` ships as a soft warning, not a hard gate — see §4.1. Cut `ml migrate` for any v0.x corpus to upgrade. Tag.
 
 ## Section 4: The five v1.0.0 categories — verdicts
 
 ### 4.1 Structural write-side friction — SHIP, with one critical addition
 
-The user's framing is correct: the write surface accepts shapeless conventions because nothing pushes back. Three components ship together:
+The user's framing is correct: the write surface accepts shapeless conventions because nothing pushes back. The two gates are deliberately asymmetric — one strict, one soft — because their failure modes are different:
 
-- **`--because <rationale>` required for conventions** when `record.require_because: true` (off in v0.11, on in v1.0 default config). Wires into the existing pre-record hook surface (`src/commands/record.ts:1003-1037`).
-- **Identifier-content rejector:** if `content` is >50% identifier-shaped tokens (`[A-Za-z_][\w./-]*`) and contains no rule-signal verb (audit's regex list: `because`, `must not`, `avoid`, `always`, `never`, etc.), refuse with "this looks like code restatement, did you mean `--type note`?" The retry hint must be copy-paste-able (existing pattern in record.ts).
+- **Identifier-content rejector (HARD GATE):** if `content` is >50% identifier-shaped tokens (`[A-Za-z_][\w./-]*`) and contains no rule-signal verb (audit's regex list: `because`, `must not`, `avoid`, `always`, `never`, etc.), refuse with "this looks like code restatement, did you mean `--type note`?" The retry hint must be copy-paste-able (existing pattern in record.ts). This stays strict because pure code restatement is noise by construction — there is no rationale a writer could supply that rescues it.
+- **`--because <rationale>` (SOFT WARNING):** when a convention is recorded without `--because`, stderr prints "this convention has no rationale — add `--because "..."` or use `--type note` if it's tactical." Records still write. Config knob `record.warn_missing_because: true` (default on in v1.0) controls the warning; `record.require_because: true` (default off, even in v1.0) opts into hard-gate behavior for teams that want it. Wires into the existing pre-record hook surface (`src/commands/record.ts:1003-1037`).
 - **Generic active-work auto-link** (see §4.5).
+
+**Why `--because` is soft, not hard:** the audit's own data (§7) says `--because` will produce parroted strings ("because this is convention") and the identifier-density check is "the real teeth." A hard gate trades noise for parroted gate-satisfaction without much net signal, while widening the `--type note` bypass surface. The complementary thesis — *noise is fine if surfacing the signal is cheap* — is structurally sound given the v0.10 prime overhaul, `ml audit --suggest`, and auto-archive cadence: noise stops touching agent attention well before it's pruned. The corpus self-cleans at the read side, which is where the cost actually lives. The directional asymmetry also matters operationally: shipping soft and tightening is a normal policy evolution; shipping strict and loosening burns trust with teams who just onboarded. If post-v0.11 telemetry shows the warning is widely ignored *and* floater rate stays high, flip `require_because` to default-on in v1.1.
 
 **The critical addition the original framing under-specified:** `note` is the relief valve, but it has a bypass risk. Agents will route around `--because` by switching `--type convention` to `--type note`. Mitigations:
 
@@ -202,7 +204,7 @@ Adopting the original framing's deferral list and adding two:
 
 ## Section 7: Open risks
 
-**`--because` may produce parroted strings** ("because this is convention"). The identifier-density check is the real teeth; `--because` is a forcing function for thoughtfulness. If post-v0.11 metrics show `--because` catches <20% incremental floaters over the identifier check, drop it to a soft-warning in v1.0 rather than a hard requirement.
+**`--because` may produce parroted strings** ("because this is convention"). The identifier-density check is the real teeth; `--because` is a forcing function for thoughtfulness. Pre-decided in §4.1: `--because` ships as a soft warning (default-on in v1.0) rather than a hard requirement, and `record.require_because` stays default-off even at v1.0 — teams opt in. The post-v0.11 telemetry to watch is the inverse: if the warning is widely ignored *and* floater rate stays high, flip `require_because` to default-on in v1.1. The complementary signal-surfacing thesis (noise is cheap if `ml prime` ranks well and `ml audit --suggest` is actionable) carries most of the load in the meantime.
 
 **`note` bypass risk is real if §4.1 mitigations are incomplete.** Auditing v0.11 corpora for note/convention ratios is critical before v1.0 freeze. If teams are routing >50% of writes to `note`, the gate is being bypassed, not respected.
 
