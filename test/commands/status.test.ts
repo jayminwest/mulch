@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
@@ -21,6 +21,18 @@ import {
 	readExpertiseFile,
 } from "../../src/utils/expertise.ts";
 import { formatStatusOutput } from "../../src/utils/format.ts";
+
+const CLI_PATH = resolve(import.meta.dir, "..", "..", "src", "cli.ts");
+
+function runCli(args: string[], cwd: string) {
+	return Bun.spawnSync(["bun", CLI_PATH, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+}
+
+function daysAgoIso(days: number): string {
+	const d = new Date();
+	d.setDate(d.getDate() - days);
+	return d.toISOString();
+}
 
 describe("status command", () => {
 	let tmpDir: string;
@@ -314,6 +326,175 @@ describe("status command", () => {
 			observational: 30,
 		});
 		expect(health.stale_count).toBe(1);
+	});
+
+	it("surfaces oldest→newest recorded range per domain", () => {
+		const now = new Date();
+		const old = new Date(now.getTime() - 90 * 86400000);
+		const recent = new Date(now.getTime() - 2 * 86400000);
+		const output = formatStatusOutput(
+			[
+				{
+					domain: "testing",
+					count: 5,
+					lastUpdated: now,
+					oldestRecorded: old,
+					newestRecorded: recent,
+					rotting: false,
+				},
+			],
+			DEFAULT_CONFIG.governance,
+		);
+		expect(output).toContain("recorded 90d ago → 2d ago");
+		expect(output).not.toContain("ROTTING");
+	});
+
+	it("flags rotting domains when newest record is older than observational shelf life", () => {
+		const now = new Date();
+		const old = new Date(now.getTime() - 100 * 86400000);
+		const stale = new Date(now.getTime() - 45 * 86400000); // 45d > 30d observational
+		const output = formatStatusOutput(
+			[
+				{
+					domain: "legacy",
+					count: 3,
+					lastUpdated: stale,
+					oldestRecorded: old,
+					newestRecorded: stale,
+					rotting: true,
+					rottingDays: 45,
+				},
+			],
+			DEFAULT_CONFIG.governance,
+		);
+		expect(output).toContain("ROTTING");
+		expect(output).toContain("no writes in 45d");
+	});
+
+	it("collapses range to single timestamp when oldest equals newest", () => {
+		const now = new Date();
+		const only = new Date(now.getTime() - 3 * 86400000);
+		const output = formatStatusOutput(
+			[
+				{
+					domain: "solo",
+					count: 1,
+					lastUpdated: only,
+					oldestRecorded: only,
+					newestRecorded: only,
+					rotting: false,
+				},
+			],
+			DEFAULT_CONFIG.governance,
+		);
+		expect(output).toContain("recorded 3d ago");
+		expect(output).not.toContain("→");
+	});
+
+	it("omits range when range fields are not provided (back-compat)", () => {
+		const output = formatStatusOutput(
+			[{ domain: "testing", count: 1, lastUpdated: new Date() }],
+			DEFAULT_CONFIG.governance,
+		);
+		expect(output).not.toContain("recorded");
+		expect(output).not.toContain("ROTTING");
+	});
+
+	it("does not flag empty domains as rotting", () => {
+		const output = formatStatusOutput(
+			[
+				{
+					domain: "empty",
+					count: 0,
+					lastUpdated: null,
+					oldestRecorded: null,
+					newestRecorded: null,
+					rotting: false,
+				},
+			],
+			DEFAULT_CONFIG.governance,
+		);
+		expect(output).not.toContain("ROTTING");
+		expect(output).not.toContain("recorded");
+	});
+
+	it("ml status (CLI) flags a rotting domain and surfaces range", async () => {
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { legacy: {} } }, tmpDir);
+		const filePath = getExpertisePath("legacy", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Old convention",
+			classification: "foundational",
+			recorded_at: daysAgoIso(90),
+		});
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Slightly newer convention",
+			classification: "foundational",
+			recorded_at: daysAgoIso(45),
+		});
+
+		const result = runCli(["status"], tmpDir);
+		const out = result.stdout.toString();
+		expect(out).toContain("legacy:");
+		expect(out).toContain("recorded 90d ago → 45d ago");
+		expect(out).toContain("ROTTING");
+		expect(out).toContain("no writes in 45d");
+	});
+
+	it("ml status (CLI) does not flag fresh domains as rotting", async () => {
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { fresh: {} } }, tmpDir);
+		const filePath = getExpertisePath("fresh", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Recent convention",
+			classification: "foundational",
+			recorded_at: daysAgoIso(5),
+		});
+
+		const result = runCli(["status"], tmpDir);
+		const out = result.stdout.toString();
+		expect(out).toContain("fresh:");
+		expect(out).not.toContain("ROTTING");
+	});
+
+	it("ml status --json exposes oldest/newest/rotting per domain", async () => {
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { mixed: {} } }, tmpDir);
+		const filePath = getExpertisePath("mixed", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Old",
+			classification: "foundational",
+			recorded_at: daysAgoIso(60),
+		});
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Newer",
+			classification: "foundational",
+			recorded_at: daysAgoIso(40),
+		});
+
+		const result = runCli(["--json", "status"], tmpDir);
+		const parsed = JSON.parse(result.stdout.toString()) as {
+			domains: Array<{
+				domain: string;
+				oldest_recorded: string | null;
+				newest_recorded: string | null;
+				rotting: boolean;
+				rotting_days: number | null;
+			}>;
+			shelf_life: { observational: number };
+		};
+		expect(parsed.shelf_life.observational).toBe(30);
+		const mixed = parsed.domains.find((d) => d.domain === "mixed");
+		expect(mixed).toBeDefined();
+		expect(mixed?.oldest_recorded).not.toBeNull();
+		expect(mixed?.newest_recorded).not.toBeNull();
+		expect(mixed?.rotting).toBe(true);
+		expect(mixed?.rotting_days).toBeGreaterThanOrEqual(40);
 	});
 
 	it("calculateDomainHealth identifies all stale observational records", () => {

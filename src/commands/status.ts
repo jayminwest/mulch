@@ -30,6 +30,8 @@ export function registerStatusCommand(program: Command): void {
 			}
 
 			const config = await readConfig();
+			const observationalShelfLifeDays = config.classification_defaults.shelf_life.observational;
+			const now = Date.now();
 
 			const domainStats = await Promise.all(
 				Object.keys(config.domains).map(async (domain) => {
@@ -41,12 +43,26 @@ export function registerStatusCommand(program: Command): void {
 						config.governance.max_entries,
 						config.classification_defaults.shelf_life,
 					);
+					const oldestRecorded = health.oldest_timestamp ? new Date(health.oldest_timestamp) : null;
+					const newestRecorded = health.newest_timestamp ? new Date(health.newest_timestamp) : null;
+					let rotting = false;
+					let rottingDays: number | null = null;
+					if (newestRecorded) {
+						const ageDays = Math.floor((now - newestRecorded.getTime()) / 86400000);
+						if (ageDays > observationalShelfLifeDays) {
+							rotting = true;
+							rottingDays = ageDays;
+						}
+					}
 					return {
 						domain,
 						count: countRecords(records),
 						lastUpdated,
+						oldestRecorded,
+						newestRecorded,
+						rotting,
+						rottingDays,
 						health,
-						records,
 					};
 				}),
 			);
@@ -59,9 +75,14 @@ export function registerStatusCommand(program: Command): void {
 						domain: s.domain,
 						count: s.count,
 						lastUpdated: s.lastUpdated?.toISOString() ?? null,
+						oldest_recorded: s.oldestRecorded?.toISOString() ?? null,
+						newest_recorded: s.newestRecorded?.toISOString() ?? null,
+						rotting: s.rotting,
+						rotting_days: s.rottingDays,
 						health: s.health,
 					})),
 					governance: config.governance,
+					shelf_life: config.classification_defaults.shelf_life,
 				});
 			} else {
 				const output = formatStatusOutput(
@@ -69,6 +90,10 @@ export function registerStatusCommand(program: Command): void {
 						domain: s.domain,
 						count: s.count,
 						lastUpdated: s.lastUpdated,
+						oldestRecorded: s.oldestRecorded,
+						newestRecorded: s.newestRecorded,
+						rotting: s.rotting,
+						rottingDays: s.rottingDays,
 					})),
 					config.governance,
 				);

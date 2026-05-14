@@ -466,12 +466,18 @@ export function getSessionEndReminder(format: PrimeFormat): string {
 	}
 }
 
+export interface StatusDomainStat {
+	domain: string;
+	count: number;
+	lastUpdated: Date | null;
+	oldestRecorded?: Date | null;
+	newestRecorded?: Date | null;
+	rotting?: boolean;
+	rottingDays?: number | null;
+}
+
 export function formatStatusOutput(
-	domainStats: Array<{
-		domain: string;
-		count: number;
-		lastUpdated: Date | null;
-	}>,
+	domainStats: StatusDomainStat[],
 	governance: { max_entries: number; warn_entries: number; hard_limit: number },
 ): string {
 	const lines: string[] = [];
@@ -484,17 +490,40 @@ export function formatStatusOutput(
 		return lines.join("\n");
 	}
 
-	for (const { domain, count, lastUpdated } of domainStats) {
+	for (const stat of domainStats) {
+		const { domain, count, lastUpdated, oldestRecorded, newestRecorded, rotting, rottingDays } =
+			stat;
 		const updatedStr = lastUpdated ? formatTimeAgo(lastUpdated) : "never";
-		let status = "";
+		let governanceStatus = "";
 		if (count >= governance.hard_limit) {
-			status = " ⚠ OVER HARD LIMIT — must decompose";
+			governanceStatus = " ⚠ OVER HARD LIMIT — must decompose";
 		} else if (count >= governance.warn_entries) {
-			status = " ⚠ consider splitting domain";
+			governanceStatus = " ⚠ consider splitting domain";
 		} else if (count >= governance.max_entries) {
-			status = " — approaching limit";
+			governanceStatus = " — approaching limit";
 		}
-		lines.push(`  ${domain}: ${count} records (updated ${updatedStr})${status}`);
+
+		let rangeStr = "";
+		if (oldestRecorded && newestRecorded) {
+			const oldestAgo = formatTimeAgo(oldestRecorded);
+			const newestAgo = formatTimeAgo(newestRecorded);
+			rangeStr =
+				oldestAgo === newestAgo
+					? ` — recorded ${oldestAgo}`
+					: ` — recorded ${oldestAgo} → ${newestAgo}`;
+		}
+
+		let rottingStr = "";
+		if (rotting) {
+			rottingStr =
+				typeof rottingDays === "number"
+					? ` ⚠ ROTTING (no writes in ${rottingDays}d)`
+					: " ⚠ ROTTING";
+		}
+
+		lines.push(
+			`  ${domain}: ${count} records (updated ${updatedStr})${rangeStr}${governanceStatus}${rottingStr}`,
+		);
 	}
 
 	return lines.join("\n");
