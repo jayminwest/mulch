@@ -62,13 +62,13 @@ Three classifications with shelf lives for pruning: `foundational` (permanent), 
 
 ### Command Pattern
 
-Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 27 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
+Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 28 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
 
 ### Concurrency Safety
 
 - **Advisory file locking**: `withFileLock(filePath, fn)` in `src/utils/lock.ts` — uses `O_CREAT|O_EXCL` lock files with 50ms retry, 5s timeout, and 30s stale lock detection
 - **Atomic writes**: `writeExpertiseFile()` in `src/utils/expertise.ts` writes to a temp file then renames, preventing partial/corrupt JSONL
-- **Write commands** (record, edit, delete, delete-domain, compact, prune, restore, doctor --fix) use both mechanisms
+- **Write commands** (record, edit, delete, delete-domain, compact, prune, archive, restore, doctor --fix) use both mechanisms
 - **Read-only commands** (prime, query, search, rank, status, validate, learn, ready) need no locking
 
 ### Worktree-Aware Storage

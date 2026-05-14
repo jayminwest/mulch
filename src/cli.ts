@@ -3,6 +3,7 @@
 import chalk from "chalk";
 import { Command, Option } from "commander";
 import { registerAddCommand } from "./commands/add.ts";
+import { registerArchiveCommand } from "./commands/archive.ts";
 import { registerAuditCommand } from "./commands/audit.ts";
 import { registerCompactCommand } from "./commands/compact.ts";
 import { registerCompletionsCommand } from "./commands/completions.ts";
@@ -185,6 +186,7 @@ registerOnboardCommand(program);
 registerStatusCommand(program);
 registerValidateCommand(program);
 registerPruneCommand(program);
+registerArchiveCommand(program);
 registerRestoreCommand(program);
 registerSearchCommand(program);
 registerRankCommand(program);
