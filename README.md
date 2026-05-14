@@ -75,7 +75,8 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
 | `ml config <subcommand>` | Inspect and edit `.mulch/mulch.config.yaml` (`schema`, `show [--path <p>]`, `set <path> <value>`, `unset <path>`) — atomic, schema-validated writes for warren and other config-UI consumers |
-| `ml status` | Show expertise freshness and counts (`--json` for health metrics) |
+| `ml status` | Show expertise freshness and counts (`--json` for health metrics; flags rotting domains where the newest record exceeds the observational shelf life) |
+| `ml audit` | Audit corpus health — floater rate, evidence coverage, convention rule-density, per-domain mix (`--ci`, `--suggest`, `--domain`, `--ignore-domains`) |
 | `ml validate` | Schema validation across all files |
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
 | `ml setup [provider]` | Install provider-specific hooks (built-ins: claude, cursor, codex — or any name discovered via `.mulch/recipes/` or `mulch-recipe-*`; `--list` shows everything) |
@@ -403,12 +404,13 @@ Mulch invokes user-supplied shell scripts at key lifecycle events so org-specifi
 | `post-record` | After a successful create/update | warn only | no |
 | `pre-prime` | Before `ml prime` emits output | yes | yes |
 | `pre-prune` | Before `ml prune` removes records | yes | no |
+| `pre-compact` | Before `ml compact` writes the merged record | yes | yes (returns `{ replacement: <Record> }` to substitute a semantic summary) |
 
 ### Contract
 
 - Each script is invoked with the payload as JSON on **stdin**.
 - Exit `0` to continue; non-zero **blocks** for `pre-*` events and emits a **warning** for `post-*` events.
-- For mutable events (`pre-record`, `pre-prime`), the script may print a modified payload as JSON on **stdout** to rewrite it in place. The next script in the array (and the eventual write) sees the mutated payload.
+- For mutable events (`pre-record`, `pre-prime`, `pre-compact`), the script may print a modified payload as JSON on **stdout** to rewrite it in place. The next script in the array (and the eventual write) sees the mutated payload. `pre-compact` is the narrowest of the three: it accepts only `{ replacement: <RecordShape> }` and the replacement is validated against the type registry before write.
 - Stderr is forwarded to the user; stdin is the only input channel.
 - Scripts are run via `sh -c`, with cwd set to the mulch project root and `MULCH_HOOK=1` in the environment.
 - Hooks **do not fire** in `--dry-run` mode (record, prune) — previews shouldn't trigger external side effects.
