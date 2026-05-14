@@ -436,12 +436,13 @@ export const configSchema = {
 			type: "object",
 			title: "Lifecycle hooks",
 			description:
-				"Ordered shell scripts invoked at each lifecycle event. Scripts receive the payload as JSON on stdin (with MULCH_HOOK=1; cwd at project root). `pre-*` hooks block on non-zero exit; `post-*` hooks emit a warning. Only `pre-record` and `pre-prime` may mutate the payload via stdout JSON.",
+				"Ordered shell scripts invoked at each lifecycle event. Scripts receive the payload as JSON on stdin (with MULCH_HOOK=1; cwd at project root). `pre-*` hooks block on non-zero exit; `post-*` hooks emit a warning. `pre-record`, `pre-prime`, and `pre-compact` may mutate the payload via stdout JSON; `pre-prune` is block-or-allow only.",
 			properties: {
 				"pre-record": hookCommandList,
 				"post-record": hookCommandList,
 				"pre-prime": hookCommandList,
 				"pre-prune": hookCommandList,
+				"pre-compact": hookCommandList,
 			},
 			additionalProperties: false,
 		},

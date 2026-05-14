@@ -524,6 +524,32 @@ async function checkGovernance(config: MulchConfig, cwd?: string): Promise<Docto
 	};
 }
 
+// Informational: report whether `ml compact` runs the mechanical merge (no
+// `pre-compact` hook registered) vs. a semantic summarizer (one or more
+// scripts configured). Always passes; the message tells the user which mode
+// they're in.
+function checkCompactSummarizer(config: MulchConfig): DoctorCheck {
+	const scripts = (config.hooks?.["pre-compact"] ?? []).filter(
+		(s) => typeof s === "string" && s.trim().length > 0,
+	);
+	if (scripts.length === 0) {
+		return {
+			name: "compact-summarizer",
+			status: "pass",
+			message: "compact-summarizer: not configured (mechanical merge in use)",
+			fixable: false,
+			details: [],
+		};
+	}
+	return {
+		name: "compact-summarizer",
+		status: "pass",
+		message: `compact-summarizer: ${scripts.length} pre-compact hook${scripts.length === 1 ? "" : "s"} registered`,
+		fixable: false,
+		details: scripts,
+	};
+}
+
 function checkDecayConfig(config: MulchConfig): DoctorCheck {
 	const cfg = config.decay?.anchor_validity;
 	if (!cfg) {
@@ -1026,6 +1052,7 @@ export function registerDoctorCommand(program: Command): void {
 			checks.push(await checkFileAnchors(config));
 			checks.push(await checkGovernance(config));
 			checks.push(checkDecayConfig(config));
+			checks.push(checkCompactSummarizer(config));
 			checks.push(await checkUpdateAvailable());
 
 			const summary = {

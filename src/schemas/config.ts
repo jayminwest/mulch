@@ -22,18 +22,19 @@ export const DEFAULT_PRIME_TIER_WEIGHTS: Required<PrimeTierWeights> = {
 
 export const DEFAULT_HOOK_TIMEOUT_MS = 5_000;
 
-// Lifecycle events. `pre-*` hooks block on non-zero exit. Only `pre-record`
-// and `pre-prime` may mutate the payload via stdout JSON; `pre-prune` is
-// block-or-allow only (its stdout is ignored, so a hook cannot reshape the
-// candidate set). `post-*` hooks are observation-only: a non-zero exit emits a
-// warning but never fails the parent command.
-export type HookEvent = "pre-record" | "post-record" | "pre-prime" | "pre-prune";
+// Lifecycle events. `pre-*` hooks block on non-zero exit. `pre-record`,
+// `pre-prime`, and `pre-compact` may mutate the payload via stdout JSON;
+// `pre-prune` is block-or-allow only (its stdout is ignored, so a hook cannot
+// reshape the candidate set). `post-*` hooks are observation-only: a non-zero
+// exit emits a warning but never fails the parent command.
+export type HookEvent = "pre-record" | "post-record" | "pre-prime" | "pre-prune" | "pre-compact";
 
 export const HOOK_EVENTS: readonly HookEvent[] = [
 	"pre-record",
 	"post-record",
 	"pre-prime",
 	"pre-prune",
+	"pre-compact",
 ];
 
 export type HooksConfig = Partial<Record<HookEvent, string[]>>;

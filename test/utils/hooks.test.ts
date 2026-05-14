@@ -273,4 +273,44 @@ echo '{"candidates":[]}'`,
 			runHooks("not-a-real-event" as any, {}, { cwd: tmpDir }),
 		).rejects.toThrow(/Unknown hook event/);
 	});
+
+	it("pre-compact is recognized and mutable (replacement passes through)", async () => {
+		const script = await writeScript(
+			tmpDir,
+			"compact-mutate.sh",
+			`cat > /dev/null
+echo '{"replacement": {"type": "convention", "content": "hooked", "classification": "foundational", "recorded_at": "2026-05-13T00:00:00.000Z"}}'`,
+		);
+		await setHooks(tmpDir, { "pre-compact": [script] });
+		const res = await runHooks(
+			"pre-compact",
+			{
+				domain: "testing",
+				type: "convention",
+				records: [],
+			},
+			{ cwd: tmpDir },
+		);
+		expect(res.ranAny).toBe(true);
+		expect(res.blocked).toBe(false);
+		const payload = res.payload as { replacement?: { type: string; content: string } };
+		expect(payload.replacement?.type).toBe("convention");
+		expect(payload.replacement?.content).toBe("hooked");
+	});
+
+	it("pre-compact blocks on non-zero exit", async () => {
+		const script = await writeScript(
+			tmpDir,
+			"compact-reject.sh",
+			"cat > /dev/null; echo 'nope' >&2; exit 2",
+		);
+		await setHooks(tmpDir, { "pre-compact": [script] });
+		const res = await runHooks(
+			"pre-compact",
+			{ domain: "x", type: "convention", records: [] },
+			{ cwd: tmpDir, forwardStderr: false },
+		);
+		expect(res.blocked).toBe(true);
+		expect(res.blockReason).toContain("exited with code 2");
+	});
 });

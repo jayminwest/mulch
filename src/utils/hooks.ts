@@ -7,16 +7,22 @@ import {
 } from "../schemas/config.ts";
 import { readConfig } from "./config.ts";
 
-// Events whose hooks may mutate the payload via stdout JSON. Per the R-02
-// spec, only `pre-record` and `pre-prime` carry mutable payloads — `pre-prune`
-// is block-or-allow only (a hook can prevent the prune but not reshape the
+// Events whose hooks may mutate the payload via stdout JSON. `pre-record` and
+// `pre-prime` carry the original R-02 mutable payloads; `pre-compact` lets a
+// hook substitute the merged replacement record (mulch-184b). `pre-prune` is
+// block-or-allow only (a hook can prevent the prune but not reshape the
 // candidate set).
-const MUTABLE_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>(["pre-record", "pre-prime"]);
+const MUTABLE_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>([
+	"pre-record",
+	"pre-prime",
+	"pre-compact",
+]);
 
 const BLOCKING_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>([
 	"pre-record",
 	"pre-prime",
 	"pre-prune",
+	"pre-compact",
 ]);
 
 export interface HookExecution {

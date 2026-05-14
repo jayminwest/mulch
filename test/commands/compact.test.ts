@@ -1,9 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
+import { Command } from "commander";
+import { registerCompactCommand } from "../../src/commands/compact.ts";
+import { registerRestoreCommand } from "../../src/commands/restore.ts";
+import { DEFAULT_CONFIG, type MulchConfig } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
+import { getArchivePath, readArchiveFile } from "../../src/utils/archive.ts";
 import { getExpertisePath, initMulchDir, writeConfig } from "../../src/utils/config.ts";
 import { appendRecord, createExpertiseFile, readExpertiseFile } from "../../src/utils/expertise.ts";
 
@@ -973,5 +977,404 @@ describe("compact command", () => {
 			const after = await readExpertiseFile(filePath);
 			expect(after[0]?.supersedes).toEqual(sourceIds);
 		});
+	});
+});
+
+interface CapturedRun {
+	stdout: string;
+	stderr: string;
+	exitCode: number | undefined;
+}
+
+async function runCompact(
+	tmpDir: string,
+	register: (program: Command) => void,
+	args: string[],
+): Promise<CapturedRun> {
+	const stdoutLines: string[] = [];
+	const stderrLines: string[] = [];
+
+	const logSpy = spyOn(console, "log").mockImplementation((...a) => {
+		stdoutLines.push(a.map(String).join(" "));
+	});
+	const errSpy = spyOn(console, "error").mockImplementation((...a) => {
+		stderrLines.push(a.map(String).join(" "));
+	});
+
+	const prevExitCode = process.exitCode;
+	process.exitCode = 0;
+	const origCwd = process.cwd();
+	process.chdir(tmpDir);
+
+	try {
+		const program = new Command();
+		program.option("--json", "output JSON");
+		program.exitOverride();
+		register(program);
+		await program.parseAsync(["node", "mulch", ...args]);
+	} catch {
+		// commander exitOverride throws on errors; the inner action sets process.exitCode.
+	} finally {
+		process.chdir(origCwd);
+		logSpy.mockRestore();
+		errSpy.mockRestore();
+	}
+
+	const exitCode = process.exitCode as number | undefined;
+	process.exitCode = prevExitCode;
+	return {
+		stdout: stdoutLines.join("\n"),
+		stderr: stderrLines.join("\n"),
+		exitCode,
+	};
+}
+
+async function writeHookScript(dir: string, name: string, body: string): Promise<string> {
+	const path = join(dir, name);
+	await writeFile(path, `#!/bin/sh\n${body}\n`, "utf-8");
+	await chmod(path, 0o755);
+	return path;
+}
+
+describe("ml compact archive integration", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-compact-archive-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("--apply archives the source records with archive_reason=compacted", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention A",
+			classification: "tactical",
+			recorded_at: daysAgo(10),
+			id: "mx-aaaa01",
+		});
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention B",
+			classification: "tactical",
+			recorded_at: daysAgo(8),
+			id: "mx-aaaa02",
+		});
+
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"testing",
+			"--apply",
+			"--records",
+			"mx-aaaa01,mx-aaaa02",
+			"--type",
+			"convention",
+			"--content",
+			"Merged",
+		]);
+		expect(result.exitCode ?? 0).toBe(0);
+
+		const live = await readExpertiseFile(filePath);
+		expect(live).toHaveLength(1);
+		expect(live[0]?.type).toBe("convention");
+		expect(live[0]?.supersedes).toEqual(["mx-aaaa01", "mx-aaaa02"]);
+
+		const archived = await readArchiveFile(getArchivePath("testing", tmpDir));
+		expect(archived).toHaveLength(2);
+		expect(new Set(archived.map((r) => r.id))).toEqual(new Set(["mx-aaaa01", "mx-aaaa02"]));
+		for (const r of archived) {
+			expect(r.status).toBe("archived");
+			expect(r.archive_reason).toBe("compacted");
+			expect(typeof r.archived_at).toBe("string");
+		}
+	});
+
+	it("--auto archives every compacted source record", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		for (let i = 0; i < 5; i++) {
+			await appendRecord(filePath, {
+				type: "convention",
+				content: `Convention ${i}`,
+				classification: "tactical",
+				recorded_at: daysAgo(20), // past 14-day shelf life
+				id: `mx-bbbb${i.toString().padStart(2, "0")}`,
+			});
+		}
+
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"testing",
+			"--auto",
+			"--yes",
+		]);
+		expect(result.exitCode ?? 0).toBe(0);
+
+		const live = await readExpertiseFile(filePath);
+		expect(live).toHaveLength(1);
+
+		const archived = await readArchiveFile(getArchivePath("testing", tmpDir));
+		expect(archived).toHaveLength(5);
+		for (const r of archived) {
+			expect(r.archive_reason).toBe("compacted");
+		}
+	});
+
+	it("ml restore round-trips a compacted record back to live", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention A",
+			classification: "tactical",
+			recorded_at: daysAgo(10),
+			id: "mx-cccc01",
+		});
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention B",
+			classification: "tactical",
+			recorded_at: daysAgo(8),
+			id: "mx-cccc02",
+		});
+
+		await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"testing",
+			"--apply",
+			"--records",
+			"mx-cccc01,mx-cccc02",
+			"--type",
+			"convention",
+			"--content",
+			"Merged",
+		]);
+
+		const restoreResult = await runCompact(tmpDir, registerRestoreCommand, [
+			"restore",
+			"mx-cccc01",
+		]);
+		expect(restoreResult.exitCode ?? 0).toBe(0);
+
+		const live = await readExpertiseFile(filePath);
+		const restored = live.find((r) => r.id === "mx-cccc01");
+		expect(restored).toBeDefined();
+		expect(restored?.type).toBe("convention");
+
+		// The archive should no longer contain mx-cccc01 (restore moves it out).
+		const archived = await readArchiveFile(getArchivePath("testing", tmpDir));
+		expect(archived.find((r) => r.id === "mx-cccc01")).toBeUndefined();
+		expect(archived.find((r) => r.id === "mx-cccc02")).toBeDefined();
+	});
+});
+
+describe("ml compact pre-compact hook", () => {
+	let tmpDir: string;
+
+	async function setupConfig(hooks: MulchConfig["hooks"]): Promise<void> {
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} }, hooks }, tmpDir);
+	}
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-compact-hook-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("uses hook's replacement when one is configured", async () => {
+		// Hook prints a `{ replacement }` object replacing the mechanical merge.
+		const script = await writeHookScript(
+			tmpDir,
+			"summarize.sh",
+			`cat >/dev/null && cat <<'EOF'
+{"replacement": {"type": "convention", "content": "LLM-summarized", "classification": "foundational", "recorded_at": "2026-05-13T00:00:00.000Z"}}
+EOF`,
+		);
+		await setupConfig({ "pre-compact": [script] });
+
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Long original A",
+			classification: "tactical",
+			recorded_at: daysAgo(10),
+			id: "mx-dddd01",
+		});
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Long original B",
+			classification: "tactical",
+			recorded_at: daysAgo(8),
+			id: "mx-dddd02",
+		});
+
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"testing",
+			"--apply",
+			"--records",
+			"mx-dddd01,mx-dddd02",
+			"--type",
+			"convention",
+			"--content",
+			"manual-merge-fallback",
+		]);
+		expect(result.exitCode ?? 0).toBe(0);
+
+		const live = await readExpertiseFile(filePath);
+		expect(live).toHaveLength(1);
+		expect(live[0]?.type).toBe("convention");
+		if (live[0]?.type === "convention") {
+			expect(live[0].content).toBe("LLM-summarized");
+		}
+		expect(live[0]?.supersedes).toEqual(["mx-dddd01", "mx-dddd02"]);
+
+		const archived = await readArchiveFile(getArchivePath("testing", tmpDir));
+		expect(archived).toHaveLength(2);
+		for (const r of archived) {
+			expect(r.archive_reason).toBe("compacted");
+		}
+	});
+
+	it("falls back to mechanical merge when no hook is configured", async () => {
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention A",
+			classification: "tactical",
+			recorded_at: daysAgo(10),
+			id: "mx-eeee01",
+		});
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention B",
+			classification: "tactical",
+			recorded_at: daysAgo(8),
+			id: "mx-eeee02",
+		});
+
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"testing",
+			"--apply",
+			"--records",
+			"mx-eeee01,mx-eeee02",
+			"--type",
+			"convention",
+			"--content",
+			"manual-merge",
+		]);
+		expect(result.exitCode ?? 0).toBe(0);
+
+		const live = await readExpertiseFile(filePath);
+		expect(live).toHaveLength(1);
+		if (live[0]?.type === "convention") {
+			// Manual --content wins when no hook overrides.
+			expect(live[0].content).toBe("manual-merge");
+		}
+	});
+
+	it("aborts when a pre-compact hook exits non-zero", async () => {
+		const script = await writeHookScript(
+			tmpDir,
+			"reject.sh",
+			"cat >/dev/null; echo 'policy rejected' >&2; exit 1",
+		);
+		await setupConfig({ "pre-compact": [script] });
+
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention A",
+			classification: "tactical",
+			recorded_at: daysAgo(10),
+			id: "mx-feed01",
+		});
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "Convention B",
+			classification: "tactical",
+			recorded_at: daysAgo(8),
+			id: "mx-feed02",
+		});
+
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"testing",
+			"--apply",
+			"--records",
+			"mx-feed01,mx-feed02",
+			"--type",
+			"convention",
+			"--content",
+			"Merged",
+		]);
+		expect(result.exitCode).toBe(1);
+
+		// Live records unchanged, no archive written.
+		const live = await readExpertiseFile(filePath);
+		expect(live).toHaveLength(2);
+	});
+
+	it("rejects a hook replacement that fails AJV validation", async () => {
+		// Hook returns a malformed pattern record (missing required `name`).
+		const script = await writeHookScript(
+			tmpDir,
+			"bad-shape.sh",
+			`cat >/dev/null && cat <<'EOF'
+{"replacement": {"type": "pattern", "description": "no name", "classification": "foundational", "recorded_at": "2026-05-13T00:00:00.000Z"}}
+EOF`,
+		);
+		await setupConfig({ "pre-compact": [script] });
+
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "pattern",
+			name: "original-1",
+			description: "first",
+			classification: "tactical",
+			recorded_at: daysAgo(10),
+			id: "mx-abcd01",
+		});
+		await appendRecord(filePath, {
+			type: "pattern",
+			name: "original-2",
+			description: "second",
+			classification: "tactical",
+			recorded_at: daysAgo(8),
+			id: "mx-abcd02",
+		});
+
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"testing",
+			"--apply",
+			"--records",
+			"mx-abcd01,mx-abcd02",
+			"--type",
+			"pattern",
+			"--name",
+			"fallback",
+			"--description",
+			"fallback",
+		]);
+		expect(result.exitCode).toBe(1);
+
+		const live = await readExpertiseFile(filePath);
+		expect(live).toHaveLength(2);
 	});
 });

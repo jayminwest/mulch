@@ -3,6 +3,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
 import type { ExpertiseRecord, RecordType } from "../schemas/record.ts";
+import { archiveRecords } from "../utils/archive.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
 	generateRecordId,
@@ -11,9 +12,22 @@ import {
 	writeExpertiseFile,
 } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
+import { runHooks } from "../utils/hooks.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
+
+// Payload sent to `pre-compact` hooks. A hook may print `{ replacement: <full
+// record body> }` on stdout to override the mechanical merge; if absent or
+// empty, the mechanical strategy (concat/keep_latest/merge_outcomes) runs as
+// today. The `replacement` field is validated against the unified AJV schema
+// before being written.
+interface PreCompactPayload {
+	domain: string;
+	type: RecordType;
+	records: ExpertiseRecord[];
+	replacement?: ExpertiseRecord;
+}
 
 interface CompactCandidate {
 	domain: string;
@@ -408,6 +422,7 @@ async function handleAuto(
 	// Apply compaction
 	let totalCompacted = 0;
 	const results: Array<{ domain: string; type: RecordType; count: number }> = [];
+	const warnings: string[] = [];
 
 	// Group candidates by domain for efficient processing
 	const byDomain = new Map<string, CompactCandidate[]>();
@@ -420,6 +435,9 @@ async function handleAuto(
 
 	for (const [domain, candidates] of byDomain) {
 		const filePath = getExpertisePath(domain);
+		// Originals collected during the locked mutation; archived AFTER the lock
+		// releases so the archive write doesn't deadlock against the live lock.
+		const toArchive: ExpertiseRecord[] = [];
 
 		await withFileLock(filePath, async () => {
 			const records = await readExpertiseFile(filePath);
@@ -433,8 +451,16 @@ async function handleAuto(
 
 				if (recordsToCompact.length < 2) continue;
 
-				// Create merged replacement record
-				const replacement = mergeRecords(recordsToCompact);
+				// Pre-compact hook may supply a semantically summarized replacement;
+				// when absent, fall back to mechanical mergeRecords(). On hook block
+				// or invalid replacement, skip this group with a warning so unrelated
+				// groups in the same domain still compact.
+				const res = await resolveReplacement(domain, candidate.type, recordsToCompact);
+				if (!res.ok) {
+					warnings.push(`${domain}/${candidate.type}: ${res.reason}`);
+					continue;
+				}
+				const replacement = res.replacement;
 
 				// Remove old records
 				const idsToRemove = new Set(recordsToCompact.map((r) => r.id));
@@ -443,6 +469,7 @@ async function handleAuto(
 				// Add replacement
 				updatedRecords.push(replacement);
 
+				toArchive.push(...recordsToCompact);
 				totalCompacted += recordsToCompact.length;
 				results.push({
 					domain,
@@ -456,6 +483,13 @@ async function handleAuto(
 				await writeExpertiseFile(filePath, updatedRecords);
 			}
 		});
+
+		// Soft-archive the originals so `ml restore <id>` can undo a compaction.
+		// Runs after the live lock releases (archiveRecords takes its own lock
+		// on the archive file).
+		if (toArchive.length > 0) {
+			await archiveRecords(domain, toArchive, new Date(), "compacted");
+		}
 	}
 
 	if (jsonMode) {
@@ -465,6 +499,7 @@ async function handleAuto(
 			action: "auto",
 			compacted: totalCompacted,
 			results,
+			warnings: warnings.length > 0 ? warnings : undefined,
 		});
 		return;
 	}
@@ -476,6 +511,63 @@ async function handleAuto(
 	for (const r of results) {
 		if (!isQuiet()) console.log(chalk.dim(`  ${r.domain}/${r.type}: ${r.count} records → 1`));
 	}
+	for (const w of warnings) {
+		if (!isQuiet()) console.error(chalk.yellow(`Warning: ${w}`));
+	}
+}
+
+// Resolve a replacement record either by running a `pre-compact` hook (when
+// one is registered and produces a `{ replacement }` body) or by falling back
+// to the mechanical mergeRecords() strategy. Returns:
+//   - { ok: true, replacement }: write this record.
+//   - { ok: false, reason }: skip this group (hook blocked or returned an
+//     invalid replacement). Caller decides whether to abort or continue.
+type ReplacementResult =
+	| { ok: true; replacement: ExpertiseRecord; ranHook: boolean }
+	| { ok: false; reason: string };
+
+export async function resolveReplacement(
+	domain: string,
+	type: RecordType,
+	recordsToCompact: ExpertiseRecord[],
+	opts: { fallback?: () => ExpertiseRecord; cwd?: string } = {},
+): Promise<ReplacementResult> {
+	const hookRes = await runHooks<PreCompactPayload>(
+		"pre-compact",
+		{ domain, type, records: recordsToCompact },
+		opts.cwd ? { cwd: opts.cwd } : {},
+	);
+	if (hookRes.blocked) {
+		return {
+			ok: false,
+			reason: hookRes.blockReason ?? "pre-compact hook blocked the compaction",
+		};
+	}
+
+	if (hookRes.ranAny && hookRes.payload?.replacement) {
+		const candidate = { ...hookRes.payload.replacement };
+		// Auto-populate the supersedes link if the hook omitted it: the
+		// replacement must always carry the originals' IDs so `ml restore` works
+		// and history is traceable. The hook may also set it explicitly.
+		const sourceIds = recordsToCompact.map((r) => r.id).filter((id): id is string => !!id);
+		if (!Array.isArray(candidate.supersedes) || candidate.supersedes.length === 0) {
+			candidate.supersedes = sourceIds;
+		}
+		// Drop any incoming id so we recompute deterministically from the body.
+		delete (candidate as { id?: string }).id;
+		const validator = getRegistry().validator;
+		if (!validator(candidate)) {
+			const errs = (validator.errors ?? []).map((e) => `${e.instancePath} ${e.message}`).join("; ");
+			return { ok: false, reason: `pre-compact hook produced an invalid record: ${errs}` };
+		}
+		candidate.id = generateRecordId(candidate);
+		return { ok: true, replacement: candidate, ranHook: true };
+	}
+
+	if (opts.fallback) {
+		return { ok: true, replacement: opts.fallback(), ranHook: false };
+	}
+	return { ok: true, replacement: mergeRecords(recordsToCompact), ranHook: false };
 }
 
 export function mergeRecords(records: ExpertiseRecord[]): ExpertiseRecord {
@@ -641,6 +733,10 @@ async function handleApply(
 	}
 
 	const filePath = getExpertisePath(domain);
+	// Track records that were compacted so we can archive them after the live
+	// lock releases. Empty when the apply path errors out before writing.
+	let recordsToArchive: ExpertiseRecord[] = [];
+
 	await withFileLock(filePath, async () => {
 		const records = await readExpertiseFile(filePath);
 		const identifiers = (options.records as string)
@@ -680,16 +776,193 @@ async function handleApply(
 			(firstIdx !== undefined ? records[firstIdx]?.type : undefined) ??
 			"convention";
 		const recordedAt = new Date().toISOString();
-		const compactedFrom = indicesToRemove.map((i) => records[i]?.id).filter(Boolean) as string[];
+		const sourceRecords = indicesToRemove
+			.map((i) => records[i])
+			.filter((r): r is ExpertiseRecord => r !== undefined);
+		const compactedFrom = sourceRecords.map((r) => r.id).filter((id): id is string => !!id);
 
-		let replacement: ExpertiseRecord;
+		// Pre-compact hook: when configured, its `{ replacement }` overrides the
+		// user-supplied flags. When absent, we build replacement from --type /
+		// --name / --description / etc. as before.
+		const hookRes = await runHooks<PreCompactPayload>("pre-compact", {
+			domain,
+			type: recordType,
+			records: sourceRecords,
+		});
+		if (hookRes.blocked) {
+			const msg = hookRes.blockReason ?? "pre-compact hook blocked the compaction";
+			if (jsonMode) {
+				outputJsonError("compact", msg);
+			} else {
+				console.error(chalk.red(`Error: ${msg}`));
+			}
+			process.exitCode = 1;
+			return;
+		}
+		for (const w of hookRes.warnings) {
+			if (!jsonMode) console.error(chalk.yellow(`Warning: ${w}`));
+		}
 
-		switch (recordType) {
-			case "convention": {
-				const content =
-					(options.content as string | undefined) ?? (options.description as string | undefined);
-				if (!content) {
-					const msg = "Replacement convention requires --content or --description.";
+		let replacement: ExpertiseRecord | undefined;
+		if (hookRes.ranAny && hookRes.payload?.replacement) {
+			const candidate = { ...hookRes.payload.replacement };
+			if (!Array.isArray(candidate.supersedes) || candidate.supersedes.length === 0) {
+				candidate.supersedes = compactedFrom;
+			}
+			delete (candidate as { id?: string }).id;
+			const validate = getRegistry().validator;
+			if (!validate(candidate)) {
+				const errs = (validate.errors ?? [])
+					.map((e) => `${e.instancePath} ${e.message}`)
+					.join("; ");
+				const msg = `pre-compact hook produced an invalid record: ${errs}`;
+				if (jsonMode) {
+					outputJsonError("compact", msg);
+				} else {
+					console.error(chalk.red(`Error: ${msg}`));
+				}
+				process.exitCode = 1;
+				return;
+			}
+			candidate.id = generateRecordId(candidate);
+			replacement = candidate;
+		}
+
+		if (!replacement) {
+			switch (recordType) {
+				case "convention": {
+					const content =
+						(options.content as string | undefined) ?? (options.description as string | undefined);
+					if (!content) {
+						const msg = "Replacement convention requires --content or --description.";
+						if (jsonMode) {
+							outputJsonError("compact", msg);
+						} else {
+							console.error(chalk.red(`Error: ${msg}`));
+						}
+						process.exitCode = 1;
+						return;
+					}
+					replacement = {
+						type: "convention",
+						content,
+						classification: "foundational",
+						recorded_at: recordedAt,
+					};
+					break;
+				}
+				case "pattern": {
+					const name = options.name as string | undefined;
+					const description = options.description as string | undefined;
+					if (!name || !description) {
+						const msg = "Replacement pattern requires --name and --description.";
+						if (jsonMode) {
+							outputJsonError("compact", msg);
+						} else {
+							console.error(chalk.red(`Error: ${msg}`));
+						}
+						process.exitCode = 1;
+						return;
+					}
+					replacement = {
+						type: "pattern",
+						name,
+						description,
+						classification: "foundational",
+						recorded_at: recordedAt,
+					};
+					break;
+				}
+				case "failure": {
+					const description = options.description as string | undefined;
+					const resolution = options.resolution as string | undefined;
+					if (!description || !resolution) {
+						const msg = "Replacement failure requires --description and --resolution.";
+						if (jsonMode) {
+							outputJsonError("compact", msg);
+						} else {
+							console.error(chalk.red(`Error: ${msg}`));
+						}
+						process.exitCode = 1;
+						return;
+					}
+					replacement = {
+						type: "failure",
+						description,
+						resolution,
+						classification: "foundational",
+						recorded_at: recordedAt,
+					};
+					break;
+				}
+				case "decision": {
+					const title = options.title as string | undefined;
+					const rationale = options.rationale as string | undefined;
+					if (!title || !rationale) {
+						const msg = "Replacement decision requires --title and --rationale.";
+						if (jsonMode) {
+							outputJsonError("compact", msg);
+						} else {
+							console.error(chalk.red(`Error: ${msg}`));
+						}
+						process.exitCode = 1;
+						return;
+					}
+					replacement = {
+						type: "decision",
+						title,
+						rationale,
+						classification: "foundational",
+						recorded_at: recordedAt,
+					};
+					break;
+				}
+				case "reference": {
+					const name = options.name as string | undefined;
+					const description = options.description as string | undefined;
+					if (!name || !description) {
+						const msg = "Replacement reference requires --name and --description.";
+						if (jsonMode) {
+							outputJsonError("compact", msg);
+						} else {
+							console.error(chalk.red(`Error: ${msg}`));
+						}
+						process.exitCode = 1;
+						return;
+					}
+					replacement = {
+						type: "reference",
+						name,
+						description,
+						classification: "foundational",
+						recorded_at: recordedAt,
+					};
+					break;
+				}
+				case "guide": {
+					const name = options.name as string | undefined;
+					const description = options.description as string | undefined;
+					if (!name || !description) {
+						const msg = "Replacement guide requires --name and --description.";
+						if (jsonMode) {
+							outputJsonError("compact", msg);
+						} else {
+							console.error(chalk.red(`Error: ${msg}`));
+						}
+						process.exitCode = 1;
+						return;
+					}
+					replacement = {
+						type: "guide",
+						name,
+						description,
+						classification: "foundational",
+						recorded_at: recordedAt,
+					};
+					break;
+				}
+				default: {
+					const msg = `Unknown record type "${recordType}".`;
 					if (jsonMode) {
 						outputJsonError("compact", msg);
 					} else {
@@ -698,126 +971,19 @@ async function handleApply(
 					process.exitCode = 1;
 					return;
 				}
-				replacement = {
-					type: "convention",
-					content,
-					classification: "foundational",
-					recorded_at: recordedAt,
-				};
-				break;
 			}
-			case "pattern": {
-				const name = options.name as string | undefined;
-				const description = options.description as string | undefined;
-				if (!name || !description) {
-					const msg = "Replacement pattern requires --name and --description.";
-					if (jsonMode) {
-						outputJsonError("compact", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
-					return;
-				}
-				replacement = {
-					type: "pattern",
-					name,
-					description,
-					classification: "foundational",
-					recorded_at: recordedAt,
-				};
-				break;
+
+			// Add supersedes links to the compacted-from records
+			if (compactedFrom.length > 0) {
+				replacement.supersedes = compactedFrom;
 			}
-			case "failure": {
-				const description = options.description as string | undefined;
-				const resolution = options.resolution as string | undefined;
-				if (!description || !resolution) {
-					const msg = "Replacement failure requires --description and --resolution.";
-					if (jsonMode) {
-						outputJsonError("compact", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
-					return;
-				}
-				replacement = {
-					type: "failure",
-					description,
-					resolution,
-					classification: "foundational",
-					recorded_at: recordedAt,
-				};
-				break;
-			}
-			case "decision": {
-				const title = options.title as string | undefined;
-				const rationale = options.rationale as string | undefined;
-				if (!title || !rationale) {
-					const msg = "Replacement decision requires --title and --rationale.";
-					if (jsonMode) {
-						outputJsonError("compact", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
-					return;
-				}
-				replacement = {
-					type: "decision",
-					title,
-					rationale,
-					classification: "foundational",
-					recorded_at: recordedAt,
-				};
-				break;
-			}
-			case "reference": {
-				const name = options.name as string | undefined;
-				const description = options.description as string | undefined;
-				if (!name || !description) {
-					const msg = "Replacement reference requires --name and --description.";
-					if (jsonMode) {
-						outputJsonError("compact", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
-					return;
-				}
-				replacement = {
-					type: "reference",
-					name,
-					description,
-					classification: "foundational",
-					recorded_at: recordedAt,
-				};
-				break;
-			}
-			case "guide": {
-				const name = options.name as string | undefined;
-				const description = options.description as string | undefined;
-				if (!name || !description) {
-					const msg = "Replacement guide requires --name and --description.";
-					if (jsonMode) {
-						outputJsonError("compact", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
-					return;
-				}
-				replacement = {
-					type: "guide",
-					name,
-					description,
-					classification: "foundational",
-					recorded_at: recordedAt,
-				};
-				break;
-			}
-			default: {
-				const msg = `Unknown record type "${recordType}".`;
+
+			// Validate replacement (cached on registry)
+			const validate = getRegistry().validator;
+			replacement.id = generateRecordId(replacement);
+			if (!validate(replacement)) {
+				const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
+				const msg = `Replacement record failed validation: ${errors.join("; ")}`;
 				if (jsonMode) {
 					outputJsonError("compact", msg);
 				} else {
@@ -828,31 +994,15 @@ async function handleApply(
 			}
 		}
 
-		// Add supersedes links to the compacted-from records
-		if (compactedFrom.length > 0) {
-			replacement.supersedes = compactedFrom;
-		}
-
-		// Validate replacement (cached on registry)
-		const validate = getRegistry().validator;
-		replacement.id = generateRecordId(replacement);
-		if (!validate(replacement)) {
-			const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
-			const msg = `Replacement record failed validation: ${errors.join("; ")}`;
-			if (jsonMode) {
-				outputJsonError("compact", msg);
-			} else {
-				console.error(chalk.red(`Error: ${msg}`));
-			}
-			process.exitCode = 1;
-			return;
-		}
-
 		// Remove old records and append replacement
 		const removeSet = new Set(indicesToRemove);
 		const remaining = records.filter((_, i) => !removeSet.has(i));
 		remaining.push(replacement);
 		await writeExpertiseFile(filePath, remaining);
+
+		// Capture for archive (outside lock; archiveRecords takes its own lock
+		// on the archive file).
+		recordsToArchive = sourceRecords;
 
 		if (jsonMode) {
 			outputJson({
@@ -870,4 +1020,8 @@ async function handleApply(
 				);
 		}
 	});
+
+	if (recordsToArchive.length > 0) {
+		await archiveRecords(domain, recordsToArchive, new Date(), "compacted");
+	}
 }

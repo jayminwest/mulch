@@ -888,3 +888,45 @@ describe("doctor — decay-config check", () => {
 		expect(check.details.some((d) => d.includes("threshold must be between 0 and 1"))).toBe(true);
 	});
 });
+
+describe("doctor — compact-summarizer check", () => {
+	it("reports 'not configured' when no pre-compact hook is registered", async () => {
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find((c: { name: string }) => c.name === "compact-summarizer") as {
+			status: string;
+			message: string;
+		};
+		expect(check.status).toBe("pass");
+		expect(check.message).toContain("not configured");
+	});
+
+	it("reports the registered hook count when pre-compact is configured", async () => {
+		await writeConfig(
+			{
+				...DEFAULT_CONFIG,
+				domains: { testing: {}, api: {} },
+				hooks: { "pre-compact": ["./scripts/llm-summarize.sh"] },
+			},
+			tmpDir,
+		);
+		const r = spawnSync("bun", [cliPath, "doctor", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 10000,
+		});
+		const out = JSON.parse(r.stdout);
+		const check = out.checks.find((c: { name: string }) => c.name === "compact-summarizer") as {
+			status: string;
+			message: string;
+			details: string[];
+		};
+		expect(check.status).toBe("pass");
+		expect(check.message).toContain("1 pre-compact hook");
+		expect(check.details).toEqual(["./scripts/llm-summarize.sh"]);
+	});
+});
