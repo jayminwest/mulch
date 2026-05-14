@@ -2,6 +2,7 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { getSessionEndReminder } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/markers.ts";
 import { isQuiet } from "../utils/palette.ts";
@@ -58,20 +59,7 @@ cleanup — \`.mulch/\` resolves to the main repo.
 \`.mulch/archive/\` directly — those records are stale by definition. If you need historical
 context, run \`ml search --archived <query>\`.
 
-### Before You Finish
-
-1. Discover what to record (shows changed files and suggests domains):
-   \`\`\`bash
-   ml learn
-   \`\`\`
-2. Store insights from this work session:
-   \`\`\`bash
-   ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
-   \`\`\`
-3. Validate and commit:
-   \`\`\`bash
-   ml sync
-   \`\`\`
+${getSessionEndReminder("embedded")}
 `;
 }
 

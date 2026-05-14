@@ -423,45 +423,70 @@ export function formatJsonOutput(domains: JsonDomain[]): string {
 	return JSON.stringify({ type: "expertise", domains }, null, 2);
 }
 
-export function getSessionEndReminder(format: PrimeFormat): string {
+// Conditional close-session prose. Audit (V1_PLAN §3) found 70-80% of conventions
+// were ritual restatements driven by the prior "you MUST run this checklist" prose;
+// reframing to "if you discovered ..." suppresses filler without losing the
+// memory-anchor function of the 🚨 marker (which V1_PLAN §5.2 keeps in the prime
+// footer for agents whose context has filled with file edits since session start).
+// Single helper feeds the prime footer (markdown/compact/xml/plain) and the
+// onboard/cursor/codex snippets ("embedded").
+export type SessionCloseStyle = PrimeFormat | "embedded";
+
+export function getSessionEndReminder(format: SessionCloseStyle): string {
 	switch (format) {
 		case "xml":
 			return [
-				'<session_close_protocol priority="critical">',
-				"  <instruction>Before saying done or complete, you MUST run this checklist:</instruction>",
-				"  <checklist>",
-				"    <step>ml learn — see what files changed, decide what to record</step>",
-				"    <step>ml record &lt;domain&gt; --type &lt;type&gt; --description &quot;...&quot;</step>",
-				"    <step>ml sync — validate, stage, and commit .mulch/ changes</step>",
-				"  </checklist>",
-				"  <warning>NEVER skip this. Unrecorded learnings are lost for the next session.</warning>",
-				"</session_close_protocol>",
+				"<session_close>",
+				"  <instruction>If you discovered insights worth preserving — a new convention, a pattern that worked, a decision made, a failure encountered — record them before closing this session.</instruction>",
+				"  <commands>",
+				"    <command>ml learn — see what files changed</command>",
+				"    <command>ml record &lt;domain&gt; --type &lt;type&gt; --description &quot;...&quot;</command>",
+				"    <command>ml sync — validate, stage, commit</command>",
+				"  </commands>",
+				"  <note>Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.</note>",
+				"</session_close>",
 			].join("\n");
 		case "plain":
 			return [
-				"=== SESSION CLOSE PROTOCOL (CRITICAL) ===",
+				"=== \u{1F6A8} SESSION CLOSE \u{1F6A8} ===",
 				"",
-				'Before saying "done" or "complete", you MUST run this checklist:',
+				"If you discovered insights worth preserving — a new convention, a pattern that worked,",
+				"a decision made, a failure encountered — record them before closing this session:",
 				"",
-				"[ ] 1. ml learn              (see what files changed — decide what to record)",
-				'[ ] 2. ml record <domain> --type <type> --description "..."',
-				"[ ] 3. ml sync               (validate, stage, and commit .mulch/ changes)",
+				"  ml learn                              (see what files changed)",
+				"  ml record <domain> --type <type> ...  (record the insight)",
+				"  ml sync                               (validate, stage, commit)",
 				"",
-				"NEVER skip this. Unrecorded learnings are lost for the next session.",
+				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
+			].join("\n");
+		case "embedded":
+			return [
+				"### Before You Finish",
+				"",
+				"If you discovered conventions, patterns, decisions, or failures worth preserving during",
+				"this session, record them before closing:",
+				"",
+				"```bash",
+				"ml learn                                                                    # see what files changed",
+				'ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."',
+				"ml sync                                                                     # validate, stage, commit",
+				"```",
+				"",
+				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
 			].join("\n");
 		default:
 			return [
-				"# \u{1F6A8} SESSION CLOSE PROTOCOL \u{1F6A8}",
+				"# \u{1F6A8} SESSION CLOSE \u{1F6A8}",
 				"",
-				'**CRITICAL**: Before saying "done" or "complete", you MUST run this checklist:',
+				"**If you discovered insights worth preserving** — a new convention, a pattern that worked, a decision made, a failure encountered — record them before closing this session:",
 				"",
+				"```bash",
+				"ml learn                              # see what files changed",
+				"ml record <domain> --type <type> ...  # record the insight",
+				"ml sync                               # validate, stage, commit",
 				"```",
-				"[ ] 1. ml learn              # see what files changed — decide what to record",
-				'[ ] 2. ml record <domain> --type <type> --description "..."',
-				"[ ] 3. ml sync               # validate, stage, and commit .mulch/ changes",
-				"```",
 				"",
-				"**NEVER skip this.** Unrecorded learnings are lost for the next session.",
+				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
 			].join("\n");
 	}
 }

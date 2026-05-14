@@ -5,6 +5,7 @@ import { dirname, join, relative } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { getMulchDir } from "../utils/config.ts";
+import { getSessionEndReminder } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import {
 	hasMarkerSection,
@@ -312,22 +313,9 @@ ml prime
 This injects project-specific conventions, patterns, decisions, and other learnings into your context.
 Use \`ml prime --files src/foo.ts\` to load only records relevant to specific files.
 
-**Before completing your task**, review your work for insights worth preserving — conventions discovered,
-patterns applied, failures encountered, or decisions made — and record them:
-
-\`\`\`
-ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
-\`\`\`
-
 Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
 
-**Before you finish**, run:
-
-\`\`\`
-ml learn        # see what files changed — decide what to record
-ml record ...   # record learnings
-ml sync         # validate, stage, and commit .mulch/ changes
-\`\`\`
+${getSessionEndReminder("embedded")}
 `;
 
 const cursorRecipe: ProviderRecipe = {
@@ -392,22 +380,9 @@ At the start of every session, run \`ml prime\` to load project expertise.
 This injects project-specific conventions, patterns, decisions, and other learnings into your context.
 Use \`ml prime --files src/foo.ts\` to load only records relevant to specific files.
 
-**Before completing your task**, review your work for insights worth preserving — conventions discovered,
-patterns applied, failures encountered, or decisions made — and record them:
-
-\`\`\`
-ml record <domain> --type <convention|pattern|failure|decision|reference|guide> [options]
-\`\`\`
-
 Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
 
-**Before you finish**, run:
-
-\`\`\`
-ml learn        # see what files changed — decide what to record
-ml record ...   # record learnings
-ml sync         # validate, stage, and commit .mulch/ changes
-\`\`\`
+${getSessionEndReminder("embedded")}
 ${MARKER_END}`;
 
 // Codex hooks via .codex/config.toml — Codex 0.124.0+ (April 2026) supports

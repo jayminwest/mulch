@@ -1658,21 +1658,22 @@ describe("prime command", () => {
 	});
 
 	describe("session-end reminder", () => {
-		it("compact output includes session close protocol", () => {
+		it("compact output includes session close prose", () => {
 			const _output = formatPrimeOutputCompact([]);
 			const reminder = getSessionEndReminder("markdown");
 			// The reminder is appended by prime.ts, but verify the function itself
-			expect(reminder).toContain("SESSION CLOSE PROTOCOL");
+			expect(reminder).toContain("SESSION CLOSE");
 			expect(reminder).toContain("ml record");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
-			expect(reminder).toContain("NEVER skip this");
+			expect(reminder).toContain("If you discovered");
 		});
 
-		it("markdown reminder uses markdown formatting", () => {
+		it("markdown reminder uses markdown formatting and preserves 🚨", () => {
 			const reminder = getSessionEndReminder("markdown");
 			expect(reminder).toContain("# ");
-			expect(reminder).toContain("**CRITICAL**");
+			expect(reminder).toContain("\u{1F6A8}");
+			expect(reminder).toContain("**If you discovered");
 			expect(reminder).toContain("ml record <domain>");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
@@ -1680,18 +1681,19 @@ describe("prime command", () => {
 
 		it("xml reminder uses XML tags", () => {
 			const reminder = getSessionEndReminder("xml");
-			expect(reminder).toContain("<session_close_protocol");
-			expect(reminder).toContain("</session_close_protocol>");
-			expect(reminder).toContain("<checklist>");
+			expect(reminder).toContain("<session_close>");
+			expect(reminder).toContain("</session_close>");
+			expect(reminder).toContain("<commands>");
 			expect(reminder).toContain("ml record");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
-			expect(reminder).toContain("NEVER skip this");
+			expect(reminder).toContain("If you discovered");
 		});
 
-		it("plain reminder uses plain text formatting", () => {
+		it("plain reminder uses plain text formatting and preserves 🚨", () => {
 			const reminder = getSessionEndReminder("plain");
-			expect(reminder).toContain("SESSION CLOSE PROTOCOL");
+			expect(reminder).toContain("SESSION CLOSE");
+			expect(reminder).toContain("\u{1F6A8}");
 			expect(reminder).not.toContain("**");
 			expect(reminder).not.toContain("##");
 			// No XML tags (but <domain> and <type> placeholders are fine)
@@ -1699,10 +1701,30 @@ describe("prime command", () => {
 			expect(reminder).toContain("ml record");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
-			expect(reminder).toContain("NEVER skip this");
+			expect(reminder).toContain("If you discovered");
 		});
 
-		it("JSON output does NOT include session close protocol", () => {
+		it("embedded reminder produces a markdown snippet for CLAUDE.md / AGENTS.md", () => {
+			const reminder = getSessionEndReminder("embedded");
+			expect(reminder).toContain("### Before You Finish");
+			expect(reminder).toContain("If you discovered");
+			expect(reminder).toContain("ml learn");
+			expect(reminder).toContain("ml record");
+			expect(reminder).toContain("ml sync");
+			// Embedded variant has no 🚨 banner — it lives inside a containing markdown
+			// section, not at the end of a long, edit-saturated context window.
+			expect(reminder).not.toContain("\u{1F6A8}");
+		});
+
+		it("reframe drops ritualistic 'MUST' / 'NEVER skip' phrasing", () => {
+			for (const format of ["markdown", "xml", "plain", "embedded"] as const) {
+				const reminder = getSessionEndReminder(format);
+				expect(reminder).not.toContain("you MUST");
+				expect(reminder).not.toContain("NEVER skip");
+			}
+		});
+
+		it("JSON output does NOT include session close prose", () => {
 			const records = [
 				{
 					type: "convention" as const,
@@ -1714,15 +1736,15 @@ describe("prime command", () => {
 			const output = formatJsonOutput([
 				{ domain: "testing", entry_count: records.length, records },
 			]);
-			expect(output).not.toContain("SESSION CLOSE PROTOCOL");
-			expect(output).not.toContain("session_close_protocol");
+			expect(output).not.toContain("SESSION CLOSE");
+			expect(output).not.toContain("session_close");
 			// Verify it's valid JSON without reminder text
 			const parsed = JSON.parse(output);
 			expect(parsed.type).toBe("expertise");
 		});
 
 		it("reminder contains key action items", () => {
-			for (const format of ["markdown", "xml", "plain"] as const) {
+			for (const format of ["markdown", "xml", "plain", "embedded"] as const) {
 				const reminder = getSessionEndReminder(format);
 				expect(reminder).toContain("ml record");
 				expect(reminder).toContain("ml sync");
@@ -2165,7 +2187,7 @@ describe("prime command", () => {
 			// The session-end reminder is appended by prime.ts after budget filtering,
 			// so it's always present. Verify the reminder function itself is available.
 			const reminder = getSessionEndReminder("markdown");
-			expect(reminder).toContain("SESSION CLOSE PROTOCOL");
+			expect(reminder).toContain("SESSION CLOSE");
 		});
 
 		it("JSON output is NOT subject to budget", () => {
@@ -2487,7 +2509,7 @@ describe("prime command", () => {
 				expect(output).toContain("## Available Domains");
 				expect(output).toContain("**cli**: 2 records");
 				expect(output).toContain("**testing**: 1 record");
-				expect(output).toContain("SESSION CLOSE PROTOCOL");
+				expect(output).toContain("SESSION CLOSE");
 			} finally {
 				logSpy.mockRestore();
 			}
@@ -2638,7 +2660,7 @@ describe("prime command", () => {
 				const program = makeProgram();
 				await program.parseAsync(["node", "mulch", "prime", "--manifest"]);
 				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
-				expect(output).toContain("SESSION CLOSE PROTOCOL");
+				expect(output).toContain("SESSION CLOSE");
 				expect(output).toContain("ml learn");
 				expect(output).toContain("ml record");
 				expect(output).toContain("ml sync");
@@ -2740,7 +2762,7 @@ describe("prime command", () => {
 				// no Session Close trailer (warren handles framing contextually).
 				expect(output).not.toContain("Project Expertise (via Mulch)");
 				expect(output).not.toMatch(/^=+$/m);
-				expect(output).not.toContain("SESSION CLOSE PROTOCOL");
+				expect(output).not.toContain("SESSION CLOSE");
 				expect(output).toContain("[cli]");
 				expect(output).toContain("Use bun");
 				expect(output).not.toContain("<expertise>");
