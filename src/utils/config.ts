@@ -26,10 +26,13 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 # ─── Optional knobs (uncomment to enable) ────────────────────────────────────
 #
 # prime:
-#   # Switch \`ml prime\` from dumping all records to emitting a manifest
-#   # (quick-reference + domain index). Useful in large monoliths — agents
-#   # scope-load with \`ml prime <domain>\` or \`ml prime --files <path>\`.
-#   default_mode: manifest    # one of: full (default), manifest
+#   # Pin \`ml prime\`'s unscoped output shape. When unset (recommended), prime
+#   # auto-flips to manifest above 100 records or 5 domains and renders full
+#   # records otherwise. Set explicitly to override both directions:
+#   #   - full     → always emit full records (skip the auto-flip)
+#   #   - manifest → always emit the domain index
+#   # --full / --manifest / scoping flags always override this on a per-call basis.
+#   default_mode: full        # one of: full, manifest
 #
 # search:
 #   # Multiplier applied to BM25 scores so records with more confirmed outcomes
@@ -116,9 +119,11 @@ Optional knobs in \`mulch.config.yaml\`:
 
 \`\`\`yaml
 prime:
-  default_mode: manifest   # or "full" (default). "manifest" emits a domain index
-                           # for monolith projects; agents scope-load with
-                           # \`ml prime <domain>\` or \`ml prime --files <path>\`.
+  default_mode: manifest   # or "full". Omit to let \`ml prime\` auto-flip:
+                           # full output until the corpus exceeds 100 records
+                           # or 5 domains, then manifest. Set explicitly to pin
+                           # one mode. Scoping flags (\`--files\`, \`<domain>\`)
+                           # always force full.
 
 search:
   boost_factor: 0.1        # multiplier on BM25 scores for confirmed records.

@@ -3070,4 +3070,358 @@ describe("prime command", () => {
 			}
 		});
 	});
+
+	describe("project contract block (v0.10 slice 1)", () => {
+		let originalCwd: string;
+
+		beforeEach(() => {
+			originalCwd = process.cwd();
+			resetRegistry();
+		});
+
+		afterEach(() => {
+			process.chdir(originalCwd);
+			process.exitCode = 0;
+			resetRegistry();
+		});
+
+		function makeProgram(): Command {
+			const program = new Command();
+			program
+				.name("mulch")
+				.option("--json", "output as structured JSON")
+				.option("--format <format>", "global format")
+				.exitOverride();
+			registerPrimeCommand(program);
+			return program;
+		}
+
+		async function seedWithGates(): Promise<void> {
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: {
+						cli: { allowed_types: ["convention", "pattern"] },
+						ecosystem: { required_fields: ["evidence"] },
+					},
+					disabled_types: ["guide"],
+					custom_types: {
+						release_decision: {
+							extends: "decision",
+							required: ["version"],
+							optional: ["breaking"],
+						} as CustomTypeConfig,
+					},
+				},
+				tmpDir,
+			);
+			await initRegistryFromConfig(tmpDir);
+			const cliPath = getExpertisePath("cli", tmpDir);
+			const ecoPath = getExpertisePath("ecosystem", tmpDir);
+			await createExpertiseFile(cliPath);
+			await createExpertiseFile(ecoPath);
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Use bun",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+		}
+
+		it("leads default output with Project Contract section before record content", async () => {
+			await seedWithGates();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("## Project Contract");
+				expect(output).toContain("**Custom types**");
+				expect(output).toContain("release_decision");
+				expect(output).toContain("**Disabled types**: `guide`");
+				expect(output).toContain("**Per-domain rules**");
+				expect(output).toContain("`cli`: allowed types — convention, pattern");
+				expect(output).toContain("`ecosystem`: required fields — evidence");
+				const contractIdx = output.indexOf("## Project Contract");
+				const expertiseIdx = output.indexOf("# Project Expertise");
+				expect(contractIdx).toBeGreaterThanOrEqual(0);
+				expect(expertiseIdx).toBeGreaterThan(contractIdx);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("leads --full output with contract block", async () => {
+			await seedWithGates();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("## Project Contract");
+				const contractIdx = output.indexOf("## Project Contract");
+				const expertiseIdx = output.indexOf("# Project Expertise");
+				expect(expertiseIdx).toBeGreaterThan(contractIdx);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("leads --manifest output with contract block", async () => {
+			await seedWithGates();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("## Project Contract");
+				const contractIdx = output.indexOf("## Project Contract");
+				const manifestIdx = output.indexOf("# Project Expertise Manifest");
+				expect(manifestIdx).toBeGreaterThan(contractIdx);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("omits contract block when project has no write-side gates", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
+			await initRegistryFromConfig(tmpDir);
+			const cliPath = getExpertisePath("cli", tmpDir);
+			await createExpertiseFile(cliPath);
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Use bun",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("## Project Contract");
+				expect(output).toContain("# Project Expertise");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("omits contract block for --json output", async () => {
+			await seedWithGates();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--json", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Contract");
+				const parsed = JSON.parse(output);
+				expect(parsed.type).toBe("expertise");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("omits contract block for --dry-run output", async () => {
+			await seedWithGates();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Contract");
+				const parsed = JSON.parse(output);
+				expect(parsed).toHaveProperty("wouldPrime");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("renders contract block in XML format (XML expertise tree follows)", async () => {
+			await seedWithGates();
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--format", "xml", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("<contract>");
+				expect(output).toContain("<custom_types>");
+				expect(output).toContain('name="release_decision"');
+				expect(output).toContain("<disabled_types>guide</disabled_types>");
+				expect(output).toContain("<expertise>");
+				const contractIdx = output.indexOf("<contract>");
+				const expertiseIdx = output.indexOf("<expertise>");
+				expect(expertiseIdx).toBeGreaterThan(contractIdx);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+	});
+
+	describe("auto-flip to manifest (v0.10 slice 1)", () => {
+		let originalCwd: string;
+
+		beforeEach(() => {
+			originalCwd = process.cwd();
+		});
+
+		afterEach(() => {
+			process.chdir(originalCwd);
+			process.exitCode = 0;
+		});
+
+		function makeProgram(): Command {
+			const program = new Command();
+			program.name("mulch").option("--json", "output as structured JSON").exitOverride();
+			registerPrimeCommand(program);
+			return program;
+		}
+
+		async function seedDomains(domainCount: number, recordsPerDomain: number): Promise<void> {
+			const domains: Record<string, Record<string, never>> = {};
+			for (let i = 0; i < domainCount; i++) {
+				domains[`d${i}`] = {};
+			}
+			await writeConfig({ ...DEFAULT_CONFIG, domains }, tmpDir);
+			for (const dom of Object.keys(domains)) {
+				const path = getExpertisePath(dom, tmpDir);
+				await createExpertiseFile(path);
+				for (let r = 0; r < recordsPerDomain; r++) {
+					await appendRecord(path, {
+						type: "convention",
+						content: `record ${dom}-${r}`,
+						classification: "foundational",
+						recorded_at: new Date().toISOString(),
+					});
+				}
+			}
+		}
+
+		it("stays in full mode at exactly 100 records and 5 domains (threshold is strict >)", async () => {
+			await seedDomains(5, 20);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Expertise Manifest");
+				expect(output).toContain("# Project Expertise (via Mulch)");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("flips to manifest above 100 records (with <=5 domains)", async () => {
+			await seedDomains(4, 26);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise Manifest");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("flips to manifest above 5 domains (with <=100 records)", async () => {
+			await seedDomains(6, 2);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise Manifest");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--full opts out of auto-flip even when over threshold", async () => {
+			await seedDomains(7, 20);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Expertise Manifest");
+				expect(output).toContain("# Project Expertise (via Mulch)");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("explicit prime.default_mode=full in config opts out of auto-flip", async () => {
+			await seedDomains(7, 20);
+			const config = await readConfig(tmpDir);
+			await writeConfig({ ...config, prime: { default_mode: "full" } }, tmpDir);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Expertise Manifest");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("explicit prime.default_mode=manifest forces manifest below threshold", async () => {
+			await seedDomains(2, 3);
+			const config = await readConfig(tmpDir);
+			await writeConfig({ ...config, prime: { default_mode: "manifest" } }, tmpDir);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise Manifest");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--dry-run opts out of auto-flip even when over threshold", async () => {
+			await seedDomains(6, 20);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const parsed = JSON.parse(output);
+				expect(parsed).toHaveProperty("wouldPrime");
+				expect(parsed).toHaveProperty("totalTokens");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("scoping (positional domain) suppresses auto-flip", async () => {
+			await seedDomains(6, 20);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "d0"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("Project Expertise Manifest");
+				expect(output).toContain("# Project Expertise (via Mulch)");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+	});
 });

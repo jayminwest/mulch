@@ -25,7 +25,9 @@ import {
 	formatPrimeOutputCompact,
 	formatPrimeOutputPlain,
 	formatPrimeOutputXml,
+	formatProjectContract,
 	getSessionEndReminder,
+	shouldAutoFlipToManifest,
 } from "../utils/format.ts";
 import { filterByContext, getChangedFiles, isGitRepo } from "../utils/git.ts";
 import { runHooks } from "../utils/hooks.ts";
@@ -154,13 +156,17 @@ export function registerPrimeCommand(program: Command): void {
 					return;
 				}
 
-				const configMode = config.prime?.default_mode ?? "full";
-				const effectiveMode: "manifest" | "full" = options.manifest
+				// Mode resolution: explicit flags / config win. When neither is set,
+				// auto-flip to manifest above the size threshold (slice 1 of the
+				// v0.10 prime overhaul — the prior `consider --manifest` warning is
+				// gone because the default *is* the right thing). --dry-run targets
+				// record-level preview, so it opts out of auto-flip.
+				const configMode = config.prime?.default_mode;
+				const explicitMode: "manifest" | "full" | undefined = options.manifest
 					? "manifest"
 					: options.full
 						? "full"
 						: configMode;
-				const useManifest = effectiveMode === "manifest" && !isScoped;
 
 				for (const d of unique) {
 					if (!(d in config.domains)) {
@@ -238,21 +244,59 @@ export function registerPrimeCommand(program: Command): void {
 				const budgetEnabled = !jsonMode && options.limit !== false;
 				const budget = options.budget ? Number.parseInt(options.budget, 10) : DEFAULT_BUDGET;
 
+				// Load records once. Both branches (manifest and full) need either
+				// counts or the records themselves; one read keeps the auto-flip
+				// decision and the format pipeline aligned on the same dataset.
+				interface LoadedDomain {
+					domain: string;
+					records: ExpertiseRecord[];
+					lastUpdated: Date | null;
+				}
+				const loaded: LoadedDomain[] = [];
+				for (const domain of targetDomains) {
+					const filePath = getExpertisePath(domain);
+					let records = await readExpertiseFile(filePath);
+					if (filesToFilter) {
+						records = filterByContext(records, filesToFilter);
+						if (records.length === 0 && !jsonMode) continue;
+					}
+					const lastUpdated = await getFileModTime(filePath);
+					loaded.push({ domain, records, lastUpdated });
+				}
+
+				// Decide effective mode. Explicit flag / config always wins. With
+				// no explicit signal and no scoping, auto-flip to manifest above
+				// the size threshold (>100 records or >5 domains). --dry-run opts
+				// out — it previews records, which manifest mode wouldn't show.
+				let useManifest: boolean;
+				if (isScoped) {
+					useManifest = false;
+				} else if (explicitMode === "manifest") {
+					useManifest = true;
+				} else if (explicitMode === "full") {
+					useManifest = false;
+				} else if (options.dryRun) {
+					useManifest = false;
+				} else {
+					const totalRecords = loaded.reduce((s, l) => s + l.records.length, 0);
+					useManifest = shouldAutoFlipToManifest(totalRecords, loaded.length);
+				}
+
+				// Contract block (write-side gates) leads non-JSON output in both
+				// manifest and full modes. Skipped for JSON (consumers parse config
+				// separately) and dry-run (output is a JSON record summary).
+				const contractBlock =
+					jsonMode || options.dryRun ? null : formatProjectContract(config, format);
+
 				let output: string;
 
 				if (useManifest) {
-					const manifestDomains: ManifestDomain[] = [];
-					for (const domain of targetDomains) {
-						const filePath = getExpertisePath(domain);
-						const records = await readExpertiseFile(filePath);
-						const lastUpdated = await getFileModTime(filePath);
-						manifestDomains.push({
-							domain,
-							count: records.length,
-							lastUpdated,
-							typeCounts: computeTypeCounts(records),
-						});
-					}
+					const manifestDomains: ManifestDomain[] = loaded.map((l) => ({
+						domain: l.domain,
+						count: l.records.length,
+						lastUpdated: l.lastUpdated,
+						typeCounts: computeTypeCounts(l.records),
+					}));
 
 					if (jsonMode) {
 						output = JSON.stringify(
@@ -270,27 +314,6 @@ export function registerPrimeCommand(program: Command): void {
 						}
 					}
 				} else {
-					// Load records once, fire pre-prime, then dispatch to formatter.
-					// Hook payload is { domains: [{ domain, records }] }; mutation
-					// allowed (script can drop records or whole domains by returning a
-					// filtered list).
-					interface LoadedDomain {
-						domain: string;
-						records: ExpertiseRecord[];
-						lastUpdated: Date | null;
-					}
-					const loaded: LoadedDomain[] = [];
-					for (const domain of targetDomains) {
-						const filePath = getExpertisePath(domain);
-						let records = await readExpertiseFile(filePath);
-						if (filesToFilter) {
-							records = filterByContext(records, filesToFilter);
-							if (records.length === 0 && !jsonMode) continue;
-						}
-						const lastUpdated = await getFileModTime(filePath);
-						loaded.push({ domain, records, lastUpdated });
-					}
-
 					// --dry-run short-circuits: skip pre-prime hooks (they may have side
 					// effects like Slack posts) and emit a JSON summary of which records
 					// would be primed under the same budget rules as a real run. Format
@@ -459,6 +482,13 @@ export function registerPrimeCommand(program: Command): void {
 							output += `\n\n${getSessionEndReminder(format)}`;
 						}
 					}
+				}
+
+				// Lead with the project contract (write-side gates from config) on
+				// non-JSON / non-dry-run output. `contractBlock` is null when the
+				// project has no gates worth surfacing.
+				if (contractBlock) {
+					output = `${contractBlock}\n\n${output}`;
 				}
 
 				if (options.export) {

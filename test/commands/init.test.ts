@@ -130,7 +130,7 @@ describe("init command", () => {
 		expect(content).toContain("https://github.com/jayminwest/mulch");
 		// Optional knob is present as commented YAML so users can discover it
 		expect(content).toContain("# prime:");
-		expect(content).toContain("#   default_mode: manifest");
+		expect(content).toContain("#   default_mode: full");
 		// Required fields are real YAML, not commented out
 		expect(content).toMatch(/^version: '1'$/m);
 		expect(content).toMatch(/^governance:$/m);

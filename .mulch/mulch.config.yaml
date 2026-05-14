@@ -109,10 +109,6 @@ hooks:
   # archive runs (hooks are skipped on `--dry-run`).
   pre-prune:
     - ./.mulch/hooks/prune-digest.sh
-  # pre-prime: warn to stderr when the loaded set is large enough that
-  # `--manifest` or `--domain` scoping would save context.
-  pre-prime:
-    - ./.mulch/hooks/prime-budget-warn.sh
 hook_settings:
   # Per-hook timeout in ms. Default is 5000; pinned explicitly so the value
   # survives a future default change.

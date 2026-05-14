@@ -1,4 +1,6 @@
 import { getRegistry } from "../registry/type-registry.ts";
+import type { HookEvent, MulchConfig } from "../schemas/config.ts";
+import { HOOK_EVENTS } from "../schemas/config.ts";
 import type { BuiltinRecordType, ExpertiseRecord } from "../schemas/record.ts";
 import { formatLinks, formatTimeAgo, xmlAttrEscape, xmlEscape } from "./format-helpers.ts";
 
@@ -795,4 +797,223 @@ export function computeTypeCounts(records: ExpertiseRecord[]): Record<string, nu
 		counts[r.type] = (counts[r.type] ?? 0) + 1;
 	}
 	return counts;
+}
+
+// --- Project Contract block (write-side gates from config) ---
+//
+// Slice 1 of the v0.10 prime overhaul leads with this so agents see the
+// project's write-side rules (`ml record` will enforce them) before any
+// record content. Surfaces custom types, disabled types, per-domain
+// allowed_types / required_fields, and active hooks. Returns null when the
+// project has no contract content worth surfacing — keeps minimal configs
+// clutter-free.
+
+export interface ContractDomainEntry {
+	domain: string;
+	allowedTypes: string[];
+	requiredFields: string[];
+}
+
+export interface ContractCustomType {
+	name: string;
+	extends: string | null;
+	required: string[];
+	optional: string[];
+}
+
+export interface ProjectContract {
+	customTypes: ContractCustomType[];
+	disabledTypes: string[];
+	domains: ContractDomainEntry[];
+	hooks: HookEvent[];
+}
+
+export function buildProjectContract(config: MulchConfig): ProjectContract {
+	const registry = getRegistry();
+	const customTypes: ContractCustomType[] = registry.customDefs().map((def) => ({
+		name: def.name,
+		extends: config.custom_types?.[def.name]?.extends ?? null,
+		required: [...def.required],
+		optional: [...def.optional],
+	}));
+	const disabledTypes = [...(config.disabled_types ?? [])];
+	const domains: ContractDomainEntry[] = [];
+	for (const [name, dconf] of Object.entries(config.domains ?? {})) {
+		const allowed = dconf?.allowed_types ?? [];
+		const required = dconf?.required_fields ?? [];
+		if (allowed.length > 0 || required.length > 0) {
+			domains.push({
+				domain: name,
+				allowedTypes: [...allowed],
+				requiredFields: [...required],
+			});
+		}
+	}
+	const hooks: HookEvent[] = [];
+	for (const event of HOOK_EVENTS) {
+		const scripts = config.hooks?.[event] ?? [];
+		if (scripts.length > 0) hooks.push(event);
+	}
+	return { customTypes, disabledTypes, domains, hooks };
+}
+
+export function hasContractContent(c: ProjectContract): boolean {
+	return (
+		c.customTypes.length > 0 ||
+		c.disabledTypes.length > 0 ||
+		c.domains.length > 0 ||
+		c.hooks.length > 0
+	);
+}
+
+function customTypeFieldsSuffix(t: ContractCustomType): string {
+	const parts: string[] = [];
+	if (t.required.length > 0) parts.push(`required: ${t.required.join(", ")}`);
+	if (t.optional.length > 0) parts.push(`optional: ${t.optional.join(", ")}`);
+	return parts.length > 0 ? `; ${parts.join("; ")}` : "";
+}
+
+function formatProjectContractMarkdown(c: ProjectContract): string {
+	const lines: string[] = [];
+	lines.push("## Project Contract");
+	lines.push("");
+	lines.push("Write-side gates `ml record` enforces in this project.");
+	lines.push("");
+
+	if (c.customTypes.length > 0) {
+		lines.push("**Custom types**:");
+		for (const t of c.customTypes) {
+			const ext = t.extends ? ` (extends \`${t.extends}\`)` : "";
+			lines.push(`- \`${t.name}\`${ext}${customTypeFieldsSuffix(t)}`);
+		}
+		lines.push("");
+	}
+
+	if (c.disabledTypes.length > 0) {
+		const names = c.disabledTypes.map((t) => `\`${t}\``).join(", ");
+		lines.push(`**Disabled types**: ${names} (writes emit a deprecation warning)`);
+		lines.push("");
+	}
+
+	if (c.domains.length > 0) {
+		lines.push("**Per-domain rules**:");
+		for (const d of c.domains) {
+			const parts: string[] = [];
+			if (d.allowedTypes.length > 0) parts.push(`allowed types — ${d.allowedTypes.join(", ")}`);
+			if (d.requiredFields.length > 0)
+				parts.push(`required fields — ${d.requiredFields.join(", ")}`);
+			lines.push(`- \`${d.domain}\`: ${parts.join("; ")}`);
+		}
+		lines.push("");
+	}
+
+	if (c.hooks.length > 0) {
+		lines.push(`**Active hooks**: ${c.hooks.join(", ")}`);
+	}
+
+	return lines.join("\n").trimEnd();
+}
+
+function formatProjectContractPlain(c: ProjectContract): string {
+	const lines: string[] = [];
+	lines.push("Project Contract (write-side gates)");
+	lines.push("===================================");
+
+	if (c.customTypes.length > 0) {
+		lines.push("");
+		lines.push("Custom types:");
+		for (const t of c.customTypes) {
+			const ext = t.extends ? ` (extends ${t.extends})` : "";
+			lines.push(`  - ${t.name}${ext}${customTypeFieldsSuffix(t)}`);
+		}
+	}
+
+	if (c.disabledTypes.length > 0) {
+		lines.push("");
+		lines.push(`Disabled types: ${c.disabledTypes.join(", ")} (writes emit a deprecation warning)`);
+	}
+
+	if (c.domains.length > 0) {
+		lines.push("");
+		lines.push("Per-domain rules:");
+		for (const d of c.domains) {
+			const parts: string[] = [];
+			if (d.allowedTypes.length > 0) parts.push(`allowed: ${d.allowedTypes.join(", ")}`);
+			if (d.requiredFields.length > 0) parts.push(`required: ${d.requiredFields.join(", ")}`);
+			lines.push(`  - ${d.domain}: ${parts.join("; ")}`);
+		}
+	}
+
+	if (c.hooks.length > 0) {
+		lines.push("");
+		lines.push(`Active hooks: ${c.hooks.join(", ")}`);
+	}
+
+	return lines.join("\n");
+}
+
+function formatProjectContractXml(c: ProjectContract): string {
+	const lines: string[] = [];
+	lines.push("<contract>");
+	if (c.customTypes.length > 0) {
+		lines.push("  <custom_types>");
+		for (const t of c.customTypes) {
+			const extAttr = t.extends ? ` extends="${xmlAttrEscape(t.extends)}"` : "";
+			lines.push(`    <type name="${xmlAttrEscape(t.name)}"${extAttr}>`);
+			if (t.required.length > 0)
+				lines.push(`      <required>${xmlEscape(t.required.join(", "))}</required>`);
+			if (t.optional.length > 0)
+				lines.push(`      <optional>${xmlEscape(t.optional.join(", "))}</optional>`);
+			lines.push("    </type>");
+		}
+		lines.push("  </custom_types>");
+	}
+	if (c.disabledTypes.length > 0) {
+		lines.push(`  <disabled_types>${xmlEscape(c.disabledTypes.join(", "))}</disabled_types>`);
+	}
+	if (c.domains.length > 0) {
+		lines.push("  <domains>");
+		for (const d of c.domains) {
+			const allowedAttr =
+				d.allowedTypes.length > 0 ? ` allowed="${xmlAttrEscape(d.allowedTypes.join(", "))}"` : "";
+			const reqAttr =
+				d.requiredFields.length > 0
+					? ` required="${xmlAttrEscape(d.requiredFields.join(", "))}"`
+					: "";
+			lines.push(`    <domain name="${xmlAttrEscape(d.domain)}"${allowedAttr}${reqAttr} />`);
+		}
+		lines.push("  </domains>");
+	}
+	if (c.hooks.length > 0) {
+		lines.push(`  <hooks>${xmlEscape(c.hooks.join(", "))}</hooks>`);
+	}
+	lines.push("</contract>");
+	return lines.join("\n");
+}
+
+export function formatProjectContract(config: MulchConfig, format: PrimeFormat): string | null {
+	const contract = buildProjectContract(config);
+	if (!hasContractContent(contract)) return null;
+	switch (format) {
+		case "xml":
+			return formatProjectContractXml(contract);
+		case "plain":
+			return formatProjectContractPlain(contract);
+		default:
+			return formatProjectContractMarkdown(contract);
+	}
+}
+
+// Auto-flip thresholds for the `ml prime` default mode. When the project has
+// not declared `prime.default_mode` and the invocation isn't scoped, prime
+// flips to manifest output above either threshold so unscoped output doesn't
+// blow the context window. Strict greater-than: 100 records is full, 101 is
+// manifest; 5 domains is full, 6 is manifest.
+export const AUTO_MANIFEST_RECORD_THRESHOLD = 100;
+export const AUTO_MANIFEST_DOMAIN_THRESHOLD = 5;
+
+export function shouldAutoFlipToManifest(totalRecords: number, totalDomains: number): boolean {
+	return (
+		totalRecords > AUTO_MANIFEST_RECORD_THRESHOLD || totalDomains > AUTO_MANIFEST_DOMAIN_THRESHOLD
+	);
 }
