@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { execSync } from "node:child_process";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
@@ -3421,6 +3422,291 @@ describe("prime command", () => {
 				expect(output).toContain("# Project Expertise (via Mulch)");
 			} finally {
 				logSpy.mockRestore();
+			}
+		});
+	});
+
+	describe("auto-context-scope for full mode (v0.10 slice 2)", () => {
+		let gitDir: string;
+		let originalCwd: string;
+
+		beforeEach(async () => {
+			originalCwd = process.cwd();
+			// realpath() needed because macOS /var → /private/var; --git-common-dir
+			// returns the resolved path so isInsideWorktree comparisons need parity.
+			gitDir = await realpath(await mkdtemp(join(tmpdir(), "mulch-prime-slice2-")));
+			execSync("git init -q -b main", { cwd: gitDir, stdio: "pipe" });
+			execSync("git config user.email 'test@test.com'", { cwd: gitDir, stdio: "pipe" });
+			execSync("git config user.name 'Test'", { cwd: gitDir, stdio: "pipe" });
+			await mkdir(join(gitDir, ".mulch"), { recursive: true });
+			await mkdir(join(gitDir, ".mulch", "expertise"), { recursive: true });
+		});
+
+		afterEach(async () => {
+			process.chdir(originalCwd);
+			process.exitCode = 0;
+			await rm(gitDir, { recursive: true, force: true });
+		});
+
+		function makeProgram(): Command {
+			const program = new Command();
+			program.name("mulch").option("--json", "output as structured JSON").exitOverride();
+			registerPrimeCommand(program);
+			return program;
+		}
+
+		async function seedMixedDomain(): Promise<void> {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, gitDir);
+			const cliPath = getExpertisePath("cli", gitDir);
+			await createExpertiseFile(cliPath);
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Universal convention with no anchors",
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "cli-entry",
+				description: "CLI entry pattern",
+				files: ["src/cli.ts"],
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "db-schema",
+				description: "DB schema pattern",
+				files: ["src/db/schema.ts"],
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+			});
+		}
+
+		async function touchFile(relPath: string): Promise<void> {
+			const abs = join(gitDir, relPath);
+			await mkdir(join(abs, ".."), { recursive: true });
+			await writeFile(abs, "// stub\n");
+			execSync(`git add ${relPath}`, { cwd: gitDir, stdio: "pipe" });
+		}
+
+		it("--full context-scopes to changed files by default", async () => {
+			await seedMixedDomain();
+			await touchFile("src/cli.ts");
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Universal convention");
+				expect(output).toContain("cli-entry");
+				expect(output).not.toContain("db-schema");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).toContain("scoped to");
+				expect(errs).toContain("--all for the full corpus");
+				expect(errs).toContain("git status");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("--full --all emits the unscoped full corpus and skips the stderr summary", async () => {
+			await seedMixedDomain();
+			await touchFile("src/cli.ts");
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full", "--all"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Universal convention");
+				expect(output).toContain("cli-entry");
+				expect(output).toContain("db-schema");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).not.toContain("scoped to");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("active-work tracker match (seeds) keeps records that reference the in-progress id", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, gitDir);
+			const cliPath = getExpertisePath("cli", gitDir);
+			await createExpertiseFile(cliPath);
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "matched-by-seed",
+				description: "Tracked by mulch-244c",
+				files: ["unrelated/path.ts"],
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+				evidence: { seeds: "mulch-244c" },
+			});
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "matched-by-other-seed",
+				description: "Tracked by some other seed",
+				files: ["unrelated/path.ts"],
+				classification: "foundational",
+				recorded_at: new Date().toISOString(),
+				evidence: { seeds: "mulch-0000" },
+			});
+			await mkdir(join(gitDir, ".seeds"), { recursive: true });
+			await writeFile(
+				join(gitDir, ".seeds", "issues.jsonl"),
+				`${JSON.stringify({ id: "mulch-244c", status: "in_progress" })}\n`,
+			);
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("matched-by-seed");
+				expect(output).not.toContain("matched-by-other-seed");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).toContain("active-work");
+				expect(errs).toContain("seeds:mulch-244c");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("no signals (clean repo, no in-progress work) skips auto-scope", async () => {
+			await seedMixedDomain();
+			// Commit the config so there are no changed/untracked files outside .mulch
+			execSync("git add -A", { cwd: gitDir, stdio: "pipe" });
+			execSync("git commit -q -m 'seed' --allow-empty", { cwd: gitDir, stdio: "pipe" });
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				// With no signals, all anchored records are emitted (no auto-scope).
+				expect(output).toContain("cli-entry");
+				expect(output).toContain("db-schema");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).not.toContain("scoped to");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("--json mode skips auto-context-scope so machine consumers see deterministic output", async () => {
+			await seedMixedDomain();
+			await touchFile("src/cli.ts");
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--json", "prime", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const parsed = JSON.parse(output);
+				const cli = parsed.domains.find((d: { domain: string }) => d.domain === "cli");
+				expect(cli.entry_count).toBe(3);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("--manifest is unaffected by auto-context-scope (size-based, not file-based)", async () => {
+			await seedMixedDomain();
+			await touchFile("src/cli.ts");
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise Manifest");
+				expect(output).toContain("**cli**: 3 records");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).not.toContain("scoped to");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("explicit --files takes precedence over auto-context-scope", async () => {
+			await seedMixedDomain();
+			await touchFile("src/cli.ts");
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync([
+					"node",
+					"mulch",
+					"prime",
+					"--full",
+					"--files",
+					"src/db/schema.ts",
+				]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("db-schema");
+				expect(output).not.toContain("cli-entry");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).not.toContain("scoped to");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("positional domain suppresses auto-context-scope", async () => {
+			await seedMixedDomain();
+			await touchFile("src/cli.ts");
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "cli"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("cli-entry");
+				expect(output).toContain("db-schema");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).not.toContain("scoped to");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("dry-run reflects auto-context-scope (preview matches what prime would emit)", async () => {
+			await seedMixedDomain();
+			await touchFile("src/cli.ts");
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run", "--full"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const parsed = JSON.parse(output);
+				const types = parsed.wouldPrime.map((r: { type: string }) => r.type);
+				// One convention + one matching pattern (cli-entry) — db-schema is excluded
+				expect(parsed.wouldPrime).toHaveLength(2);
+				expect(types).toContain("convention");
+				expect(types).toContain("pattern");
+				const errs = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(errs).toContain("scoped to");
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
 			}
 		});
 	});

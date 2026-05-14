@@ -49,9 +49,12 @@ ml prime                                           # Get full context for agent 
 ml prime database                                  # Get context for one domain only
 ml prime --files src/foo.ts                        # Prime only records relevant to specific files
 ml prime --manifest                                # Domain index for monoliths (scope-load on demand)
+ml prime --full --all                              # Skip auto-context-scope and emit every record
 ```
 
 For large monoliths where dumping every record wastes context, set `prime.default_mode: manifest` in `.mulch/mulch.config.yaml` — `ml prime` then emits a quick reference + domain index, and agents scope-load with `ml prime <domain>` or `ml prime --files <path>`.
+
+In full mode, `ml prime` auto-context-scopes to the agent's working set by default: `git status` for changed/untracked files, plus the active-work resolver chain (current branch, in-progress seeds, current GH PR, branch-parsed linear/bead IDs) matched against each record's `evidence.{seeds,gh,linear,bead}`. Universal records (no `files` / `dir_anchors` / tracker-anchored evidence) are always emitted. The stderr line `prime: scoped to N of M records based on …; run with --all for the full corpus` reports the scoping ratio so the agent sees what got dropped. Pass `--all` to opt out and emit the full corpus; pass an explicit `--files`, positional domain, `--domain`, or `--context` to scope on different signals. Auto-scope is skipped under `--json` (machine consumers expect deterministic output) and outside a git repo.
 
 ## Commands
 
@@ -66,7 +69,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml delete <domain> [id]` | Delete records by ID, `--records <ids>`, or `--all-except <ids>` (`--dry-run`) |
 | `ml delete-domain <domain>` | Remove a domain from config and delete its expertise JSONL file (`--yes`, `--dry-run`) |
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
-| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`, `--dry-run`) |
+| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--all`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`, `--dry-run`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--no-boost`, `--format`) |
 | `ml rank [domain]` | Rank records by confirmation-frequency score, highest first (`--type`, `--limit`, `--min-score`, `--json`) — pure score ranking with no text query, useful for context-constrained consumers |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |

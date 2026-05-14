@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import type { Command } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
+import { resolveActiveWork } from "../utils/active-work.ts";
 import type { DomainRecords } from "../utils/budget.ts";
 import {
 	applyBudget,
@@ -29,7 +30,15 @@ import {
 	getSessionEndReminder,
 	shouldAutoFlipToManifest,
 } from "../utils/format.ts";
-import { filterByContext, getChangedFiles, isGitRepo } from "../utils/git.ts";
+import {
+	type ActiveContext,
+	activeContextHasSignal,
+	filterByActiveContext,
+	filterByContext,
+	getActiveFiles,
+	getChangedFiles,
+	isGitRepo,
+} from "../utils/git.ts";
 import { runHooks } from "../utils/hooks.ts";
 import { outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
@@ -43,6 +52,7 @@ interface PrimeOptions {
 	excludeDomain?: string[];
 	context?: boolean;
 	files?: string[];
+	all?: boolean;
 	budget?: string;
 	// Commander parses `--no-limit` as `limit=false` (defaults true), not as
 	// `noLimit=true`. Field name follows Commander's parsed-attribute convention.
@@ -97,6 +107,10 @@ export function registerPrimeCommand(program: Command): void {
 		.option("--exclude-domain <domains...>", "domain(s) to exclude")
 		.option("--context", "filter records to only those relevant to changed files")
 		.option("--files <paths...>", "filter records to only those relevant to specified files")
+		.option(
+			"--all",
+			"opt out of auto-context-scope and emit the full corpus (full mode only; manifest mode is unaffected)",
+		)
 		.option("--export <path>", "export output to a file")
 		.option("--budget <tokens>", `token budget for output (default: ${DEFAULT_BUDGET})`)
 		.option("--no-limit", "disable token budget limit")
@@ -244,9 +258,11 @@ export function registerPrimeCommand(program: Command): void {
 				const budgetEnabled = !jsonMode && options.limit !== false;
 				const budget = options.budget ? Number.parseInt(options.budget, 10) : DEFAULT_BUDGET;
 
-				// Load records once. Both branches (manifest and full) need either
-				// counts or the records themselves; one read keeps the auto-flip
-				// decision and the format pipeline aligned on the same dataset.
+				// Load records once, unfiltered. Both branches (manifest and full)
+				// need either counts or the records themselves; one read keeps the
+				// auto-flip decision and the format pipeline aligned on the same
+				// dataset. Auto-flip threshold uses unfiltered counts so a scoped
+				// session in a 200-record corpus still flips to manifest by default.
 				interface LoadedDomain {
 					domain: string;
 					records: ExpertiseRecord[];
@@ -255,11 +271,7 @@ export function registerPrimeCommand(program: Command): void {
 				const loaded: LoadedDomain[] = [];
 				for (const domain of targetDomains) {
 					const filePath = getExpertisePath(domain);
-					let records = await readExpertiseFile(filePath);
-					if (filesToFilter) {
-						records = filterByContext(records, filesToFilter);
-						if (records.length === 0 && !jsonMode) continue;
-					}
+					const records = await readExpertiseFile(filePath);
 					const lastUpdated = await getFileModTime(filePath);
 					loaded.push({ domain, records, lastUpdated });
 				}
@@ -280,6 +292,79 @@ export function registerPrimeCommand(program: Command): void {
 				} else {
 					const totalRecords = loaded.reduce((s, l) => s + l.records.length, 0);
 					useManifest = shouldAutoFlipToManifest(totalRecords, loaded.length);
+				}
+
+				// Slice-2 auto-context-scope: in full mode, narrow records to the
+				// agent's current working set (git status + active-work resolver)
+				// unless the user opts out with `--all`. Explicit scoping (--files,
+				// --context, positional domain) takes precedence — those code paths
+				// already filter via `filesToFilter` below. JSON mode skips
+				// auto-scope so machine consumers see a deterministic corpus.
+				let scopedTotal = 0;
+				let scopedKept = 0;
+				let scopedFromGit = false;
+				let activeContext: ActiveContext | null = null;
+				if (
+					!useManifest &&
+					!isScoped &&
+					!jsonMode &&
+					options.all !== true &&
+					filesToFilter === undefined
+				) {
+					const cwd = process.cwd();
+					if (isGitRepo(cwd)) {
+						const changedFiles = getActiveFiles(cwd);
+						const active = resolveActiveWork({ cwd });
+						const trackers = {
+							seeds: active.seeds,
+							gh: active.gh,
+							linear: active.linear,
+							bead: active.bead,
+						};
+						const ctx: ActiveContext = { changedFiles, trackers };
+						if (activeContextHasSignal(ctx)) {
+							activeContext = ctx;
+							scopedFromGit = true;
+						}
+					}
+				}
+
+				if (filesToFilter !== undefined) {
+					for (let i = 0; i < loaded.length; i++) {
+						const entry = loaded[i];
+						if (!entry) continue;
+						const filtered = filterByContext(entry.records, filesToFilter);
+						loaded[i] = { ...entry, records: filtered };
+					}
+					if (!jsonMode) {
+						for (let i = loaded.length - 1; i >= 0; i--) {
+							const entry = loaded[i];
+							if (entry && entry.records.length === 0) loaded.splice(i, 1);
+						}
+					}
+				} else if (activeContext && !useManifest) {
+					for (let i = 0; i < loaded.length; i++) {
+						const entry = loaded[i];
+						if (!entry) continue;
+						scopedTotal += entry.records.length;
+						const filtered = filterByActiveContext(entry.records, activeContext);
+						scopedKept += filtered.length;
+						loaded[i] = { ...entry, records: filtered };
+					}
+					if (scopedFromGit) {
+						const sources: string[] = [];
+						if (activeContext.changedFiles.length > 0) sources.push("git status");
+						const trackerBits: string[] = [];
+						for (const t of ["seeds", "gh", "linear", "bead"] as const) {
+							const v = activeContext.trackers[t];
+							if (v) trackerBits.push(`${t}:${v}`);
+						}
+						if (trackerBits.length > 0) sources.push(`active-work (${trackerBits.join(", ")})`);
+						const source = sources.length > 0 ? sources.join(" + ") : "git status";
+						console.error(
+							`prime: scoped to ${scopedKept} of ${scopedTotal} records based on ${source}; run with --all for the full corpus`,
+						);
+					}
 				}
 
 				// Contract block (write-side gates) leads non-JSON output in both
