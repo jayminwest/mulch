@@ -33,6 +33,15 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #   #   - manifest → always emit the domain index
 #   # --full / --manifest / scoping flags always override this on a per-call basis.
 #   default_mode: full        # one of: full, manifest
+#   # Trust-tier ranking weights for full-mode output. Sort score per record =
+#   # (★ count * star) + classification weight. Override only the knobs you
+#   # want to retune; unset fields keep their default. Higher scores surface
+#   # first; within-tier ties preserve insertion order.
+#   tier_weights:
+#     star: 100               # multiplier on the ★ confirmation count
+#     foundational: 50        # base score for foundational records
+#     tactical: 20             # base score for tactical records
+#     observational: 10        # base score for observational records
 #
 # search:
 #   # Multiplier applied to BM25 scores so records with more confirmed outcomes

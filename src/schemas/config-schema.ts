@@ -349,8 +349,45 @@ export const configSchema = {
 					enum: ["manifest", "full"],
 					default: "full",
 				},
+				tier_weights: {
+					type: "object",
+					title: "Trust-tier ranking weights",
+					description:
+						"Per-record sort score = stars * `star` + classification weight. Override only the knobs you want to retune; unset fields keep their default. Higher scores surface first.",
+					properties: {
+						star: {
+							type: "number",
+							title: "Star weight",
+							description:
+								"Multiplier applied to a record's confirmation-score (★ count from outcomes).",
+							minimum: 0,
+							default: 100,
+						},
+						foundational: {
+							type: "number",
+							title: "Foundational weight",
+							description: "Base score added to every foundational record.",
+							minimum: 0,
+							default: 50,
+						},
+						tactical: {
+							type: "number",
+							title: "Tactical weight",
+							description: "Base score added to every tactical record.",
+							minimum: 0,
+							default: 20,
+						},
+						observational: {
+							type: "number",
+							title: "Observational weight",
+							description: "Base score added to every observational record.",
+							minimum: 0,
+							default: 10,
+						},
+					},
+					additionalProperties: false,
+				},
 			},
-			required: ["default_mode"],
 			additionalProperties: false,
 		},
 		search: {

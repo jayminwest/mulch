@@ -18,6 +18,7 @@ export function formatDomainExpertiseCompact(
 	domain: string,
 	records: ExpertiseRecord[],
 	lastUpdated: Date | null,
+	annotations?: Map<string, string>,
 ): string {
 	const registry = getRegistry();
 	const updatedStr = lastUpdated ? `, updated ${formatTimeAgo(lastUpdated)}` : "";
@@ -27,7 +28,10 @@ export function formatDomainExpertiseCompact(
 	for (const r of records) {
 		const def = registry.get(r.type);
 		if (!def) continue;
-		lines.push(def.formatCompactLine(r));
+		let line = def.formatCompactLine(r);
+		const why = annotations && r.id ? annotations.get(r.id) : undefined;
+		if (why) line += ` — ${why}`;
+		lines.push(line);
 	}
 
 	return lines.join("\n");
@@ -80,6 +84,7 @@ export function formatDomainExpertise(
 	records: ExpertiseRecord[],
 	lastUpdated: Date | null,
 	options: { full?: boolean } = {},
+	annotations?: Map<string, string>,
 ): string {
 	const full = options.full ?? false;
 	const registry = getRegistry();
@@ -93,11 +98,36 @@ export function formatDomainExpertise(
 	for (const def of registry.enabled()) {
 		const subset = records.filter((r) => r.type === def.name);
 		const block = def.formatMarkdown(subset, full);
-		if (block.length > 0) sections.push(block);
+		if (block.length > 0) sections.push(annotateMarkdownBlock(block, annotations));
 	}
 
 	lines.push(sections.join("\n\n"));
 
+	return lines.join("\n");
+}
+
+// Append a "why surfaced" suffix to each bullet line that carries an id tag.
+// def.formatMarkdown returns a multi-line section ("### Patterns\n- [mx-xxx]
+// ...\n- [mx-yyy] ..."); we scan for `[mx-N]` at line start and append the
+// annotation when present. Bullets without ids (older records) are left
+// untouched.
+const MARKDOWN_ID_TAG_RE = /\[mx-([0-9a-f]+)\]/;
+
+function annotateMarkdownBlock(
+	block: string,
+	annotations: Map<string, string> | undefined,
+): string {
+	if (!annotations || annotations.size === 0) return block;
+	const lines = block.split("\n");
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line === undefined || !line.startsWith("- ")) continue;
+		const m = MARKDOWN_ID_TAG_RE.exec(line);
+		if (!m) continue;
+		const id = `mx-${m[1]}`;
+		const why = annotations.get(id);
+		if (why) lines[i] = `${line} — ${why}`;
+	}
 	return lines.join("\n");
 }
 
@@ -240,6 +270,7 @@ export function formatDomainExpertiseXml(
 	domain: string,
 	records: ExpertiseRecord[],
 	lastUpdated: Date | null,
+	annotations?: Map<string, string>,
 ): string {
 	const registry = getRegistry();
 	const updatedStr = lastUpdated ? ` updated="${formatTimeAgo(lastUpdated)}"` : "";
@@ -251,7 +282,9 @@ export function formatDomainExpertiseXml(
 		const def = registry.get(r.type);
 		if (!def) continue;
 		const idAttr = r.id ? ` id="${xmlEscape(r.id)}"` : "";
-		lines.push(`  <${r.type}${idAttr} classification="${r.classification}">`);
+		const why = annotations && r.id ? annotations.get(r.id) : undefined;
+		const whyAttr = why ? ` why="${xmlAttrEscape(why)}"` : "";
+		lines.push(`  <${r.type}${idAttr} classification="${r.classification}"${whyAttr}>`);
 
 		for (const inner of def.formatXml(r)) {
 			lines.push(inner);
@@ -386,6 +419,7 @@ export function formatDomainExpertisePlain(
 	domain: string,
 	records: ExpertiseRecord[],
 	lastUpdated: Date | null,
+	annotations?: Map<string, string>,
 ): string {
 	const registry = getRegistry();
 	const updatedStr = lastUpdated ? ` (updated ${formatTimeAgo(lastUpdated)})` : "";
@@ -397,10 +431,28 @@ export function formatDomainExpertisePlain(
 	for (const def of registry.enabled()) {
 		const subset = records.filter((r) => r.type === def.name);
 		if (subset.length === 0) continue;
-		for (const line of plainSection(def, subset)) lines.push(line);
+		for (const line of plainSection(def, subset)) {
+			lines.push(annotatePlainLine(line, annotations));
+		}
 	}
 
 	return lines.join("\n").trimEnd();
+}
+
+// Plain-format bullets carry `[mx-N]` after the leading "  - " indent. Mirror
+// the markdown post-processor: when an annotation exists for the id, append
+// "  (why: ...)" to the bullet so spawned codex agents see the same surface
+// reason that the compact/markdown formats expose.
+const PLAIN_ID_TAG_RE = /^\s+-\s+\[(mx-[0-9a-f]+)\]/;
+
+function annotatePlainLine(line: string, annotations: Map<string, string> | undefined): string {
+	if (!annotations || annotations.size === 0) return line;
+	const m = PLAIN_ID_TAG_RE.exec(line);
+	if (!m) return line;
+	const id = m[1];
+	if (!id) return line;
+	const why = annotations.get(id);
+	return why ? `${line}  (${why})` : line;
 }
 
 // Plain format is the spawn-injection contract: clean text suitable for

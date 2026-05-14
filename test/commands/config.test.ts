@@ -193,7 +193,8 @@ describe("config command", () => {
 		});
 
 		it("--path on an unset section synthesizes an object from leaf defaults", async () => {
-			// `prime` (whole section) is unset; schema has prime.default_mode default 'full'.
+			// `prime` (whole section) is unset; schema has defaults for both
+			// default_mode and tier_weights so the synthesized object includes both.
 			await initMulchProject(
 				tmpDir,
 				[
@@ -206,7 +207,15 @@ describe("config command", () => {
 			);
 			const result = runCli(["config", "show", "--path", "prime"], tmpDir);
 			expect(result.exitCode).toBe(0);
-			expect(JSON.parse(result.stdout.toString())).toEqual({ default_mode: "full" });
+			expect(JSON.parse(result.stdout.toString())).toEqual({
+				default_mode: "full",
+				tier_weights: {
+					star: 100,
+					foundational: 50,
+					tactical: 20,
+					observational: 10,
+				},
+			});
 		});
 
 		it("returns a nested user-set value", async () => {

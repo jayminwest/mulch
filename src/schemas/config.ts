@@ -2,6 +2,24 @@ export type PrimeMode = "manifest" | "full";
 
 export const DEFAULT_SEARCH_BOOST_FACTOR = 0.1;
 
+// Trust-tier ranking weights for `ml prime` full-mode output (v0.10 slice 3).
+// Sort score = stars * star_weight + classification_weight. Higher scores are
+// surfaced first; ties preserve insertion order so within-tier output stays
+// stable across runs.
+export interface PrimeTierWeights {
+	star?: number;
+	foundational?: number;
+	tactical?: number;
+	observational?: number;
+}
+
+export const DEFAULT_PRIME_TIER_WEIGHTS: Required<PrimeTierWeights> = {
+	star: 100,
+	foundational: 50,
+	tactical: 20,
+	observational: 10,
+};
+
 export const DEFAULT_HOOK_TIMEOUT_MS = 5_000;
 
 // Lifecycle events. `pre-*` hooks block on non-zero exit. Only `pre-record`
@@ -159,7 +177,11 @@ export interface MulchConfig {
 		};
 	};
 	prime?: {
-		default_mode: PrimeMode;
+		default_mode?: PrimeMode;
+		// Trust-tier ranking weights. Each knob is optional; unset fields fall
+		// back to DEFAULT_PRIME_TIER_WEIGHTS so projects can tune one dimension
+		// (e.g. observational only) without redeclaring the whole block.
+		tier_weights?: PrimeTierWeights;
 	};
 	search?: {
 		// Multiplier applied to BM25 scores via applyConfirmationBoost. 0 disables.

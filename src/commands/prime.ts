@@ -42,6 +42,11 @@ import {
 import { runHooks } from "../utils/hooks.ts";
 import { outputJsonError } from "../utils/json-output.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
+import {
+	buildSurfaceAnnotations,
+	resolveTierWeights,
+	sortByTrust,
+} from "../utils/prime-ranking.ts";
 
 interface PrimeOptions {
 	full?: boolean;
@@ -399,6 +404,29 @@ export function registerPrimeCommand(program: Command): void {
 						}
 					}
 				} else {
+					// Trust-tier ranking (slice 3 of the v0.10 prime overhaul): sort
+					// each domain's records by (★ count * star_weight) + classification
+					// weight before budget so the most trustworthy records survive
+					// truncation. Manifest mode skips this — manifest emits domain
+					// counts, not records, so order is irrelevant.
+					const tierWeights = resolveTierWeights(config.prime?.tier_weights);
+					for (let i = 0; i < loaded.length; i++) {
+						const entry = loaded[i];
+						if (!entry) continue;
+						loaded[i] = { ...entry, records: sortByTrust(entry.records, tierWeights) };
+					}
+
+					// Build the "why surfaced now" context for downstream formatters.
+					// Priority: explicit --files/--context (treat the requested paths as
+					// the agent's working set) → auto-context-scope signal → null. The
+					// resulting context drives both the file-match and tracker-match
+					// branches inside `whySurfaced`; when no signal exists, suffixes
+					// fall back to stars / recency / "universal".
+					const annotationContext: ActiveContext | null =
+						filesToFilter !== undefined
+							? { changedFiles: filesToFilter, trackers: {} }
+							: activeContext;
+
 					// --dry-run short-circuits: skip pre-prime hooks (they may have side
 					// effects like Slack posts) and emit a JSON summary of which records
 					// would be primed under the same budget rules as a real run. Format
@@ -477,7 +505,11 @@ export function registerPrimeCommand(program: Command): void {
 					}
 					const finalLoaded: LoadedDomain[] = loaded.map((l) => {
 						const mut = mutatedByDomain.get(l.domain);
-						return mut ? { ...l, records: mut } : l;
+						const base = mut ? { ...l, records: mut } : l;
+						// Re-sort post-hook so hook-mutated records also follow trust
+						// order. The pre-hook sort (on `loaded`) makes the dry-run path
+						// match what the real run would emit.
+						return { ...base, records: sortByTrust(base.records, tierWeights) };
 					});
 
 					if (jsonMode) {
@@ -515,26 +547,48 @@ export function registerPrimeCommand(program: Command): void {
 							domainRecordsToFormat = allDomainRecords;
 						}
 
+						// Build per-record "why surfaced" annotations using the same
+						// context (changedFiles + trackers) that drove the filter step.
+						// Computed after budget truncation so dropped records don't waste
+						// annotation work.
+						const annotationsByDomain = new Map<string, Map<string, string>>();
+						for (const { domain, records } of domainRecordsToFormat) {
+							annotationsByDomain.set(domain, buildSurfaceAnnotations(records, annotationContext));
+						}
+
 						// Format domain sections
 						const domainSections: string[] = [];
 						for (const { domain, records } of domainRecordsToFormat) {
 							const lastUpdated = modTimes.get(domain) ?? null;
+							const annotations = annotationsByDomain.get(domain);
 
 							switch (format) {
 								case "xml":
-									domainSections.push(formatDomainExpertiseXml(domain, records, lastUpdated));
+									domainSections.push(
+										formatDomainExpertiseXml(domain, records, lastUpdated, annotations),
+									);
 									break;
 								case "plain":
-									domainSections.push(formatDomainExpertisePlain(domain, records, lastUpdated));
+									domainSections.push(
+										formatDomainExpertisePlain(domain, records, lastUpdated, annotations),
+									);
 									break;
 								case "compact":
-									domainSections.push(formatDomainExpertiseCompact(domain, records, lastUpdated));
+									domainSections.push(
+										formatDomainExpertiseCompact(domain, records, lastUpdated, annotations),
+									);
 									break;
 								default:
 									domainSections.push(
-										formatDomainExpertise(domain, records, lastUpdated, {
-											full: options.full || verbose,
-										}),
+										formatDomainExpertise(
+											domain,
+											records,
+											lastUpdated,
+											{
+												full: options.full || verbose,
+											},
+											annotations,
+										),
 									);
 									break;
 							}

@@ -3710,4 +3710,355 @@ describe("prime command", () => {
 			}
 		});
 	});
+
+	describe("trust-tier ranking + why-surfaced (v0.10 slice 3)", () => {
+		let gitDir: string;
+		let originalCwd: string;
+
+		beforeEach(async () => {
+			originalCwd = process.cwd();
+			gitDir = await realpath(await mkdtemp(join(tmpdir(), "mulch-prime-slice3-")));
+			execSync("git init -q -b main", { cwd: gitDir, stdio: "pipe" });
+			execSync("git config user.email 'test@test.com'", { cwd: gitDir, stdio: "pipe" });
+			execSync("git config user.name 'Test'", { cwd: gitDir, stdio: "pipe" });
+			await mkdir(join(gitDir, ".mulch"), { recursive: true });
+			await mkdir(join(gitDir, ".mulch", "expertise"), { recursive: true });
+		});
+
+		afterEach(async () => {
+			process.chdir(originalCwd);
+			process.exitCode = 0;
+			await rm(gitDir, { recursive: true, force: true });
+		});
+
+		function makeProgram(): Command {
+			const program = new Command();
+			program.name("mulch").option("--json", "output as structured JSON").exitOverride();
+			registerPrimeCommand(program);
+			return program;
+		}
+
+		it("orders records by trust tier (★-confirmed > foundational > tactical > observational)", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, gitDir);
+			const cliPath = getExpertisePath("cli", gitDir);
+			await createExpertiseFile(cliPath);
+			const now = new Date().toISOString();
+			// Intentionally insert in reverse trust order so a stable read would
+			// surface observational first; the trust sort must flip this.
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Observational baseline",
+				classification: "observational",
+				recorded_at: now,
+				id: "mx-0001",
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Tactical fact",
+				classification: "tactical",
+				recorded_at: now,
+				id: "mx-0002",
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Foundational rule",
+				classification: "foundational",
+				recorded_at: now,
+				id: "mx-0003",
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Star-confirmed insight",
+				classification: "tactical",
+				recorded_at: now,
+				id: "mx-0004",
+				outcomes: [{ status: "success" }, { status: "success" }],
+			});
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full", "--all"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const starIdx = output.indexOf("Star-confirmed insight");
+				const foundIdx = output.indexOf("Foundational rule");
+				const tactIdx = output.indexOf("Tactical fact");
+				const obsIdx = output.indexOf("Observational baseline");
+				expect(starIdx).toBeGreaterThan(-1);
+				expect(starIdx).toBeLessThan(foundIdx);
+				expect(foundIdx).toBeLessThan(tactIdx);
+				expect(tactIdx).toBeLessThan(obsIdx);
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("prime.tier_weights config override re-ranks the order", async () => {
+			// Boost observational above foundational. Star weight set to 0 so a
+			// star-confirmed tactical record can't sneak in. With override,
+			// observational (300) > tactical (200) > foundational (100).
+			await writeConfig(
+				{
+					...DEFAULT_CONFIG,
+					domains: { cli: {} },
+					prime: {
+						tier_weights: { star: 0, foundational: 100, tactical: 200, observational: 300 },
+					},
+				},
+				gitDir,
+			);
+			const cliPath = getExpertisePath("cli", gitDir);
+			await createExpertiseFile(cliPath);
+			const now = new Date().toISOString();
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Foundational rule",
+				classification: "foundational",
+				recorded_at: now,
+				id: "mx-1001",
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Tactical fact",
+				classification: "tactical",
+				recorded_at: now,
+				id: "mx-1002",
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Observational baseline",
+				classification: "observational",
+				recorded_at: now,
+				id: "mx-1003",
+			});
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full", "--all"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const obsIdx = output.indexOf("Observational baseline");
+				const tactIdx = output.indexOf("Tactical fact");
+				const foundIdx = output.indexOf("Foundational rule");
+				expect(obsIdx).toBeGreaterThan(-1);
+				expect(obsIdx).toBeLessThan(tactIdx);
+				expect(tactIdx).toBeLessThan(foundIdx);
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		async function seedSurfaceFixture(): Promise<void> {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, gitDir);
+			const cliPath = getExpertisePath("cli", gitDir);
+			await createExpertiseFile(cliPath);
+			const now = new Date().toISOString();
+			const old = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString();
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "file-anchored",
+				description: "Pattern anchored to src/cli.ts",
+				files: ["src/cli.ts"],
+				classification: "tactical",
+				recorded_at: old,
+				id: "mx-2001",
+			});
+			await appendRecord(cliPath, {
+				type: "pattern",
+				name: "tracker-anchored",
+				description: "Pattern with seeds evidence only",
+				files: ["unrelated/path.ts"],
+				classification: "tactical",
+				recorded_at: old,
+				id: "mx-2002",
+				evidence: { seeds: "mulch-1234" },
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Star-confirmed convention",
+				classification: "tactical",
+				recorded_at: old,
+				id: "mx-2003",
+				outcomes: [{ status: "success" }],
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Universal convention with no anchors",
+				classification: "foundational",
+				recorded_at: old,
+				id: "mx-2004",
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Recently recorded convention",
+				classification: "tactical",
+				recorded_at: now,
+				id: "mx-2005",
+			});
+		}
+
+		it("compact format appends a 'why surfaced' suffix per record", async () => {
+			await seedSurfaceFixture();
+			// Stage a file change so the file-anchored pattern matches and the
+			// tracker resolver picks up the in-progress seed. Auto-context-scope
+			// supplies the ActiveContext; omitting --all lets it kick in.
+			await mkdir(join(gitDir, "src"), { recursive: true });
+			await writeFile(join(gitDir, "src", "cli.ts"), "// stub\n");
+			execSync("git add src/cli.ts", { cwd: gitDir, stdio: "pipe" });
+			await mkdir(join(gitDir, ".seeds"), { recursive: true });
+			await writeFile(
+				join(gitDir, ".seeds", "issues.jsonl"),
+				`${JSON.stringify({ id: "mulch-1234", status: "in_progress" })}\n`,
+			);
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--compact"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				// Every surfaced record carries a why suffix on its compact line.
+				expect(output).toMatch(/file-anchored.* — why: file match \(src\/cli\.ts\)/);
+				expect(output).toMatch(/tracker-anchored.* — why: in-progress seeds:mulch-1234/);
+				expect(output).toMatch(/Star-confirmed convention.* — why: ★1 confirmations/);
+				expect(output).toMatch(/Recently recorded convention.* — why: recorded today/);
+				expect(output).toMatch(/Universal convention.* — why: applies broadly/);
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("markdown (--full) format appends suffixes to bullets", async () => {
+			await seedSurfaceFixture();
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--full", "--all"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toMatch(/\[mx-2003\].*— why: ★1 confirmations/);
+				expect(output).toMatch(/\[mx-2005\].*— why: recorded today/);
+				expect(output).toMatch(/\[mx-2004\].*— why: applies broadly/);
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("xml format carries a why='...' attribute on each record element", async () => {
+			await seedSurfaceFixture();
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = new Command();
+				program
+					.name("mulch")
+					.option("--json", "output as structured JSON")
+					.option("--format <fmt>", "output format")
+					.exitOverride();
+				registerPrimeCommand(program);
+				await program.parseAsync(["node", "mulch", "--format", "xml", "prime", "--full", "--all"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain('id="mx-2003"');
+				expect(output).toMatch(/id="mx-2003"[^>]*why="why: /);
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("file-match suffix uses the --files arg as the surfacing context", async () => {
+			await seedSurfaceFixture();
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			const errSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--compact", "--files", "src/cli.ts"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toMatch(/file-anchored.* — why: file match \(src\/cli\.ts\)/);
+			} finally {
+				logSpy.mockRestore();
+				errSpy.mockRestore();
+			}
+		});
+
+		it("--json mode emits records without why-surfaced annotations", async () => {
+			await seedSurfaceFixture();
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "--json", "prime", "--full", "--all"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const parsed = JSON.parse(output);
+				const cli = parsed.domains.find((d: { domain: string }) => d.domain === "cli");
+				expect(cli).toBeDefined();
+				// JSON mode is the machine-consumer contract — annotations only
+				// belong in the rendered formats. Check that no record carries
+				// a "why" property leak.
+				for (const r of cli.records) {
+					expect(r).not.toHaveProperty("why");
+				}
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("manifest mode is unaffected by trust ranking (lists domains, not records)", async () => {
+			await seedSurfaceFixture();
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--manifest"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("Project Expertise Manifest");
+				expect(output).not.toMatch(/why: /);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("trust ranking applies to dry-run preview (highest trust first)", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, gitDir);
+			const cliPath = getExpertisePath("cli", gitDir);
+			await createExpertiseFile(cliPath);
+			const now = new Date().toISOString();
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Observational baseline",
+				classification: "observational",
+				recorded_at: now,
+				id: "mx-3001",
+			});
+			await appendRecord(cliPath, {
+				type: "convention",
+				content: "Foundational rule",
+				classification: "foundational",
+				recorded_at: now,
+				id: "mx-3002",
+			});
+			process.chdir(gitDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--dry-run", "--full", "--all"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				const parsed = JSON.parse(output);
+				const ids = parsed.wouldPrime.map((r: { id: string }) => r.id);
+				expect(ids[0]).toBe("mx-3002");
+				expect(ids[1]).toBe("mx-3001");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+	});
 });
