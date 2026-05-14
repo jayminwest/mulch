@@ -1752,6 +1752,93 @@ describe("prime command", () => {
 				expect(reminder).toContain("ml learn");
 			}
 		});
+
+		describe("style presets", () => {
+			it("defaults to the conditional preset when no config is passed", () => {
+				const reminder = getSessionEndReminder("markdown");
+				expect(reminder).toContain("If you discovered");
+			});
+
+			it("explicit conditional style matches the default", () => {
+				const def = getSessionEndReminder("markdown");
+				const explicit = getSessionEndReminder("markdown", { style: "conditional" });
+				expect(explicit).toBe(def);
+			});
+
+			it("none style returns an empty string in every format", () => {
+				for (const format of ["markdown", "xml", "plain", "embedded"] as const) {
+					expect(getSessionEndReminder(format, { style: "none" })).toBe("");
+				}
+			});
+
+			it("minimal style emits a single short line per format", () => {
+				for (const format of ["markdown", "plain", "embedded"] as const) {
+					const reminder = getSessionEndReminder(format, { style: "minimal" });
+					expect(reminder).toContain("ml learn");
+					expect(reminder).toContain("ml record");
+					expect(reminder).toContain("ml sync");
+					// One line, no bullet list, no 🚨 banner.
+					expect(reminder.split("\n").length).toBe(1);
+					expect(reminder).not.toContain("\u{1F6A8}");
+				}
+			});
+
+			it("minimal xml stays inside a session_close tag", () => {
+				const reminder = getSessionEndReminder("xml", { style: "minimal" });
+				expect(reminder).toContain("<session_close>");
+				expect(reminder).toContain("</session_close>");
+			});
+
+			it("directive style ships type glossary + dedup nudge + anti-filler guardrails", () => {
+				for (const format of ["markdown", "plain", "xml", "embedded"] as const) {
+					const reminder = getSessionEndReminder(format, { style: "directive" });
+					// numbered imperative steps
+					expect(reminder).toContain("ml learn");
+					expect(reminder).toContain("ml record");
+					expect(reminder).toContain("ml sync");
+					// type glossary
+					expect(reminder).toContain("convention");
+					expect(reminder).toContain("pattern");
+					expect(reminder).toContain("failure");
+					expect(reminder).toContain("decision");
+					expect(reminder).toContain("reference");
+					expect(reminder).toContain("guide");
+					// dedup nudge
+					expect(reminder.toLowerCase()).toContain("upsert");
+					// anti-filler examples
+					expect(reminder).toContain("use TypeScript");
+					expect(reminder).toContain("this PR adds X");
+					// no "you MUST" ritual prose — directiveness comes from imperative
+					// voice and concrete negative examples
+					expect(reminder).not.toContain("you MUST");
+					expect(reminder).not.toContain("NEVER skip");
+				}
+			});
+
+			it("directive markdown/plain keep the 🚨 anchor; embedded drops it", () => {
+				expect(getSessionEndReminder("markdown", { style: "directive" })).toContain("\u{1F6A8}");
+				expect(getSessionEndReminder("plain", { style: "directive" })).toContain("\u{1F6A8}");
+				expect(getSessionEndReminder("embedded", { style: "directive" })).not.toContain(
+					"\u{1F6A8}",
+				);
+			});
+
+			it("custom override wins over style and returns the verbatim string", () => {
+				const customProse = "Custom session-close prose — exit politely.";
+				for (const format of ["markdown", "xml", "plain", "embedded"] as const) {
+					expect(getSessionEndReminder(format, { custom: customProse })).toBe(customProse);
+					// Even with style set, custom wins.
+					expect(getSessionEndReminder(format, { style: "directive", custom: customProse })).toBe(
+						customProse,
+					);
+				}
+			});
+
+			it("empty custom override falls through to the preset", () => {
+				const reminder = getSessionEndReminder("markdown", { custom: "" });
+				expect(reminder).toContain("If you discovered");
+			});
+		});
 	});
 
 	describe("token budget", () => {
@@ -2665,6 +2752,82 @@ describe("prime command", () => {
 				expect(output).toContain("ml learn");
 				expect(output).toContain("ml record");
 				expect(output).toContain("ml sync");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("prime.session_close.style=directive emits the type glossary + anti-filler examples", async () => {
+			await seedTwoDomains();
+			const config = await readConfig(tmpDir);
+			await writeConfig(
+				{ ...config, prime: { ...config.prime, session_close: { style: "directive" } } },
+				tmpDir,
+			);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain("SESSION CLOSE");
+				// Directive distinguishing markers:
+				expect(output).toContain("convention");
+				expect(output).toContain("anti-pattern");
+				expect(output.toLowerCase()).toContain("upsert");
+				expect(output).toContain("use TypeScript");
+				expect(output).toContain("this PR adds X");
+				// And NOT the conditional default's lead-in:
+				expect(output).not.toContain("If you discovered insights worth preserving");
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("prime.session_close.style=none suppresses the footer entirely", async () => {
+			await seedTwoDomains();
+			const config = await readConfig(tmpDir);
+			await writeConfig(
+				{ ...config, prime: { ...config.prime, session_close: { style: "none" } } },
+				tmpDir,
+			);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).not.toContain("SESSION CLOSE");
+				expect(output).not.toContain("Before closing");
+				// And output does not end with stray blank lines from the suppressed
+				// reminder concatenation.
+				expect(output).not.toMatch(/\n\n\n$/);
+			} finally {
+				logSpy.mockRestore();
+			}
+		});
+
+		it("prime.session_close.custom replaces the preset with verbatim prose", async () => {
+			await seedTwoDomains();
+			const config = await readConfig(tmpDir);
+			const customProse = "Custom close-of-session marker — record discoveries to .mulch/.";
+			await writeConfig(
+				{
+					...config,
+					prime: { ...config.prime, session_close: { style: "directive", custom: customProse } },
+				},
+				tmpDir,
+			);
+			process.chdir(tmpDir);
+			const logSpy = spyOn(console, "log").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime"]);
+				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+				expect(output).toContain(customProse);
+				// Custom wins over style — directive markers must NOT appear.
+				expect(output).not.toContain("anti-pattern");
+				expect(output).not.toContain("SESSION CLOSE");
 			} finally {
 				logSpy.mockRestore();
 			}

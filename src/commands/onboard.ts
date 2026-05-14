@@ -2,6 +2,8 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
+import type { SessionCloseConfig } from "../schemas/config.ts";
+import { readConfig } from "../utils/config.ts";
 import { getSessionEndReminder } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/markers.ts";
@@ -16,7 +18,7 @@ export function getVersionMarker(): string {
 	return `<!-- mulch-onboard:v${getCurrentVersion()} -->`;
 }
 
-function buildSnippet(): string {
+function buildSnippet(sessionClose?: SessionCloseConfig): string {
 	const pkgVersion = getCurrentVersion();
 	return `## Project Expertise (Mulch)
 <!-- mulch-onboard:v${pkgVersion} -->
@@ -59,16 +61,27 @@ cleanup — \`.mulch/\` resolves to the main repo.
 \`.mulch/archive/\` directly — those records are stale by definition. If you need historical
 context, run \`ml search --archived <query>\`.
 
-${getSessionEndReminder("embedded")}
+${getSessionEndReminder("embedded", sessionClose)}
 `;
 }
 
 const LEGACY_HEADER = "## Project Expertise (Mulch)";
 const LEGACY_TAIL = 'mulch validate && git add .mulch/ && git commit -m "mulch: record learnings"';
 
-function getSnippet(_provider: string | undefined): string {
+function getSnippet(_provider: string | undefined, sessionClose?: SessionCloseConfig): string {
 	// All providers use the same standardized snippet.
-	return buildSnippet();
+	return buildSnippet(sessionClose);
+}
+
+// `ml onboard` may run before `ml init`, so reading the config gracefully
+// degrades to "no preset configured" rather than failing the command.
+async function readSessionCloseConfig(cwd: string): Promise<SessionCloseConfig | undefined> {
+	try {
+		const config = await readConfig(cwd);
+		return config.prime?.session_close;
+	} catch {
+		return undefined;
+	}
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -214,7 +227,8 @@ export async function runOnboard(options: {
 	jsonMode?: boolean;
 }): Promise<void> {
 	const cwd = options.cwd ?? process.cwd();
-	const snippet = getSnippet(options.provider);
+	const sessionClose = await readSessionCloseConfig(cwd);
+	const snippet = getSnippet(options.provider, sessionClose);
 	const wrappedSnippet = wrapInMarkers(snippet);
 
 	if (options.stdout) {

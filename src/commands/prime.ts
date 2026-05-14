@@ -400,7 +400,8 @@ export function registerPrimeCommand(program: Command): void {
 						// embedders handle session framing in their own dispatch, so the
 						// reminder would be redundant noise inside a system prompt.
 						if (format !== "plain") {
-							output += `\n\n${getSessionEndReminder(format)}`;
+							const reminder = getSessionEndReminder(format, config.prime?.session_close);
+							if (reminder.length > 0) output += `\n\n${reminder}`;
 						}
 					}
 				} else {
@@ -618,7 +619,8 @@ export function registerPrimeCommand(program: Command): void {
 						// embedders handle session framing in their own dispatch, so the
 						// reminder would be redundant noise inside a system prompt.
 						if (format !== "plain") {
-							output += `\n\n${getSessionEndReminder(format)}`;
+							const reminder = getSessionEndReminder(format, config.prime?.session_close);
+							if (reminder.length > 0) output += `\n\n${reminder}`;
 						}
 					}
 				}

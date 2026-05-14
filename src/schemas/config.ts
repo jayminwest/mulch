@@ -1,5 +1,21 @@
 export type PrimeMode = "manifest" | "full";
 
+// Session-close footer styles. Audit (V1_PLAN §3) found 70-80% of conventions
+// were ritual restatements driven by an earlier "you MUST run this checklist"
+// prose; the v0.10.0 reframing dropped it for `conditional`. `directive` ships
+// a numbered imperative + type glossary + anti-filler guardrails for projects
+// that need a louder voice. `minimal` is a one-line nudge. `none` suppresses
+// the footer entirely. `custom` (via SessionCloseConfig.custom) wins over
+// style and ships the raw string verbatim.
+export type SessionCloseStyleName = "directive" | "conditional" | "minimal" | "none";
+
+export const DEFAULT_SESSION_CLOSE_STYLE: SessionCloseStyleName = "conditional";
+
+export interface SessionCloseConfig {
+	style?: SessionCloseStyleName;
+	custom?: string;
+}
+
 export const DEFAULT_SEARCH_BOOST_FACTOR = 0.1;
 
 // Trust-tier ranking weights for `ml prime` full-mode output (v0.10 slice 3).
@@ -183,6 +199,11 @@ export interface MulchConfig {
 		// back to DEFAULT_PRIME_TIER_WEIGHTS so projects can tune one dimension
 		// (e.g. observational only) without redeclaring the whole block.
 		tier_weights?: PrimeTierWeights;
+		// Session-close footer customization. `style` selects a built-in preset
+		// (directive / conditional / minimal / none); `custom` overrides the
+		// preset entirely with verbatim prose. Both are optional — unset means
+		// DEFAULT_SESSION_CLOSE_STYLE ("conditional", v0.10.0 back-compat).
+		session_close?: SessionCloseConfig;
 	};
 	search?: {
 		// Multiplier applied to BM25 scores via applyConfirmationBoost. 0 disables.

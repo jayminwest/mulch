@@ -4,8 +4,8 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+	buildCursorRuleContent,
 	CLAUDE_HOOK_COMMAND,
-	CURSOR_RULE_CONTENT,
 	checkGitHook,
 	installGitHook,
 	recipes,
@@ -152,7 +152,7 @@ describe("setup command", () => {
 			expect(existsSync(rulePath)).toBe(true);
 
 			const content = await readFile(rulePath, "utf-8");
-			expect(content).toBe(CURSOR_RULE_CONTENT);
+			expect(content).toBe(await buildCursorRuleContent(tmpDir));
 		});
 
 		it("is idempotent", async () => {

@@ -215,6 +215,7 @@ describe("config command", () => {
 					tactical: 20,
 					observational: 10,
 				},
+				session_close: { style: "conditional" },
 			});
 		});
 

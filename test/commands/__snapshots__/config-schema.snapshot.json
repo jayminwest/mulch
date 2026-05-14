@@ -167,6 +167,31 @@
             }
           },
           "additionalProperties": false
+        },
+        "session_close": {
+          "type": "object",
+          "title": "Session-close footer",
+          "description": "Footer appended after `ml prime` (and the embedded snippet emitted by `ml setup` / `ml onboard`). `style` selects a built-in preset; `custom` overrides the preset with verbatim prose.",
+          "properties": {
+            "style": {
+              "type": "string",
+              "title": "Preset style",
+              "description": "`directive` = numbered imperative + type glossary + anti-filler guardrails. `conditional` = the v0.10.0 'if you discovered…' reframe (default). `minimal` = one-line nudge. `none` = suppress the footer entirely.",
+              "enum": [
+                "directive",
+                "conditional",
+                "minimal",
+                "none"
+              ],
+              "default": "conditional"
+            },
+            "custom": {
+              "type": "string",
+              "title": "Custom override",
+              "description": "Verbatim prose to emit in place of the preset. Wins over `style` when both are set; the embedded variant (used by `ml setup` / `ml onboard`) is also overridden."
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

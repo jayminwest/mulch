@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
-import { getMulchDir } from "../utils/config.ts";
+import { getMulchDir, readConfig } from "../utils/config.ts";
 import { getSessionEndReminder } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import {
@@ -21,6 +21,18 @@ import {
 	type RecipeWithSource,
 	resolveRecipe,
 } from "../utils/recipe-discovery.ts";
+
+// Read prime.session_close from .mulch/mulch.config.yaml. Returns undefined
+// when mulch isn't initialized yet (setup may run before `ml init`) so the
+// caller falls back to the default preset rather than failing.
+async function readSessionCloseConfig(cwd: string) {
+	try {
+		const config = await readConfig(cwd);
+		return config.prime?.session_close;
+	} catch {
+		return undefined;
+	}
+}
 
 // ────────────────────────────────────────────────────────────
 // Git hook helpers
@@ -296,7 +308,12 @@ function cursorRulePath(cwd: string): string {
 	return join(cwd, ".cursor", "rules", "mulch.mdc");
 }
 
-const CURSOR_RULE_CONTENT = `---
+// Built from config at install/check time so projects can swap the session-close
+// preset (prime.session_close.style) without forking the recipe.
+async function buildCursorRuleContent(cwd: string): Promise<string> {
+	const sessionClose = await readSessionCloseConfig(cwd);
+	const footer = getSessionEndReminder("embedded", sessionClose);
+	return `---
 description: Mulch expertise integration
 globs: *
 alwaysApply: true
@@ -315,22 +332,24 @@ Use \`ml prime --files src/foo.ts\` to load only records relevant to specific fi
 
 Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
 
-${getSessionEndReminder("embedded")}
+${footer}
 `;
+}
 
 const cursorRecipe: ProviderRecipe = {
 	async install(cwd) {
 		const rulePath = cursorRulePath(cwd);
+		const content = await buildCursorRuleContent(cwd);
 
 		if (existsSync(rulePath)) {
 			const existing = await readFile(rulePath, "utf-8");
-			if (existing === CURSOR_RULE_CONTENT) {
+			if (existing === content) {
 				return { success: true, message: "Cursor rule already installed." };
 			}
 		}
 
 		await mkdir(dirname(rulePath), { recursive: true });
-		await writeFile(rulePath, CURSOR_RULE_CONTENT, "utf-8");
+		await writeFile(rulePath, content, "utf-8");
 
 		return {
 			success: true,
@@ -344,7 +363,8 @@ const cursorRecipe: ProviderRecipe = {
 			return { success: false, message: "Cursor rule file not found." };
 		}
 		const content = await readFile(rulePath, "utf-8");
-		if (content !== CURSOR_RULE_CONTENT) {
+		const expected = await buildCursorRuleContent(cwd);
+		if (content !== expected) {
 			return {
 				success: false,
 				message: "Cursor rule file exists but has been modified.",
@@ -372,7 +392,10 @@ function codexAgentsPath(cwd: string): string {
 	return join(cwd, "AGENTS.md");
 }
 
-const CODEX_SECTION = `${MARKER_START}
+async function buildCodexSection(cwd: string): Promise<string> {
+	const sessionClose = await readSessionCloseConfig(cwd);
+	const footer = getSessionEndReminder("embedded", sessionClose);
+	return `${MARKER_START}
 ## Mulch Expertise
 
 At the start of every session, run \`ml prime\` to load project expertise.
@@ -382,8 +405,9 @@ Use \`ml prime --files src/foo.ts\` to load only records relevant to specific fi
 
 Evidence auto-populates from git (current commit + changed files). Link trackers explicitly with \`--evidence-seeds <id>\` / \`--evidence-gh <id>\` / \`--evidence-linear <id>\` / \`--evidence-bead <id>\`, or \`--relates-to <mx-id>\`.
 
-${getSessionEndReminder("embedded")}
+${footer}
 ${MARKER_END}`;
+}
 
 // Codex hooks via .codex/config.toml — Codex 0.124.0+ (April 2026) supports
 // SessionStart hooks whose stdout JSON `additionalContext` is injected as
@@ -443,9 +467,10 @@ const codexRecipe: ProviderRecipe = {
 		}
 
 		if (!agentsAlready) {
+			const codexSection = await buildCodexSection(cwd);
 			const newAgents = agentsContent
-				? `${agentsContent.trimEnd()}\n\n${CODEX_SECTION}\n`
-				: `${CODEX_SECTION}\n`;
+				? `${agentsContent.trimEnd()}\n\n${codexSection}\n`
+				: `${codexSection}\n`;
 			await writeFile(agentsPath, newAgents, "utf-8");
 		}
 
@@ -574,8 +599,8 @@ export {
 	BUILTIN_RECIPES,
 	recipes,
 	BUILTIN_PROVIDER_NAMES,
-	CURSOR_RULE_CONTENT,
-	CODEX_SECTION,
+	buildCursorRuleContent,
+	buildCodexSection,
 	CLAUDE_HOOK_COMMAND,
 	MULCH_HOOK_SECTION,
 	installGitHook,

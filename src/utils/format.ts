@@ -1,6 +1,11 @@
 import { getRegistry } from "../registry/type-registry.ts";
-import type { HookEvent, MulchConfig } from "../schemas/config.ts";
-import { HOOK_EVENTS } from "../schemas/config.ts";
+import type {
+	HookEvent,
+	MulchConfig,
+	SessionCloseConfig,
+	SessionCloseStyleName,
+} from "../schemas/config.ts";
+import { DEFAULT_SESSION_CLOSE_STYLE, HOOK_EVENTS } from "../schemas/config.ts";
 import type { BuiltinRecordType, ExpertiseRecord } from "../schemas/record.ts";
 import { formatLinks, formatTimeAgo, xmlAttrEscape, xmlEscape } from "./format-helpers.ts";
 
@@ -477,16 +482,39 @@ export function formatJsonOutput(domains: JsonDomain[]): string {
 	return JSON.stringify({ type: "expertise", domains }, null, 2);
 }
 
-// Conditional close-session prose. Audit (V1_PLAN §3) found 70-80% of conventions
-// were ritual restatements driven by the prior "you MUST run this checklist" prose;
-// reframing to "if you discovered ..." suppresses filler without losing the
-// memory-anchor function of the 🚨 marker (which V1_PLAN §5.2 keeps in the prime
-// footer for agents whose context has filled with file edits since session start).
-// Single helper feeds the prime footer (markdown/compact/xml/plain) and the
-// onboard/cursor/codex snippets ("embedded").
-export type SessionCloseStyle = PrimeFormat | "embedded";
+// Close-session footer prose. Audit (V1_PLAN §3) found 70-80% of conventions
+// were ritual restatements driven by the prior "you MUST run this checklist"
+// prose; the v0.10.0 reframe to "if you discovered ..." suppresses filler
+// without losing the memory-anchor function of the 🚨 marker (V1_PLAN §5.2
+// keeps it on the prime footer for agents whose context has filled with file
+// edits since session start). Single helper feeds the prime footer
+// (markdown/compact/xml/plain) and the onboard/cursor/codex snippets
+// ("embedded"). Style preset and custom override come from `prime.session_close`
+// in mulch.config.yaml.
+export type SessionCloseFormat = PrimeFormat | "embedded";
 
-export function getSessionEndReminder(format: SessionCloseStyle): string {
+export function getSessionEndReminder(
+	format: SessionCloseFormat,
+	config?: SessionCloseConfig,
+): string {
+	const custom = config?.custom;
+	if (typeof custom === "string" && custom.length > 0) {
+		return custom;
+	}
+	const style = config?.style ?? DEFAULT_SESSION_CLOSE_STYLE;
+	switch (style) {
+		case "none":
+			return "";
+		case "minimal":
+			return renderMinimalSessionClose(format);
+		case "directive":
+			return renderDirectiveSessionClose(format);
+		default:
+			return renderConditionalSessionClose(format);
+	}
+}
+
+function renderConditionalSessionClose(format: SessionCloseFormat): string {
 	switch (format) {
 		case "xml":
 			return [
@@ -544,6 +572,141 @@ export function getSessionEndReminder(format: SessionCloseStyle): string {
 			].join("\n");
 	}
 }
+
+// One-line nudge for projects that want presence-only signaling — surfaces
+// the three-step workflow without the type glossary, anti-filler guardrails,
+// or memory-anchor marker. Embedded form drops "Before You Finish" framing
+// because it lives at the top of CLAUDE.md, not at end-of-session.
+function renderMinimalSessionClose(format: SessionCloseFormat): string {
+	switch (format) {
+		case "xml":
+			return [
+				"<session_close>",
+				"  <instruction>Before closing, record any insight worth preserving: `ml learn` → `ml record &lt;domain&gt; --type &lt;type&gt; …` → `ml sync`. Skip if no insight surfaced.</instruction>",
+				"</session_close>",
+			].join("\n");
+		case "plain":
+			return "Before closing, record any insight worth preserving: ml learn → ml record <domain> --type <type> … → ml sync. Skip if no insight surfaced.";
+		case "embedded":
+			return "**Before you finish**: record any insight worth preserving with `ml learn` → `ml record <domain> --type <type> …` → `ml sync`. Skip if no insight surfaced.";
+		default:
+			return "**Before closing**: record any insight worth preserving — `ml learn` → `ml record <domain> --type <type> …` → `ml sync`. Skip if no insight surfaced.";
+	}
+}
+
+// Directive preset: numbered imperative + type glossary + dedup nudge +
+// anti-filler examples. Directiveness comes from imperative voice and
+// concrete negative examples, NOT from "you MUST" ritual prose (the audit
+// data is clear that produces 70-80% filler conventions).
+function renderDirectiveSessionClose(format: SessionCloseFormat): string {
+	switch (format) {
+		case "xml":
+			return [
+				"<session_close>",
+				"  <heading>SESSION CLOSE — record insights before exiting</heading>",
+				"  <steps>",
+				'    <step n="1">Run `ml learn` to see changed files and suggested domains.</step>',
+				'    <step n="2">Run `ml record &lt;domain&gt; --type &lt;type&gt; …` for each insight worth preserving.</step>',
+				'    <step n="3">Run `ml sync` to validate, stage, and commit the .mulch/ changes.</step>',
+				"  </steps>",
+				"  <types>",
+				'    <type name="convention">a norm the project follows (e.g. naming, formatting)</type>',
+				'    <type name="pattern">how-to: a repeatable approach to a class of problem</type>',
+				'    <type name="failure">anti-pattern + fix: what broke and how you resolved it</type>',
+				'    <type name="decision">we picked X over Y, and why</type>',
+				'    <type name="reference">pointer to an external spec, doc, or codebase landmark</type>',
+				'    <type name="guide">a walk-through of a multi-step workflow</type>',
+				"  </types>",
+				"  <dedup>`--name` upserts merge; re-recording is safe — outcomes accumulate, fields update in place.</dedup>",
+				"  <do_not_record>",
+				"    <item>Restatements of CLAUDE.md or prior records</item>",
+				'    <item>Generic truisms ("use TypeScript", "write tests")</item>',
+				'    <item>Single-PR-scoped facts ("this PR adds X")</item>',
+				"    <item>Ritual confirmations with no new information</item>",
+				"  </do_not_record>",
+				"  <note>Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.</note>",
+				"</session_close>",
+			].join("\n");
+		case "plain":
+			return [
+				"=== \u{1F6A8} SESSION CLOSE \u{1F6A8} ===",
+				"",
+				"Record insights before exiting:",
+				"",
+				"  1. ml learn                              (see changed files + suggested domains)",
+				"  2. ml record <domain> --type <type> ...  (record each insight)",
+				"  3. ml sync                               (validate, stage, commit)",
+				"",
+				"Types:",
+				"  - convention : a norm the project follows (naming, formatting, ...)",
+				"  - pattern    : how-to — a repeatable approach to a class of problem",
+				"  - failure    : anti-pattern + fix — what broke and how you resolved it",
+				"  - decision   : we picked X over Y, and why",
+				"  - reference  : pointer to an external spec / doc / codebase landmark",
+				"  - guide      : a walk-through of a multi-step workflow",
+				"",
+				"Dedup: --name upserts merge; re-recording is safe — outcomes accumulate, fields update in place.",
+				"",
+				"Do NOT record:",
+				"  - Restatements of CLAUDE.md or prior records",
+				'  - Generic truisms ("use TypeScript", "write tests")',
+				'  - Single-PR-scoped facts ("this PR adds X")',
+				"  - Ritual confirmations with no new information",
+				"",
+				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
+			].join("\n");
+		case "embedded":
+			return [
+				"### Before You Finish",
+				"",
+				"Record insights worth preserving before closing this session:",
+				"",
+				"1. `ml learn` — see changed files and suggested domains",
+				"2. `ml record <domain> --type <type> …` — record each insight",
+				"3. `ml sync` — validate, stage, commit",
+				"",
+				"**Types**:",
+				"- `convention` — a norm the project follows (naming, formatting, …)",
+				"- `pattern` — how-to: a repeatable approach to a class of problem",
+				"- `failure` — anti-pattern + fix: what broke and how you resolved it",
+				"- `decision` — we picked X over Y, and why",
+				"- `reference` — pointer to an external spec / doc / codebase landmark",
+				"- `guide` — a walk-through of a multi-step workflow",
+				"",
+				"**Dedup**: `--name` upserts merge; re-recording is safe — outcomes accumulate, fields update in place.",
+				"",
+				'**Do not record**: restatements of CLAUDE.md or prior records, generic truisms ("use TypeScript"), single-PR-scoped facts ("this PR adds X"), ritual confirmations with no new information.',
+				"",
+				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
+			].join("\n");
+		default:
+			return [
+				"# \u{1F6A8} SESSION CLOSE \u{1F6A8}",
+				"",
+				"**Record insights before exiting:**",
+				"",
+				"1. `ml learn` — see changed files and suggested domains",
+				"2. `ml record <domain> --type <type> …` — record each insight",
+				"3. `ml sync` — validate, stage, commit",
+				"",
+				"**Types**:",
+				"- `convention` — a norm the project follows (naming, formatting, …)",
+				"- `pattern` — how-to: a repeatable approach to a class of problem",
+				"- `failure` — anti-pattern + fix: what broke and how you resolved it",
+				"- `decision` — we picked X over Y, and why",
+				"- `reference` — pointer to an external spec / doc / codebase landmark",
+				"- `guide` — a walk-through of a multi-step workflow",
+				"",
+				"**Dedup**: `--name` upserts merge; re-recording is safe — outcomes accumulate, fields update in place.",
+				"",
+				'**Do not record**: restatements of CLAUDE.md or prior records, generic truisms ("use TypeScript"), single-PR-scoped facts ("this PR adds X"), ritual confirmations with no new information.',
+				"",
+				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
+			].join("\n");
+	}
+}
+
+export type { SessionCloseStyleName };
 
 export interface StatusDomainStat {
 	domain: string;
