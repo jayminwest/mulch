@@ -40,6 +40,9 @@ function convention(opts: {
 	content: string;
 	classification?: "foundational" | "tactical" | "observational";
 	withSeed?: string;
+	withGh?: string;
+	withLinear?: string;
+	withBead?: string;
 	withCommit?: string;
 	relates?: string[];
 	id?: string;
@@ -52,9 +55,12 @@ function convention(opts: {
 		recorded_at: opts.recordedAt ?? nowIso(),
 	};
 	if (opts.id) r.id = opts.id;
-	if (opts.withSeed || opts.withCommit) {
+	if (opts.withSeed || opts.withGh || opts.withLinear || opts.withBead || opts.withCommit) {
 		r.evidence = {};
 		if (opts.withSeed) r.evidence.seeds = opts.withSeed;
+		if (opts.withGh) r.evidence.gh = opts.withGh;
+		if (opts.withLinear) r.evidence.linear = opts.withLinear;
+		if (opts.withBead) r.evidence.bead = opts.withBead;
 		if (opts.withCommit) r.evidence.commit = opts.withCommit;
 	}
 	if (opts.relates) r.relates_to = opts.relates;
@@ -249,6 +255,96 @@ describe("audit utility", () => {
 		expect(byAction.attribute?.record_ids).not.toContain("mx-cccc00");
 	});
 
+	it("breaks evidence coverage down per-tracker (with_tracker)", async () => {
+		const config: MulchConfig = {
+			...DEFAULT_CONFIG,
+			domains: { cli: {} },
+		};
+		await writeConfig(config, tmpDir);
+		await seedDomain(tmpDir, "cli", [
+			convention({ content: "a", withSeed: "mulch-001" }),
+			convention({ content: "b", withGh: "42" }),
+			convention({ content: "c", withGh: "43" }),
+			convention({ content: "d", withLinear: "ENG-123" }),
+			convention({ content: "e", withBead: "b-abc123" }),
+			convention({ content: "f" }), // floater
+		]);
+		const report = await computeAudit(config, { cwd: tmpDir });
+		expect(report.evidence.with_tracker).toEqual({
+			seeds: 1,
+			gh: 2,
+			linear: 1,
+			bead: 1,
+		});
+		// Back-compat: with_seeds mirrors with_tracker.seeds.
+		expect(report.evidence.with_seeds).toBe(1);
+		// 5 records carry at least one tracker; 1 is a floater.
+		expect(report.evidence.with_any_tracker).toBe(5);
+		expect(report.evidence.floaters).toBe(1);
+	});
+
+	it("tracker_citations buckets gh/linear/bead refs as unresolved", async () => {
+		const config: MulchConfig = {
+			...DEFAULT_CONFIG,
+			domains: { cli: {} },
+		};
+		await writeConfig(config, tmpDir);
+		await seedDomain(tmpDir, "cli", [
+			convention({ content: "a", withGh: "42" }),
+			convention({ content: "b", withGh: "42" }),
+			convention({ content: "c", withGh: "43" }),
+			convention({ content: "d", withLinear: "ENG-9" }),
+			convention({ content: "e", withBead: "b-abc123" }),
+		]);
+		// No .seeds/issues.jsonl on disk — gh/linear/bead never resolve locally.
+		const report = await computeAudit(config, { cwd: tmpDir });
+		// Unique tracker citations: gh#42, gh#43, linear:ENG-9, bead:b-abc123.
+		expect(report.tracker_citations.unique).toBe(4);
+		expect(report.tracker_citations.status_counts.unresolved).toBe(4);
+		expect(report.tracker_citations.missing_in_index).toBe(0);
+		const byId = Object.fromEntries(report.tracker_citations.top_cited.map((t) => [t.id, t]));
+		expect(byId["gh#42"]?.count).toBe(2);
+		expect(byId["gh#42"]?.tracker).toBe("gh");
+		expect(byId["gh#42"]?.status).toBe("unresolved");
+		expect(byId["gh#43"]?.count).toBe(1);
+		expect(byId["linear:ENG-9"]).toBeDefined();
+		expect(byId["bead:b-abc123"]).toBeDefined();
+		// Back-compat: seed_citations stays empty in a gh-only repo so old
+		// consumers reading report.seed_citations don't see foreign tracker data.
+		expect(report.seed_citations.unique).toBe(0);
+		expect(report.seed_citations.top_cited).toEqual([]);
+	});
+
+	it("tracker_citations mixes seeds (resolved) with gh/linear/bead (unresolved)", async () => {
+		const config: MulchConfig = {
+			...DEFAULT_CONFIG,
+			domains: { cli: {} },
+		};
+		await writeConfig(config, tmpDir);
+		await seedDomain(tmpDir, "cli", [
+			convention({ content: "a", withSeed: "mulch-007" }),
+			convention({ content: "b", withSeed: "mulch-007" }),
+			convention({ content: "c", withGh: "42" }),
+		]);
+		await mkdir(join(tmpDir, ".seeds"), { recursive: true });
+		await writeFile(
+			join(tmpDir, ".seeds", "issues.jsonl"),
+			`${JSON.stringify({ id: "mulch-007", status: "closed", title: "Fix stdin" })}\n`,
+		);
+
+		const report = await computeAudit(config, { cwd: tmpDir });
+		expect(report.tracker_citations.unique).toBe(2); // mulch-007 + gh#42
+		expect(report.tracker_citations.status_counts.closed).toBe(1);
+		expect(report.tracker_citations.status_counts.unresolved).toBe(1);
+		// Back-compat: seed_citations still only counts seeds entries.
+		expect(report.seed_citations.unique).toBe(1);
+		expect(report.seed_citations.top_cited[0]).toMatchObject({
+			id: "mulch-007",
+			count: 2,
+			status: "closed",
+		});
+	});
+
 	it("resolves seed citations against .seeds/issues.jsonl", async () => {
 		const config: MulchConfig = {
 			...DEFAULT_CONFIG,
@@ -301,6 +397,30 @@ describe("audit CLI", () => {
 		expect(stdout).toContain("=== mulch-audit:");
 		expect(stdout).toContain("total records: 1");
 		expect(stdout).toContain("--- summary signals ---");
+	});
+
+	it("human output omits the seeds line for gh-only repos and renders tracker-prefixed top-cited ids", async () => {
+		const config: MulchConfig = { ...DEFAULT_CONFIG, domains: { cli: {} } };
+		await writeConfig(config, tmpDir);
+		await seedDomain(tmpDir, "cli", [
+			convention({ content: "a", withGh: "42" }),
+			convention({ content: "b", withGh: "42" }),
+		]);
+
+		const result = runCli(["audit"], tmpDir);
+		expect(result.exitCode).toBe(0);
+		const stdout = result.stdout.toString();
+		// Per-tracker breakdown: gh present, seeds/linear/bead omitted (0).
+		expect(stdout).toContain("- gh: 2");
+		expect(stdout).not.toContain("- seeds:");
+		expect(stdout).not.toContain("- linear:");
+		expect(stdout).not.toContain("- bead:");
+		// Old "seeds-ev" line is gone in favor of the per-tracker breakdown.
+		expect(stdout).not.toContain("with seeds-ev");
+		// Citation block renders under the generalized header.
+		expect(stdout).toContain("tracker-citation");
+		expect(stdout).toContain("top-cited tracker ids:");
+		expect(stdout).toContain("gh#42 cited=2 status=unresolved");
 	});
 
 	it("--ci emits JSON and exits 0 when no FAIL signals", async () => {

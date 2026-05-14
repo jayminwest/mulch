@@ -8,6 +8,7 @@ import {
 	resolveAuditThresholds,
 } from "../schemas/config.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
+import { TRACKERS, type TrackerName } from "./active-work.ts";
 import { getExpertisePath } from "./config.ts";
 import { isRecordStale, readExpertiseFile } from "./expertise.ts";
 
@@ -58,6 +59,14 @@ export interface DomainMix {
 	last_recorded_at: string | null;
 }
 
+export interface TrackerCitation {
+	id: string;
+	tracker: TrackerName;
+	count: number;
+	status: string;
+	title: string;
+}
+
 export interface AuditReport {
 	repo: string;
 	total_records: number;
@@ -65,7 +74,10 @@ export interface AuditReport {
 	ignored_domains: string[];
 	type_mix: Array<{ type: string; count: number; pct: number }>;
 	evidence: {
+		// Deprecated since v0.10.1 (mulch-1334) — populated from `with_tracker.seeds`.
+		// Kept readable for one release so old JSON consumers don't break. Removed in v0.11.
 		with_seeds: number;
+		with_tracker: Record<TrackerName, number>;
 		with_any_tracker: number;
 		with_commit: number;
 		with_relates: number;
@@ -76,11 +88,19 @@ export interface AuditReport {
 		with_rule_signal: number;
 		likely_code_restatement: number;
 	} | null;
+	// Deprecated since v0.10.1 (mulch-1334) — populated from seeds entries in
+	// `tracker_citations` for back-compat. Removed in v0.11. Read `tracker_citations`.
 	seed_citations: {
 		unique: number;
 		status_counts: Record<string, number>;
 		missing_in_seeds: number;
 		top_cited: Array<{ id: string; count: number; status: string; title: string }>;
+	};
+	tracker_citations: {
+		unique: number;
+		status_counts: Record<string, number>;
+		missing_in_index: number;
+		top_cited: TrackerCitation[];
 	};
 	by_domain: DomainMix[];
 	weak_domains: string[];
@@ -108,11 +128,22 @@ interface RecordWithDomain {
 	domain: string;
 }
 
-function extractSeedRefs(record: ExpertiseRecord): string[] {
-	const seeds = record.evidence?.seeds;
-	if (!seeds) return [];
-	if (typeof seeds === "string") return [seeds];
-	return [];
+export interface TrackerRef {
+	tracker: TrackerName;
+	id: string;
+}
+
+export function extractTrackerRefs(record: ExpertiseRecord): TrackerRef[] {
+	const ev = record.evidence;
+	if (!ev) return [];
+	const refs: TrackerRef[] = [];
+	for (const tracker of TRACKERS) {
+		const value = ev[tracker];
+		if (typeof value === "string" && value.length > 0) {
+			refs.push({ tracker, id: value });
+		}
+	}
+	return refs;
 }
 
 function recordHasTracker(record: ExpertiseRecord): boolean {
@@ -131,28 +162,64 @@ function recordIsFloater(record: ExpertiseRecord): boolean {
 	return true;
 }
 
+interface TrackerIndexEntry {
+	tracker: TrackerName;
+	id: string;
+	status?: string;
+	title?: string;
+}
+
 interface SeedRow {
 	id: string;
 	status?: string;
 	title?: string;
 }
 
-async function loadSeeds(cwd: string): Promise<Map<string, SeedRow>> {
+function trackerKey(tracker: TrackerName, id: string): string {
+	return `${tracker}:${id}`;
+}
+
+// Render a tracker ref for human-readable output. Seeds keep the bare id
+// (back-compat with the pre-mulch-1334 top_cited shape); gh uses the
+// GitHub-native `gh#42` form (incoming `#42` is normalized to `gh#42`);
+// linear and bead use a `<tracker>:<id>` prefix.
+export function formatTrackerId(tracker: TrackerName, id: string): string {
+	if (tracker === "seeds") return id;
+	if (tracker === "gh") return `gh#${id.replace(/^#/, "")}`;
+	return `${tracker}:${id}`;
+}
+
+async function loadTrackerIndex(cwd: string): Promise<Map<string, TrackerIndexEntry>> {
+	const index = new Map<string, TrackerIndexEntry>();
+
+	// Seeds: read .seeds/issues.jsonl (only tracker with local resolution today).
 	const seedsPath = join(cwd, ".seeds", "issues.jsonl");
-	const seeds = new Map<string, SeedRow>();
-	if (!existsSync(seedsPath)) return seeds;
-	const content = await readFile(seedsPath, "utf-8");
-	for (const line of content.split("\n")) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith("#")) continue;
-		try {
-			const row = JSON.parse(trimmed) as SeedRow;
-			if (row && typeof row.id === "string") seeds.set(row.id, row);
-		} catch {
-			// Skip malformed seeds rows — the audit is read-only and best-effort here.
+	if (existsSync(seedsPath)) {
+		const content = await readFile(seedsPath, "utf-8");
+		for (const line of content.split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith("#")) continue;
+			try {
+				const row = JSON.parse(trimmed) as SeedRow;
+				if (row && typeof row.id === "string") {
+					index.set(trackerKey("seeds", row.id), {
+						tracker: "seeds",
+						id: row.id,
+						status: row.status,
+						title: row.title,
+					});
+				}
+			} catch {
+				// Skip malformed seeds rows — the audit is read-only and best-effort here.
+			}
 		}
 	}
-	return seeds;
+
+	// gh / linear / bead: no local resolution. Citations to these trackers fall
+	// through to `unresolved` in status_counts (per mulch-1334 acceptance).
+	// A future seed can layer in networked status lookups (gh CLI, linear API).
+
+	return index;
 }
 
 function classifyEvidenceCoverage(
@@ -263,49 +330,100 @@ export async function computeAudit(
 			pct: total > 0 ? Math.floor((100 * count) / total) : 0,
 		}));
 
-	// Evidence coverage
-	let withSeeds = 0;
+	// Evidence coverage (per-tracker breakdown + roll-ups)
+	const withTracker: Record<TrackerName, number> = { seeds: 0, gh: 0, linear: 0, bead: 0 };
 	let withCommit = 0;
 	let withRelates = 0;
 	let withAnyTracker = 0;
 	let floaters = 0;
 	for (const r of records) {
-		if (extractSeedRefs(r).length > 0) withSeeds++;
+		for (const ref of extractTrackerRefs(r)) {
+			withTracker[ref.tracker]++;
+		}
 		if (r.evidence?.commit) withCommit++;
 		if (r.relates_to && r.relates_to.length > 0) withRelates++;
 		if (recordHasTracker(r) || r.evidence?.commit) withAnyTracker++;
 		if (recordIsFloater(r)) floaters++;
 	}
 
-	// Seed citations
-	const seedsIndex = await loadSeeds(cwd);
-	const refCounts = new Map<string, number>();
+	// Tracker citations (generalized from seed_citations per mulch-1334).
+	const trackerIndex = await loadTrackerIndex(cwd);
+	const refCounts = new Map<string, { tracker: TrackerName; id: string; count: number }>();
 	for (const r of records) {
-		for (const sid of extractSeedRefs(r)) {
-			refCounts.set(sid, (refCounts.get(sid) ?? 0) + 1);
+		for (const ref of extractTrackerRefs(r)) {
+			const key = trackerKey(ref.tracker, ref.id);
+			const existing = refCounts.get(key);
+			if (existing) {
+				existing.count++;
+			} else {
+				refCounts.set(key, { tracker: ref.tracker, id: ref.id, count: 1 });
+			}
 		}
 	}
-	const statusCounts: Record<string, number> = {};
-	let missing = 0;
-	for (const sid of refCounts.keys()) {
-		const sj = seedsIndex.get(sid);
-		if (sj) {
-			const status = sj.status ?? "?";
-			statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+	const trackerStatusCounts: Record<string, number> = {};
+	let trackerMissing = 0;
+	for (const [key, entry] of refCounts.entries()) {
+		const hit = trackerIndex.get(key);
+		if (hit) {
+			const status = hit.status ?? "?";
+			trackerStatusCounts[status] = (trackerStatusCounts[status] ?? 0) + 1;
+		} else if (entry.tracker === "seeds") {
+			// Seeds is the one tracker with a local index — a missing entry means
+			// the citation points at a seeds id that isn't in .seeds/issues.jsonl.
+			trackerMissing++;
 		} else {
-			missing++;
+			// gh/linear/bead have no local index yet — bucket into "unresolved"
+			// rather than "missing" so consumers don't confuse the two.
+			trackerStatusCounts.unresolved = (trackerStatusCounts.unresolved ?? 0) + 1;
 		}
 	}
-	const topCited = Array.from(refCounts.entries())
-		.sort((a, b) => b[1] - a[1])
+	const trackerTopCited: TrackerCitation[] = Array.from(refCounts.values())
+		.sort((a, b) => b.count - a.count)
 		.slice(0, 8)
-		.map(([id, count]) => {
-			const sj = seedsIndex.get(id);
+		.map(({ tracker, id, count }) => {
+			const hit = trackerIndex.get(trackerKey(tracker, id));
+			let status: string;
+			if (hit) {
+				status = hit.status ?? "?";
+			} else if (tracker === "seeds") {
+				status = "MISSING";
+			} else {
+				status = "unresolved";
+			}
+			return {
+				id: formatTrackerId(tracker, id),
+				tracker,
+				count,
+				status,
+				title: (hit?.title ?? "").slice(0, 55),
+			};
+		});
+
+	// Seeds-only back-compat shape (deprecated, populated from tracker_citations).
+	// Filter the tracker refs/index to seeds entries so old JSON consumers reading
+	// `report.seed_citations` still see exactly what they saw pre-mulch-1334.
+	const seedsRefEntries = Array.from(refCounts.values()).filter((e) => e.tracker === "seeds");
+	const seedsStatusCounts: Record<string, number> = {};
+	let seedsMissing = 0;
+	for (const { tracker, id } of seedsRefEntries) {
+		const hit = trackerIndex.get(trackerKey(tracker, id));
+		if (hit) {
+			const status = hit.status ?? "?";
+			seedsStatusCounts[status] = (seedsStatusCounts[status] ?? 0) + 1;
+		} else {
+			seedsMissing++;
+		}
+	}
+	const seedsTopCited = seedsRefEntries
+		.sort((a, b) => b.count - a.count)
+		.slice(0, 8)
+		.map(({ id, count }) => {
+			const hit = trackerIndex.get(trackerKey("seeds", id));
 			return {
 				id,
 				count,
-				status: sj?.status ?? "MISSING",
-				title: (sj?.title ?? "MISSING").slice(0, 55),
+				status: hit?.status ?? "MISSING",
+				title: (hit?.title ?? "MISSING").slice(0, 55),
 			};
 		});
 
@@ -417,7 +535,8 @@ export async function computeAudit(
 		ignored_domains: ignored,
 		type_mix,
 		evidence: {
-			with_seeds: withSeeds,
+			with_seeds: withTracker.seeds,
+			with_tracker: withTracker,
 			with_any_tracker: withAnyTracker,
 			with_commit: withCommit,
 			with_relates: withRelates,
@@ -425,10 +544,16 @@ export async function computeAudit(
 		},
 		convention_quality: conv_quality,
 		seed_citations: {
+			unique: seedsRefEntries.length,
+			status_counts: seedsStatusCounts,
+			missing_in_seeds: seedsMissing,
+			top_cited: seedsTopCited,
+		},
+		tracker_citations: {
 			unique: refCounts.size,
-			status_counts: statusCounts,
-			missing_in_seeds: missing,
-			top_cited: topCited,
+			status_counts: trackerStatusCounts,
+			missing_in_index: trackerMissing,
+			top_cited: trackerTopCited,
 		},
 		by_domain,
 		weak_domains,

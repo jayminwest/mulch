@@ -76,7 +76,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml diff [ref]` | Show expertise changes between git refs (`ml diff HEAD~3`, `ml diff main..feature`) |
 | `ml config <subcommand>` | Inspect and edit `.mulch/mulch.config.yaml` (`schema`, `show [--path <p>]`, `set <path> <value>`, `unset <path>`) — atomic, schema-validated writes for warren and other config-UI consumers |
 | `ml status` | Show expertise freshness and counts (`--json` for health metrics; flags rotting domains where the newest record exceeds the observational shelf life) |
-| `ml audit` | Audit corpus health — floater rate, evidence coverage, convention rule-density, per-domain mix (`--ci`, `--suggest`, `--domain`, `--ignore-domains`) |
+| `ml audit` | Audit corpus health — floater rate, per-tracker evidence coverage (seeds/gh/linear/bead), convention rule-density, per-domain mix, tracker-citation status (`--ci`, `--suggest`, `--domain`, `--ignore-domains`) |
 | `ml validate` | Schema validation across all files |
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
 | `ml setup [provider]` | Install provider-specific hooks (built-ins: claude, cursor, codex — or any name discovered via `.mulch/recipes/` or `mulch-recipe-*`; `--list` shows everything) |

@@ -54,23 +54,24 @@ function formatHuman(report: AuditReport): string {
 	const ev = report.evidence;
 	const total = report.total_records;
 	const p = (n: number) => `${Math.floor((100 * n) / total)}%`;
-	lines.push(`  with seeds-ev: ${ev.with_seeds} (${p(ev.with_seeds)})`);
-	lines.push(
-		`  with any tracker (seeds/gh/linear/bead): ${ev.with_any_tracker} (${p(ev.with_any_tracker)})`,
-	);
+	lines.push(`  with any tracker: ${ev.with_any_tracker} (${p(ev.with_any_tracker)})`);
+	for (const tracker of ["seeds", "gh", "linear", "bead"] as const) {
+		const n = ev.with_tracker[tracker];
+		if (n > 0) lines.push(`  - ${tracker}: ${n} (${p(n)})`);
+	}
 	lines.push(`  with commit-ev: ${ev.with_commit} (${p(ev.with_commit)})`);
 	lines.push(`  with relates_to: ${ev.with_relates}`);
-	lines.push(`  FLOATERS (no seeds/tracker/relates/commit): ${ev.floaters}`);
+	lines.push(`  FLOATERS (no tracker/relates/commit): ${ev.floaters}`);
 
-	const refs = report.seed_citations;
+	const refs = report.tracker_citations;
 	if (refs.unique > 0) {
 		lines.push("");
-		lines.push(`seed-citation (unique seeds cited: ${refs.unique}):`);
+		lines.push(`tracker-citation (unique ids cited: ${refs.unique}):`);
 		for (const [status, count] of Object.entries(refs.status_counts).sort((a, b) => b[1] - a[1])) {
 			lines.push(`  ${status}: ${count}`);
 		}
-		if (refs.missing_in_seeds > 0) {
-			lines.push(`  not-found-in-seeds.jsonl: ${refs.missing_in_seeds}`);
+		if (refs.missing_in_index > 0) {
+			lines.push(`  not-found-in-seeds.jsonl: ${refs.missing_in_index}`);
 		}
 		const closed = refs.status_counts.closed ?? 0;
 		lines.push(`  closed-citation rate: ${Math.floor((100 * closed) / refs.unique)}%`);
@@ -98,10 +99,10 @@ function formatHuman(report: AuditReport): string {
 		);
 	}
 
-	if (report.seed_citations.top_cited.length > 0) {
+	if (report.tracker_citations.top_cited.length > 0) {
 		lines.push("");
-		lines.push("top-cited seeds:");
-		for (const t of report.seed_citations.top_cited) {
+		lines.push("top-cited tracker ids:");
+		for (const t of report.tracker_citations.top_cited) {
 			lines.push(`  ${t.id} cited=${t.count} status=${t.status}  ${t.title}`);
 		}
 	}
