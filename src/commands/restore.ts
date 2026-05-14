@@ -108,12 +108,18 @@ export function registerRestoreCommand(program: Command): void {
 					return;
 				}
 
+				// Capture the original archive_reason BEFORE stripping so we can
+				// surface it in the success line and preserve it on a rollback
+				// re-archive. Archives written before mulch-b41a have no reason
+				// on disk — fall back to "manual" so the field is always set.
+				const originalReason = removed.archive_reason ?? "manual";
 				const live = stripArchiveFields(removed);
 				const restoreRes = await restoreToExpertise(expertisePath, live);
 				if (!restoreRes.ok) {
 					// Race lost between pre-check and lock. Roll the archive back so
-					// the record isn't stranded.
-					await archiveRecords(domain, [stripArchiveFields(removed)], new Date());
+					// the record isn't stranded. Preserve the original archive_reason
+					// so the round-trip is invisible to anyone reading the archive.
+					await archiveRecords(domain, [stripArchiveFields(removed)], new Date(), originalReason);
 					const msg = `Live record "${recordId}" appeared in domain "${domain}" while restore was in flight (classification: ${restoreRes.conflict.classification}). Re-archived; nothing changed.`;
 					if (jsonMode) {
 						outputJsonError("restore", msg);
@@ -132,11 +138,12 @@ export function registerRestoreCommand(program: Command): void {
 						id: live.id ?? null,
 						type: live.type,
 						summary: getRecordSummary(live),
+						archive_reason: originalReason,
 					});
 				} else if (!isQuiet()) {
 					const rid = live.id ? ` ${accent(live.id)}` : "";
 					console.log(
-						`${brand("✓")} ${brand(`Restored ${live.type}`)}${rid} ${brand(`to ${domain}`)}: ${getRecordSummary(live)}`,
+						`${brand("✓")} ${brand(`Restored ${live.type}`)}${rid} ${brand(`to ${domain}`)} (archived: ${originalReason}): ${getRecordSummary(live)}`,
 					);
 				}
 			} catch (err) {

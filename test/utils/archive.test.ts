@@ -72,16 +72,29 @@ describe("archive utilities", () => {
 		expect(records).toEqual([]);
 	});
 
-	it("archiveRecords stamps status and archived_at on each record", async () => {
+	it("archiveRecords stamps status, archived_at, and archive_reason on each record", async () => {
 		const now = new Date("2026-05-06T00:00:00.000Z");
 		const live = makeRecord("payload");
 		live.id = "mx-aaa111";
-		await archiveRecords("testing", [live], now, tmpDir);
+		await archiveRecords("testing", [live], now, "stale", tmpDir);
 		const archived = await readArchiveFile(getArchivePath("testing", tmpDir));
 		expect(archived).toHaveLength(1);
 		expect(archived[0]?.status).toBe("archived");
 		expect(archived[0]?.archived_at).toBe(now.toISOString());
+		expect(archived[0]?.archive_reason).toBe("stale");
 		expect(archived[0]?.id).toBe("mx-aaa111");
+	});
+
+	it("archiveRecords preserves a pre-stamped archive_reason over the param default", async () => {
+		const now = new Date("2026-05-06T00:00:00.000Z");
+		const preStamped: ExpertiseRecord = {
+			...makeRecord("bottom-out"),
+			archive_reason: "superseded",
+		};
+		preStamped.id = "mx-aaa111";
+		await archiveRecords("testing", [preStamped], now, "stale", tmpDir);
+		const archived = await readArchiveFile(getArchivePath("testing", tmpDir));
+		expect(archived[0]?.archive_reason).toBe("superseded");
 	});
 
 	it("archiveRecords appends to an existing archive without losing prior records", async () => {
@@ -90,22 +103,42 @@ describe("archive utilities", () => {
 		first.id = "mx-aaa111";
 		const second = makeRecord("second");
 		second.id = "mx-bbb222";
-		await archiveRecords("testing", [first], now, tmpDir);
-		await archiveRecords("testing", [second], now, tmpDir);
+		await archiveRecords("testing", [first], now, "stale", tmpDir);
+		await archiveRecords("testing", [second], now, "manual", tmpDir);
 		const archived = await readArchiveFile(getArchivePath("testing", tmpDir));
 		expect(archived).toHaveLength(2);
 		expect(archived.map((r) => r.id)).toEqual(["mx-aaa111", "mx-bbb222"]);
+		expect(archived.map((r) => r.archive_reason)).toEqual(["stale", "manual"]);
 	});
 
-	it("stripArchiveFields removes status and archived_at without touching anything else", () => {
+	it("readArchiveFile loads archives written before archive_reason landed (back-compat)", async () => {
+		const path = getArchivePath("testing", tmpDir);
+		// Hand-write an archive that predates archive_reason — readArchiveFile
+		// must still load the record (field is optional).
+		const legacy: ExpertiseRecord = {
+			...makeRecord("legacy"),
+			status: "archived",
+			archived_at: "2026-04-01T00:00:00.000Z",
+		};
+		legacy.id = "mx-legacy1";
+		await writeArchiveFile(path, [legacy]);
+		const records = await readArchiveFile(path);
+		expect(records).toHaveLength(1);
+		expect(records[0]?.id).toBe("mx-legacy1");
+		expect(records[0]?.archive_reason).toBeUndefined();
+	});
+
+	it("stripArchiveFields removes status, archived_at, and archive_reason", () => {
 		const r: ExpertiseRecord = {
 			...makeRecord("foo"),
 			status: "archived",
 			archived_at: "2026-05-06T00:00:00.000Z",
+			archive_reason: "stale",
 		};
 		const stripped = stripArchiveFields(r);
 		expect(stripped.status).toBeUndefined();
 		expect(stripped.archived_at).toBeUndefined();
+		expect(stripped.archive_reason).toBeUndefined();
 		expect(stripped).toMatchObject({ content: "foo", type: "convention" });
 	});
 
@@ -115,7 +148,7 @@ describe("archive utilities", () => {
 		first.id = "mx-aaa111";
 		const second = makeRecord("second");
 		second.id = "mx-bbb222";
-		await archiveRecords("testing", [first, second], now, tmpDir);
+		await archiveRecords("testing", [first, second], now, "stale", tmpDir);
 
 		const removed = await removeFromArchive("testing", "mx-aaa111", tmpDir);
 		expect(removed?.id).toBe("mx-aaa111");

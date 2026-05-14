@@ -394,7 +394,17 @@ export function registerPruneCommand(program: Command): void {
 							const target = options.aggressive ? null : nextDemotionTier(record.classification);
 							if (target === null) {
 								pruned++;
-								archived.push(record);
+								// Bottom-out via supersession/anchor_decay — stamp the
+								// archive_reason inline so the multi-record archive write
+								// in this domain preserves per-record reasons (vs the
+								// caller-wide reason param passed to archiveRecords).
+								const bottomReason =
+									supersededHit && anchorHit
+										? "superseded+anchor_decay"
+										: supersededHit
+											? "superseded"
+											: "anchor_decay";
+								archived.push({ ...record, archive_reason: bottomReason });
 								if (options.explain) {
 									domainExplanations.push({
 										domain,
@@ -473,7 +483,10 @@ export function registerPruneCommand(program: Command): void {
 
 					if (domainResult) {
 						if (!options.dryRun && !options.hard && archived.length > 0) {
-							await archiveRecords(domain, archived, now);
+							// Default reason "stale" covers records pushed via the
+							// shelf-life path; bottom-out records pre-stamp their own
+							// reason and archiveRecords preserves it.
+							await archiveRecords(domain, archived, now, "stale");
 						}
 						results.push(domainResult);
 						totalPruned += domainResult.pruned;

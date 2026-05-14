@@ -54,14 +54,18 @@ export async function writeArchiveFile(
 
 /**
  * Move records from a live expertise file to the corresponding archive file.
- * Each archived record gets `status: "archived"` and an `archived_at` timestamp.
- * Locks the archive file during the merge+write; the caller is responsible
- * for locking the source expertise file before invoking.
+ * Each archived record gets `status: "archived"`, an `archived_at` timestamp,
+ * and an `archive_reason` (use values from `ArchiveReason` as a convention;
+ * free-text suffix permitted, e.g. "manual: wrong domain"). A pre-existing
+ * `archive_reason` on the record (e.g. from a re-archive on restore rollback)
+ * is preserved. Locks the archive file during the merge+write; the caller is
+ * responsible for locking the source expertise file before invoking.
  */
 export async function archiveRecords(
 	domain: string,
 	records: ExpertiseRecord[],
 	now: Date,
+	reason: string,
 	cwd: string = process.cwd(),
 ): Promise<void> {
 	if (records.length === 0) return;
@@ -70,6 +74,7 @@ export async function archiveRecords(
 		...r,
 		status: "archived" as const,
 		archived_at: r.archived_at ?? now.toISOString(),
+		archive_reason: r.archive_reason ?? reason,
 	}));
 	await mkdir(dirname(archivePath), { recursive: true });
 	await withFileLock(archivePath, async () => {
@@ -78,14 +83,22 @@ export async function archiveRecords(
 	});
 }
 
+/**
+ * Canonical archive_reason values. Free-text suffix permitted via raw string;
+ * the union is just the convention for the five known code paths.
+ */
+export type ArchiveReason = "stale" | "superseded" | "anchor_decay" | "manual" | "compacted";
+
 /** Strip soft-archive lifecycle fields. Used when restoring a record to live. */
 export function stripArchiveFields(record: ExpertiseRecord): ExpertiseRecord {
-	const { status, archived_at, ...rest } = record as ExpertiseRecord & {
+	const { status, archived_at, archive_reason, ...rest } = record as ExpertiseRecord & {
 		status?: unknown;
 		archived_at?: unknown;
+		archive_reason?: unknown;
 	};
 	void status;
 	void archived_at;
+	void archive_reason;
 	return rest as ExpertiseRecord;
 }
 

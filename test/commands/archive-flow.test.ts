@@ -297,7 +297,7 @@ describe("ml search --archived", () => {
 		expect(result.stdout).not.toContain("[ARCHIVED");
 	});
 
-	it("--archived includes the archived match with [ARCHIVED <date>] prefix", async () => {
+	it("--archived includes the archived match with [ARCHIVED <date> <reason>] prefix", async () => {
 		const result = await runCommand(tmpDir, registerSearchCommand, [
 			"search",
 			"payload",
@@ -307,6 +307,6 @@ describe("ml search --archived", () => {
 		expect(result.stdout).toContain("Permanent payload");
 		expect(result.stdout).toContain("Stale tactical payload");
 		expect(result.stdout).toContain("(archived,");
-		expect(result.stdout).toMatch(/\[ARCHIVED \d{4}-\d{2}-\d{2}\]/);
+		expect(result.stdout).toMatch(/\[ARCHIVED \d{4}-\d{2}-\d{2} stale\]/);
 	});
 });

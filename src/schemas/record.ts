@@ -52,6 +52,12 @@ interface BaseRecord {
 	// under .mulch/archive/<domain>.jsonl) and the live AJV schemas reject it.
 	status?: "draft" | "active" | "deprecated" | "archived";
 	archived_at?: string;
+	// Set by `archiveRecords` on every code path that moves a record to
+	// .mulch/archive/. Convention values: "stale" | "superseded" |
+	// "anchor_decay" | "manual" | "compacted"; a free-text suffix is permitted
+	// (e.g. "manual: wrong domain"). Optional for back-compat with archives
+	// written before mulch-b41a landed; lives only on archived records.
+	archive_reason?: string;
 	// Set by `ml prune` when supersession decay (R-05e) demotes a record one
 	// classification tier. Lives on the record across the demotion until
 	// archive; bumped each pass that re-demotes.

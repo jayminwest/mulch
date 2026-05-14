@@ -30,7 +30,10 @@ function formatArchivedSection(domain: string, records: ExpertiseRecord[]): stri
 	for (const r of records) {
 		const date = (r.archived_at ?? "").slice(0, 10) || "unknown";
 		const id = r.id ? `${r.id} ` : "";
-		lines.push(`- [ARCHIVED ${date}] ${id}[${r.type}] ${getRecordSummary(r)}`);
+		// Archives written before mulch-b41a have no reason on disk; omit the
+		// suffix gracefully so back-compat output stays readable.
+		const reason = r.archive_reason ? ` ${r.archive_reason}` : "";
+		lines.push(`- [ARCHIVED ${date}${reason}] ${id}[${r.type}] ${getRecordSummary(r)}`);
 	}
 	return lines.join("\n");
 }
