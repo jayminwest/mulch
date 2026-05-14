@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ml audit` — first-class corpus-health command** (mulch-a051 / pl-0752, v0.10 step 1): ports the `mulch-audit.py` prototype (V1_PLAN §4.2) into the CLI so teams can measure floater rate, evidence coverage, convention rule-density, per-domain mix, and seed-citation status from a single command — and act on the results without leaving the terminal. Default output reproduces the Python prototype's signal layout (type mix → evidence → seed citations → convention quality → per-domain mix → top-cited seeds → domain age → summary signals) with PASS/WARN/FAIL verdicts per metric.
+  - **`ml audit --ci`** exits 1 when any signal is in the FAIL band and emits the report as JSON so CI pipelines can gate on corpus health without parsing human output.
+  - **`ml audit --suggest`** groups specific record IDs into `archive` (stale, non-foundational records), `revise` (conventions without rule-signal language), and `attribute` (floaters with no tracker / relates_to / commit) buckets — each bucket prints a copy-paste-able `ml prune --ids …` or `ml edit <id> …` command. This is the ROI multiplier per V1_PLAN: "your corpus is bad" is uncomforting; "here are the 47 specific records to fix" is actionable.
+  - **`ml audit --domain <name>`** scopes every metric and verdict to one domain.
+  - **`ml audit --ignore-domains <a,b>`** excludes domains from the audit (CLI list merges with `audit.ignore_domains` from config).
+  - **`audit.thresholds` config block** overrides every default (evidence_coverage 0.5, evidence_coverage_warn 0.3, floater_max 0.2, rule_density_min 0.25, rule_density_warn 0.15, max_records_per_domain 200, max_stale 0). Per-domain overrides via `audit.per_domain.<name>` layer on top of the global thresholds — partial overrides inherit unspecified knobs from the global. Defaults relaxed from the Python prototype per V1_PLAN §4.2 ("0.7 evidence coverage is empirically unreachable today"); recalibrate after one quarter of real-corpus data.
+
 ## [0.9.0] - 2026-05-10
 
 A warren-integration release: a full `ml config` family (schema + show/set/unset) gives config-UI consumers atomic, schema-validated reads and writes; `ml prime --dry-run` returns a JSON token-budget preview without rendering record content; `owner` and `status` join `BaseRecord` as built-in optional fields. The Codex provider recipe gains a real `SessionStart` hook (so `ml prime` finally runs on Codex), and the `aider` / `gemini` / `windsurf` built-in recipes are removed after an audit found all three writing to paths the runtimes don't read. 1225 tests across 61 files / 3047 expect() calls (up from 1120 / 58 in 0.8.0).

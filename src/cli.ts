@@ -3,6 +3,7 @@
 import chalk from "chalk";
 import { Command, Option } from "commander";
 import { registerAddCommand } from "./commands/add.ts";
+import { registerAuditCommand } from "./commands/audit.ts";
 import { registerCompactCommand } from "./commands/compact.ts";
 import { registerCompletionsCommand } from "./commands/completions.ts";
 import { registerConfigCommand } from "./commands/config.ts";
@@ -200,6 +201,7 @@ registerDiffCommand(program);
 registerUpdateCommand(program);
 registerUpgradeCommand(program);
 registerCompletionsCommand(program);
+registerAuditCommand(program);
 
 // --- Typo suggestions via Levenshtein distance ---
 

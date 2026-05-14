@@ -112,6 +112,102 @@ const customTypeConfigSchema = {
 	additionalProperties: false,
 } as const;
 
+const auditThresholdsSchema = {
+	type: "object",
+	title: "Audit thresholds",
+	description:
+		"PASS/WARN/FAIL bands for `ml audit`. Below `_warn` is FAIL; between `_warn` and the primary threshold is WARN; meeting the primary threshold is PASS. Floater and stale knobs use a single PASS ceiling.",
+	properties: {
+		evidence_coverage: {
+			type: "number",
+			title: "Evidence coverage (PASS)",
+			description:
+				"PASS when ≥ this fraction of records carry any tracker (seeds/gh/linear/bead) or commit evidence. Range: [0, 1].",
+			minimum: 0,
+			maximum: 1,
+			default: 0.5,
+		},
+		evidence_coverage_warn: {
+			type: "number",
+			title: "Evidence coverage (WARN)",
+			description:
+				"WARN when evidence coverage is between this value and `evidence_coverage`. Below this is FAIL. Range: [0, 1].",
+			minimum: 0,
+			maximum: 1,
+			default: 0.3,
+		},
+		floater_max: {
+			type: "number",
+			title: "Floater rate (PASS ceiling)",
+			description:
+				"PASS when the fraction of records without any tracker, relates_to, or commit evidence is ≤ this value. Above is WARN/FAIL.",
+			minimum: 0,
+			maximum: 1,
+			default: 0.2,
+		},
+		rule_density_min: {
+			type: "number",
+			title: "Convention rule-density (PASS)",
+			description:
+				"PASS when ≥ this fraction of convention records contain a rule-signal word (because, must not, avoid, always, never, …). Range: [0, 1].",
+			minimum: 0,
+			maximum: 1,
+			default: 0.25,
+		},
+		rule_density_warn: {
+			type: "number",
+			title: "Convention rule-density (WARN)",
+			description:
+				"WARN when rule-density is between this value and `rule_density_min`. Below this is FAIL. Range: [0, 1].",
+			minimum: 0,
+			maximum: 1,
+			default: 0.15,
+		},
+		max_records_per_domain: {
+			type: "integer",
+			title: "Records per domain (PASS ceiling)",
+			description:
+				"Informational ceiling on records per domain; auditors flag domains above this number. Distinct from `governance.hard_limit` which gates writes.",
+			minimum: 1,
+			default: 200,
+		},
+		max_stale: {
+			type: "integer",
+			title: "Stale records (PASS ceiling)",
+			description:
+				"Informational ceiling on stale (past-shelf-life) records per domain. PASS when ≤ this value.",
+			minimum: 0,
+			default: 0,
+		},
+	},
+	additionalProperties: false,
+} as const;
+
+const auditConfigSchema = {
+	type: "object",
+	title: "Audit configuration",
+	description:
+		"Knobs for `ml audit`. Global thresholds are merged on top of defaults; per-domain entries layer on top of the global thresholds for that domain only.",
+	properties: {
+		thresholds: auditThresholdsSchema,
+		ignore_domains: {
+			type: "array",
+			title: "Domains excluded from audit",
+			description:
+				"Domains skipped entirely by `ml audit` (e.g. reference-doc domains that are legitimately convention-heavy and evidence-light).",
+			items: { type: "string" },
+		},
+		per_domain: {
+			type: "object",
+			title: "Per-domain threshold overrides",
+			description:
+				"Threshold overrides keyed by domain name. Partial overrides are merged on top of the global thresholds; keys not declared inherit the global value.",
+			additionalProperties: auditThresholdsSchema,
+		},
+	},
+	additionalProperties: false,
+} as const;
+
 const anchorValidityConfigSchema = {
 	type: "object",
 	title: "Anchor-validity decay",
@@ -291,6 +387,7 @@ export const configSchema = {
 			},
 			additionalProperties: false,
 		},
+		audit: auditConfigSchema,
 		disabled_types: {
 			type: "array",
 			title: "Disabled types",

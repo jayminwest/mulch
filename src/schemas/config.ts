@@ -65,6 +65,52 @@ export interface DecayConfig {
 export const DEFAULT_ANCHOR_VALIDITY_THRESHOLD = 0.5;
 export const DEFAULT_ANCHOR_VALIDITY_GRACE_DAYS = 7;
 
+// `ml audit` thresholds. PASS/WARN/FAIL bands for the three primary corpus
+// health metrics. Defaults relaxed from the Python prototype per V1_PLAN §4.2
+// ("0.7 evidence coverage is empirically unreachable today"). All knobs are
+// overridable globally under `audit.thresholds` and per-domain under
+// `audit.per_domain.<name>` — partial overrides are merged on top of defaults.
+export interface AuditThresholds {
+	evidence_coverage?: number; // PASS ≥, default 0.5
+	evidence_coverage_warn?: number; // WARN ≥, default 0.3 (below = FAIL)
+	floater_max?: number; // PASS ≤ (fraction of records), default 0.2
+	rule_density_min?: number; // PASS ≥, default 0.25
+	rule_density_warn?: number; // WARN ≥, default 0.15 (below = FAIL)
+	max_records_per_domain?: number; // PASS ≤, default 200 (matches governance.hard_limit)
+	max_stale?: number; // PASS ≤ stale-record count, default 0
+}
+
+export interface AuditConfig {
+	thresholds?: AuditThresholds;
+	// Domains excluded from audit metrics entirely (e.g. reference-doc domains
+	// that are legitimately convention-heavy and evidence-light).
+	ignore_domains?: string[];
+	// Per-domain threshold overrides. Each value is merged on top of the global
+	// thresholds for that domain only — keys not declared fall back to the global.
+	per_domain?: Record<string, AuditThresholds>;
+}
+
+export const DEFAULT_AUDIT_THRESHOLDS: Required<AuditThresholds> = {
+	evidence_coverage: 0.5,
+	evidence_coverage_warn: 0.3,
+	floater_max: 0.2,
+	rule_density_min: 0.25,
+	rule_density_warn: 0.15,
+	max_records_per_domain: 200,
+	max_stale: 0,
+};
+
+export function resolveAuditThresholds(
+	cfg: AuditConfig | undefined,
+	domain?: string,
+): Required<AuditThresholds> {
+	const global = { ...DEFAULT_AUDIT_THRESHOLDS, ...(cfg?.thresholds ?? {}) };
+	if (!domain) return global;
+	const override = cfg?.per_domain?.[domain];
+	if (!override) return global;
+	return { ...global, ...override };
+}
+
 /**
  * Range-check decay.anchor_validity knobs. Returns a list of human-readable
  * error strings (empty when valid). Caught at command-time (e.g. `ml prune
@@ -123,6 +169,8 @@ export interface MulchConfig {
 	// Decay knobs. R-05f wires `anchor_validity` into `ml prune --check-anchors`;
 	// `weight` is reserved for the future R-05g fitness blend and otherwise unused.
 	decay?: DecayConfig;
+	// `ml audit` thresholds and ignore-list. See AuditConfig.
+	audit?: AuditConfig;
 	// Names of registered types (built-in or custom) that emit a deprecation
 	// warning on write. Reads still succeed; the type stays in CLI choices.
 	disabled_types?: string[];
