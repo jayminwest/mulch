@@ -95,9 +95,9 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 <!-- mulch:start -->
 ## Project Expertise (Mulch)
-<!-- mulch-onboard:v0.9.0 -->
+<!-- mulch-onboard:v0.10.0 -->
 
-This project uses [Mulch](https://github.com/jayminwest/mulch) v0.9.0 for structured expertise management.
+This project uses [Mulch](https://github.com/jayminwest/mulch) v0.10.0 for structured expertise management.
 
 **At the start of every session**, run:
 ```bash
@@ -137,18 +137,16 @@ context, run `ml search --archived <query>`.
 
 ### Before You Finish
 
-1. Discover what to record (shows changed files and suggests domains):
-   ```bash
-   ml learn
-   ```
-2. Store insights from this work session:
-   ```bash
-   ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
-   ```
-3. Validate and commit:
-   ```bash
-   ml sync
-   ```
+If you discovered conventions, patterns, decisions, or failures worth preserving during
+this session, record them before closing:
+
+```bash
+ml learn                                                                    # see what files changed
+ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
+ml sync                                                                     # validate, stage, commit
+```
+
+Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.
 <!-- mulch:end -->
 
 <!-- seeds:start -->
