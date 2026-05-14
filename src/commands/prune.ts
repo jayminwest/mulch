@@ -29,9 +29,9 @@ interface PruneResult {
 	after: number;
 }
 
-type DemotionReason = "supersession" | "anchor_decay";
+type ActionReason = "stale" | "superseded" | "anchor_decay";
 
-interface DemotionExplain {
+interface RecordAction {
 	domain: string;
 	id?: string;
 	type: string;
@@ -39,7 +39,7 @@ interface DemotionExplain {
 	// "archived" when the record bottomed out and moved to the archive (or was
 	// hard-deleted with --hard).
 	to: Classification | "archived";
-	reasons: DemotionReason[];
+	reasons: ActionReason[];
 	anchors?: {
 		valid_fraction: number;
 		valid: number;
@@ -259,7 +259,7 @@ export function registerPruneCommand(program: Command): void {
 				const anchorGrace = anchorCfg.grace_days ?? DEFAULT_ANCHOR_VALIDITY_GRACE_DAYS;
 
 				const results: PruneResult[] = [];
-				const explanations: DemotionExplain[] = [];
+				const actions: RecordAction[] = [];
 				let totalPruned = 0;
 				let totalDemoted = 0;
 				let totalAnchorDemoted = 0;
@@ -361,7 +361,7 @@ export function registerPruneCommand(program: Command): void {
 					const filePath = getExpertisePath(domain);
 
 					const archived: ExpertiseRecord[] = [];
-					const domainExplanations: DemotionExplain[] = [];
+					const domainActions: RecordAction[] = [];
 					const domainResult = await withFileLock(filePath, async () => {
 						const records = await readExpertiseFile(filePath);
 						if (records.length === 0) return null;
@@ -376,6 +376,14 @@ export function registerPruneCommand(program: Command): void {
 							if (isStale(record, now, shelfLife)) {
 								pruned++;
 								archived.push(record);
+								domainActions.push({
+									domain,
+									id: record.id,
+									type: record.type,
+									from: record.classification,
+									to: "archived",
+									reasons: ["stale"],
+								});
 								continue;
 							}
 
@@ -387,8 +395,8 @@ export function registerPruneCommand(program: Command): void {
 								continue;
 							}
 
-							const reasons: DemotionReason[] = [];
-							if (supersededHit) reasons.push("supersession");
+							const reasons: ActionReason[] = [];
+							if (supersededHit) reasons.push("superseded");
 							if (anchorHit) reasons.push("anchor_decay");
 
 							const target = options.aggressive ? null : nextDemotionTier(record.classification);
@@ -405,26 +413,24 @@ export function registerPruneCommand(program: Command): void {
 											? "superseded"
 											: "anchor_decay";
 								archived.push({ ...record, archive_reason: bottomReason });
-								if (options.explain) {
-									domainExplanations.push({
-										domain,
-										id: record.id,
-										type: record.type,
-										from: record.classification,
-										to: "archived",
-										reasons,
-										...(anchorHit
-											? {
-													anchors: {
-														valid_fraction: anchorHit.validFraction ?? 0,
-														valid: anchorHit.valid,
-														total: anchorHit.total,
-														broken: anchorHit.broken,
-													},
-												}
-											: {}),
-									});
-								}
+								domainActions.push({
+									domain,
+									id: record.id,
+									type: record.type,
+									from: record.classification,
+									to: "archived",
+									reasons,
+									...(anchorHit
+										? {
+												anchors: {
+													valid_fraction: anchorHit.validFraction ?? 0,
+													valid: anchorHit.valid,
+													total: anchorHit.total,
+													broken: anchorHit.broken,
+												},
+											}
+										: {}),
+								});
 								continue;
 							}
 
@@ -442,26 +448,24 @@ export function registerPruneCommand(program: Command): void {
 							}
 							kept.push(demotedRecord);
 							demoted++;
-							if (options.explain) {
-								domainExplanations.push({
-									domain,
-									id: record.id,
-									type: record.type,
-									from: record.classification,
-									to: target,
-									reasons,
-									...(anchorHit
-										? {
-												anchors: {
-													valid_fraction: anchorHit.validFraction ?? 0,
-													valid: anchorHit.valid,
-													total: anchorHit.total,
-													broken: anchorHit.broken,
-												},
-											}
-										: {}),
-								});
-							}
+							domainActions.push({
+								domain,
+								id: record.id,
+								type: record.type,
+								from: record.classification,
+								to: target,
+								reasons,
+								...(anchorHit
+									? {
+											anchors: {
+												valid_fraction: anchorHit.validFraction ?? 0,
+												valid: anchorHit.valid,
+												total: anchorHit.total,
+												broken: anchorHit.broken,
+											},
+										}
+									: {}),
+							});
 						}
 
 						if (pruned > 0 || demoted > 0) {
@@ -493,11 +497,18 @@ export function registerPruneCommand(program: Command): void {
 						totalDemoted += domainResult.demoted;
 						totalAnchorDemoted += domainResult.anchor_demoted;
 						totalSupersessionDemoted += domainResult.supersession_demoted;
-						if (options.explain) explanations.push(...domainExplanations);
+						actions.push(...domainActions);
 					}
 				}
 
 				if (jsonMode) {
+					// `explanations` in JSON is the legacy shape: demotion-only,
+					// gated on --explain. Per-seed acceptance: JSON output is
+					// unchanged. Stale-archive entries live in `results` /
+					// `totalPruned`; they're never in `explanations`.
+					const explanations = options.explain
+						? actions.filter((a) => a.reasons.some((r) => r !== "stale"))
+						: undefined;
 					outputJson({
 						success: true,
 						command: "prune",
@@ -510,7 +521,7 @@ export function registerPruneCommand(program: Command): void {
 						totalAnchorDemoted,
 						totalSupersessionDemoted,
 						results,
-						...(options.explain ? { explanations } : {}),
+						...(explanations ? { explanations } : {}),
 					});
 					return;
 				}
@@ -527,6 +538,14 @@ export function registerPruneCommand(program: Command): void {
 				const demoteLabel = options.dryRun ? "Would demote" : "Demoted";
 				const prefix = options.dryRun ? chalk.yellow("[DRY RUN] ") : "";
 
+				const quiet = isQuiet();
+				const actionsByDomain = new Map<string, RecordAction[]>();
+				for (const a of actions) {
+					const list = actionsByDomain.get(a.domain) ?? [];
+					list.push(a);
+					actionsByDomain.set(a.domain, list);
+				}
+
 				for (const result of results) {
 					let body: string;
 					if (result.pruned > 0 && result.demoted > 0) {
@@ -536,62 +555,59 @@ export function registerPruneCommand(program: Command): void {
 					} else {
 						body = `${demoteLabel} ${chalk.yellow(String(result.demoted))}`;
 					}
-					if (!isQuiet())
+					if (!quiet) {
 						console.log(
 							`${prefix}${chalk.cyan(result.domain)}: ${body} of ${result.before} records (${result.after} remaining)`,
 						);
-				}
-
-				if (options.explain && explanations.length > 0 && !isQuiet()) {
-					console.log(`\n${chalk.bold("Explain:")}`);
-					for (const ex of explanations) {
-						const idPart = ex.id ? ` ${chalk.dim(`[${ex.id}]`)}` : "";
-						const reasonPart = ex.reasons.join(" + ");
-						console.log(
-							`  ${chalk.cyan(ex.domain)}${idPart} ${ex.type}: ${ex.from} → ${ex.to} (${reasonPart})`,
-						);
-						if (ex.anchors) {
-							const frac = (ex.anchors.valid_fraction * 100).toFixed(0);
-							console.log(
-								`      anchors: ${ex.anchors.valid}/${ex.anchors.total} valid (${frac}%)`,
-							);
-							for (const b of ex.anchors.broken) {
-								console.log(`        ${chalk.red("✗")} ${b.kind}: ${b.path}`);
+						const domainActions = actionsByDomain.get(result.domain) ?? [];
+						for (const a of domainActions) {
+							const idPart = a.id ? chalk.dim(a.id) : chalk.dim("(no id)");
+							const reasonPart = a.reasons.join(" + ");
+							console.log(`  ${idPart} [${a.type}]: ${a.from} → ${a.to} (${reasonPart})`);
+							if (options.explain && a.anchors) {
+								const frac = (a.anchors.valid_fraction * 100).toFixed(0);
+								console.log(
+									`      anchors: ${a.anchors.valid}/${a.anchors.total} valid (${frac}%)`,
+								);
+								for (const b of a.anchors.broken) {
+									console.log(`        ${chalk.red("✗")} ${b.kind}: ${b.path}`);
+								}
 							}
 						}
 					}
 				}
 
-				if (!isQuiet()) {
-					const totals: string[] = [];
-					if (totalPruned > 0) {
-						totals.push(
-							`${label.toLowerCase()} ${totalPruned} stale ${totalPruned === 1 ? "record" : "records"}`,
-						);
-					}
-					if (totalDemoted > 0) {
-						const noun = totalDemoted === 1 ? "record" : "records";
-						const breakdown: string[] = [];
-						if (totalSupersessionDemoted > 0)
-							breakdown.push(`${totalSupersessionDemoted} superseded`);
-						if (totalAnchorDemoted > 0) breakdown.push(`${totalAnchorDemoted} anchor-decayed`);
-						const suffix = breakdown.length > 1 ? ` (${breakdown.join(", ")})` : "";
-						const tag =
-							breakdown.length === 1 && totalSupersessionDemoted > 0
-								? "superseded "
-								: breakdown.length === 1 && totalAnchorDemoted > 0
-									? "anchor-decayed "
-									: "";
-						totals.push(`${demoteLabel.toLowerCase()} ${totalDemoted} ${tag}${noun}${suffix}`);
-					}
-					console.log(`\n${prefix}${chalk.bold(`Total: ${totals.join("; ")}.`)}`);
-					if (!options.hard && !options.dryRun && totalPruned > 0) {
-						console.log(
-							chalk.dim(
-								"Records moved to .mulch/archive/. Restore with `ml restore <id>` or use `--hard` next time to permanently delete.",
-							),
-						);
-					}
+				const totals: string[] = [];
+				if (totalPruned > 0) {
+					totals.push(
+						`${label.toLowerCase()} ${totalPruned} stale ${totalPruned === 1 ? "record" : "records"}`,
+					);
+				}
+				if (totalDemoted > 0) {
+					const noun = totalDemoted === 1 ? "record" : "records";
+					const breakdown: string[] = [];
+					if (totalSupersessionDemoted > 0)
+						breakdown.push(`${totalSupersessionDemoted} superseded`);
+					if (totalAnchorDemoted > 0) breakdown.push(`${totalAnchorDemoted} anchor-decayed`);
+					const suffix = breakdown.length > 1 ? ` (${breakdown.join(", ")})` : "";
+					const tag =
+						breakdown.length === 1 && totalSupersessionDemoted > 0
+							? "superseded "
+							: breakdown.length === 1 && totalAnchorDemoted > 0
+								? "anchor-decayed "
+								: "";
+					totals.push(`${demoteLabel.toLowerCase()} ${totalDemoted} ${tag}${noun}${suffix}`);
+				}
+				// Totals print even under --quiet; the per-record list above is
+				// what --quiet suppresses (seed mulch-5ce3).
+				const separator = quiet ? "" : "\n";
+				console.log(`${separator}${prefix}${chalk.bold(`Total: ${totals.join("; ")}.`)}`);
+				if (!quiet && !options.hard && !options.dryRun && totalPruned > 0) {
+					console.log(
+						chalk.dim(
+							"Records moved to .mulch/archive/. Restore with `ml restore <id>` or use `--hard` next time to permanently delete.",
+						),
+					);
 				}
 			},
 		);

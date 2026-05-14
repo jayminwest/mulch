@@ -369,10 +369,11 @@ describe("ml prune --check-anchors — anchor-validity decay (R-05f)", () => {
 
 		const result = await runPrune(tmpDir, ["--check-anchors", "--explain"]);
 		expect(result.exitCode ?? 0).toBe(0);
-		expect(result.stdout).toContain("Explain");
 		expect(result.stdout).toContain("foundational");
 		expect(result.stdout).toContain("tactical");
 		expect(result.stdout).toContain("anchor_decay");
+		// --explain adds the anchor breakdown on top of the default per-record list.
+		expect(result.stdout).toMatch(/anchors:\s+1\/3 valid/);
 		expect(result.stdout).toContain("src/missing-j.ts");
 		expect(result.stdout).toContain("src/missing-k.ts");
 	});
