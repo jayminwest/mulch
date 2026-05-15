@@ -62,7 +62,7 @@ Three classifications with shelf lives for pruning: `foundational` (permanent), 
 
 ### Command Pattern
 
-Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 28 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
+Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Command(program)` function. All 29 commands are registered in `src/cli.ts`. Entry point is `src/cli.ts` (executed directly by Bun, no `dist/` output).
 
 ### Concurrency Safety
 
@@ -77,7 +77,16 @@ Each command lives in `src/commands/<name>.ts` and exports a `register<Name>Comm
 
 ### Provider Integration (setup command)
 
-`src/commands/setup.ts` contains the three built-in provider "recipes" (claude, cursor, codex). Each recipe implements idempotent `install()`, `check()`, and `remove()` operations. The Codex recipe writes both an `AGENTS.md` mulch section (fallback prose) and a `[[hooks.SessionStart]]` block in `.codex/config.toml` fenced by `# mulch:start` / `# mulch:end` line comments for idempotency. The Claude recipe registers only `SessionStart` (the empty matcher covers startup/resume/clear/compact); `PreCompact` is intentionally not registered because its stdout is discarded across compaction. The previous `aider`, `gemini`, and `windsurf` built-ins were removed in v0.9.0 after an audit found all three writing to paths the runtimes don't read; users who relied on them can re-create the same behavior as a filesystem recipe under `.mulch/recipes/<name>.{ts,sh}`.
+`src/commands/setup.ts` contains the four built-in provider "recipes" (claude, cursor, codex, pi). Each recipe implements idempotent `install()`, `check()`, and `remove()` operations. The Codex recipe writes both an `AGENTS.md` mulch section (fallback prose) and a `[[hooks.SessionStart]]` block in `.codex/config.toml` fenced by `# mulch:start` / `# mulch:end` line comments for idempotency. The Claude recipe registers only `SessionStart` (the empty matcher covers startup/resume/clear/compact); `PreCompact` is intentionally not registered because its stdout is discarded across compaction. The Pi recipe writes `@os-eco/mulch-cli` to the `packages` array in `.pi/settings.json` (preserving existing entries) and stamps the onboarding marker with a `:pi` suffix so detection logic doubles as install-state. The previous `aider`, `gemini`, and `windsurf` built-ins were removed in v0.9.0 after an audit found all three writing to paths the runtimes don't read; users who relied on them can re-create the same behavior as a filesystem recipe under `.mulch/recipes/<name>.{ts,sh}`.
+
+### Pi Extension (extensions/pi)
+
+`extensions/pi/index.ts` ships a first-class `@os-eco/pi-mulch` integration for the pi-coding-agent runtime, behind the `pi-package` keyword and optional peerDependencies on `@earendil-works/pi-coding-agent` + `typebox`. The extension reads the `pi.*` config block from `.mulch/mulch.config.yaml` on every hook so edits take effect on `/reload` without restart. Four lifecycle integrations:
+
+- **`session_start` → `before_agent_start`** (mulch-7359): shells out to `ml prime`, caches the markdown, injects it into the systemPrompt fenced by `<!-- mulch:prime:start -->` / `<!-- mulch:prime:end -->` banners for idempotent re-injection.
+- **`tool_call`** (mulch-71cf): debounced (default 500ms) per-path `ml prime --files <path> --budget <n>` exec; results steered into the message stream as `mulch-scope-load` (display:false). `pi.appendEntry("mulch-scope-load", { path })` persists primed paths across `/reload` via `ctx.sessionManager.getEntries()`.
+- **`record_expertise` + `query_expertise` custom tools** (mulch-4d87): registered on `session_start` when `pi.tools` is true. Both rebuild on every session so per-project `allowed_types` / `custom_types` / `required_fields` show up in the LLM-facing schema/description. `record_expertise` writes a single-record JSON to `mkdtemp()` and invokes `ml record <domain> --batch <tmp> --json` (pi.exec has no stdin); pre-flight validation surfaces domain rules client-side.
+- **`/ml:prime` slash command + `agent_end` widget** (mulch-903f): `/ml:prime [domain]` autocompletes from live config; `agent_end` runs `ml learn --json` and renders one `Record: <domain>/<type>?` line per suggestion via `ctx.ui.setWidget`. Widgets clear on `session_start` and `session_shutdown` to avoid stranding stale UI.
 
 ## TypeScript Conventions
 
