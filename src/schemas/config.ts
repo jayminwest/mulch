@@ -38,6 +38,50 @@ export const DEFAULT_PRIME_TIER_WEIGHTS: Required<PrimeTierWeights> = {
 
 export const DEFAULT_HOOK_TIMEOUT_MS = 5_000;
 
+// `pi.*` namespace consumed by the in-tree `@os-eco/pi-mulch` extension
+// (extensions/pi/index.ts). The extension reads these knobs on every hook
+// invocation via readConfig() so edits take effect without restart. Stored
+// inside the existing mulch.config.yaml so file locking, atomic writes, and
+// schema validation are inherited.
+export interface PiScopeLoadConfig {
+	// Fire `ml prime --files <path>` on tool_call read/edit/write events.
+	enabled?: boolean;
+	// Per-call token budget passed to `ml prime --budget`. Tune downward if
+	// scope-load floods the message stream; upward if records truncate.
+	budget?: number;
+	// Coalesce rapid file events to one scope-load per file within this window.
+	debounce_ms?: number;
+}
+
+export interface PiConfig {
+	// Run `ml prime` on session_start and inject the result via the
+	// before_agent_start systemPrompt hook. Falls back to manifest mode when
+	// `prime.default_mode` is `manifest`.
+	auto_prime?: boolean;
+	// Per-file scope-loading on tool_call events. See PiScopeLoadConfig.
+	scope_load?: PiScopeLoadConfig;
+	// Register the record_expertise / query_expertise custom tools.
+	tools?: boolean;
+	// Register /ml:prime, /ml:status, /ml:doctor slash commands.
+	commands?: boolean;
+	// Surface the `ml learn` nudge widget on agent_end.
+	agent_end_widget?: boolean;
+}
+
+export const DEFAULT_PI_CONFIG: Required<Omit<PiConfig, "scope_load">> & {
+	scope_load: Required<PiScopeLoadConfig>;
+} = {
+	auto_prime: true,
+	scope_load: {
+		enabled: true,
+		budget: 2000,
+		debounce_ms: 500,
+	},
+	tools: true,
+	commands: true,
+	agent_end_widget: true,
+};
+
 // Lifecycle events. `pre-*` hooks block on non-zero exit. `pre-record`,
 // `pre-prime`, and `pre-compact` may mutate the payload via stdout JSON;
 // `pre-prune` is block-or-allow only (its stdout is ignored, so a hook cannot
@@ -226,6 +270,10 @@ export interface MulchConfig {
 	hook_settings?: {
 		timeout_ms?: number;
 	};
+	// Configuration consumed by the in-tree `@os-eco/pi-mulch` pi-coding-agent
+	// extension (extensions/pi/index.ts). Absent means defaults apply; the
+	// extension is a no-op when pi is not the active runtime regardless.
+	pi?: PiConfig;
 }
 
 export const DEFAULT_CONFIG: MulchConfig = {

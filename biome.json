@@ -4,6 +4,7 @@
 		"includes": [
 			"src/**",
 			"test/**",
+			"extensions/**",
 			"!**/node_modules",
 			"!test/**/__snapshots__/**"
 		]

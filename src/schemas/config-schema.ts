@@ -484,6 +484,74 @@ export const configSchema = {
 			},
 			additionalProperties: false,
 		},
+		pi: {
+			type: "object",
+			title: "pi-coding-agent extension",
+			description:
+				"Configuration consumed by the in-tree @os-eco/pi-mulch extension (extensions/pi/index.ts). The extension is a no-op when pi is not the active runtime, regardless of these knobs.",
+			properties: {
+				auto_prime: {
+					type: "boolean",
+					title: "Auto-prime on session_start",
+					description:
+						"Run `ml prime` on session_start and inject the result as a systemPrompt append via before_agent_start. Falls back to manifest mode when `prime.default_mode` is `manifest`.",
+					default: true,
+				},
+				scope_load: {
+					type: "object",
+					title: "Per-file scope-load on tool_call",
+					description:
+						"Fire `ml prime --files <path>` when the agent is about to read/edit/write a file, then steer the resulting records into the message stream.",
+					properties: {
+						enabled: {
+							type: "boolean",
+							title: "Enabled",
+							description: "When false, no scope-load fires regardless of other settings.",
+							default: true,
+						},
+						budget: {
+							type: "integer",
+							title: "Token budget",
+							description:
+								"Per-call token budget passed to `ml prime --budget`. Tune downward if scope-load floods the message stream; upward if records truncate. Read on every call so edits take effect without restart.",
+							minimum: 1,
+							default: 2000,
+						},
+						debounce_ms: {
+							type: "integer",
+							title: "Debounce window (ms)",
+							description:
+								"Coalesce rapid tool_call events on the same file to one scope-load per file within this window.",
+							minimum: 0,
+							default: 500,
+						},
+					},
+					additionalProperties: false,
+				},
+				tools: {
+					type: "boolean",
+					title: "Register custom tools",
+					description:
+						"Register the record_expertise and query_expertise pi tools. The tool schemas are derived dynamically from the in-process type registry so custom_types and per-domain allowed_types stay in lockstep with `ml record`.",
+					default: true,
+				},
+				commands: {
+					type: "boolean",
+					title: "Register slash commands",
+					description:
+						"Register /ml:prime, /ml:status, /ml:doctor slash commands. Disable when another extension provides them.",
+					default: true,
+				},
+				agent_end_widget: {
+					type: "boolean",
+					title: "Show learn-nudge widget on agent_end",
+					description:
+						"On agent_end, run `ml learn --json` and surface a non-blocking widget prompting the user (or the LLM on the next turn) to record insights from the session.",
+					default: true,
+				},
+			},
+			additionalProperties: false,
+		},
 	},
 	additionalProperties: false,
 } as const;

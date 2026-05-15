@@ -94,6 +94,19 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 # hook_settings:
 #   # Per-hook execution timeout in milliseconds. Default 5000.
 #   timeout_ms: 5000
+#
+# pi:
+#   # Configuration consumed by the in-tree pi-mulch extension
+#   # (extensions/pi/index.ts) when mulch is loaded inside the pi-coding-agent
+#   # runtime. The extension is a no-op outside pi regardless of these knobs.
+#   auto_prime: true            # session_start prime + systemPrompt injection
+#   scope_load:
+#     enabled: true             # fire \`ml prime --files\` on tool_call file events
+#     budget: 2000              # tokens per scope-load call
+#     debounce_ms: 500          # coalesce rapid events per file
+#   tools: true                 # register record_expertise / query_expertise tools
+#   commands: true              # register /ml:prime, /ml:status, /ml:doctor
+#   agent_end_widget: true      # show \`ml learn\` nudge widget on agent_end
 `;
 
 export function buildInitialConfigYaml(): string {

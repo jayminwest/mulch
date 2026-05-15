@@ -8,14 +8,17 @@
     "ml": "src/cli.ts"
   },
   "main": "src/index.ts",
-  "files": ["src"],
+  "files": ["src", "extensions"],
+  "pi": {
+    "extensions": ["./extensions/pi/index.ts"]
+  },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "test": "bun test",
-    "lint": "biome check --error-on-warnings src/ test/",
-    "lint:fix": "biome check --write src/ test/",
+    "lint": "biome check --error-on-warnings src/ test/ extensions/",
+    "lint:fix": "biome check --write src/ test/ extensions/",
     "typecheck": "tsc --noEmit",
     "version:bump": "bun run scripts/version-bump.ts"
   },
@@ -28,7 +31,8 @@
     "expertise",
     "knowledge-management",
     "cli",
-    "developer-tools"
+    "developer-tools",
+    "pi-package"
   ],
   "author": "Jaymin West",
   "license": "MIT",
@@ -48,8 +52,22 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.6",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
+    "typebox": "^1.1.0",
     "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "typebox": "^1.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
   }
 }
