@@ -5,10 +5,10 @@
 //   • mulch-be45 — extension skeleton, peer deps, pi.* config block
 //   • mulch-7359 — auto-prime (session_start → before_agent_start)
 //   • mulch-71cf — scope-load on tool_call
-//   • mulch-4d87 — record_expertise / query_expertise custom tools (this commit)
+//   • mulch-4d87 — record_expertise / query_expertise custom tools
+//   • mulch-903f — /ml:prime slash command + agent_end learn-nudge widget (this commit)
 //
 // Pending steps fill in the remaining lifecycle handlers:
-//   • mulch-903f — slash commands + agent_end learn-nudge widget
 //   • mulch-d060 — pi-aware onboarding marker (driven by setup recipe)
 //
 // Imports from @earendil-works/pi-coding-agent and typebox are declared as
@@ -17,7 +17,9 @@
 // manifest entry which points at this file.
 
 import type { ExtensionAPI, ToolCallEvent } from "@earendil-works/pi-coding-agent";
+import { buildPrimeCommandRegistration, type PrimeCommandDeps } from "./lib/commands.ts";
 import { type ResolvedPiConfig, readPiConfig } from "./lib/config.ts";
+import { composeLearnWidgetLines, LEARN_WIDGET_KEY, runMlLearn } from "./lib/learn-nudge.ts";
 import { composePrimedSystemPrompt, runMlPrime } from "./lib/prime.ts";
 import {
 	collectPersistedScopeLoadPaths,
@@ -44,10 +46,35 @@ export default function piMulchExtension(pi: ExtensionAPI): void {
 	// /reload doesn't re-prime files already scope-loaded this run.
 	let scopeLoader: ScopeLoader | undefined;
 
+	// Latest session cwd + UI handle, captured on session_start. The slash
+	// command is registered once at extension load (before any session) so
+	// the handler reads these via closure rather than baking in stale values.
+	let sessionCwd: string | undefined;
+	let notify: ((message: string, type?: "info" | "warning" | "error") => void) | undefined;
+
+	// /ml:prime [domain] — registered once. The `getDeps` getter resolves the
+	// current session cwd / sendMessage on each invocation so the command is
+	// inert between sessions and re-binds cleanly across /reload.
+	const primeCommand = buildPrimeCommandRegistration((): PrimeCommandDeps | undefined => {
+		if (!resolved?.commands) return undefined;
+		if (!sessionCwd) return undefined;
+		return {
+			exec: pi.exec,
+			cwd: sessionCwd,
+			sendMessage: (message, opts) => pi.sendMessage(message, opts),
+			notify,
+		};
+	});
+	pi.registerCommand(primeCommand.name, primeCommand.options);
+
 	pi.on("session_start", async (_event, ctx) => {
 		scopeLoader?.cancelPending();
 		scopeLoader = undefined;
 		primed = undefined;
+		sessionCwd = ctx.cwd;
+		notify = ctx.hasUI ? (msg, type) => ctx.ui.notify(msg, type) : undefined;
+		// Clear any widget left over from a previous session (e.g. /reload).
+		if (ctx.hasUI) ctx.ui.setWidget(LEARN_WIDGET_KEY, undefined);
 		try {
 			resolved = await readPiConfig(ctx.cwd);
 		} catch {
@@ -99,11 +126,18 @@ export default function piMulchExtension(pi: ExtensionAPI): void {
 		scopeLoader.register(path);
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", (_event, ctx) => {
 		scopeLoader?.cancelPending();
+		if (ctx.hasUI) ctx.ui.setWidget(LEARN_WIDGET_KEY, undefined);
+		sessionCwd = undefined;
+		notify = undefined;
 	});
 
-	pi.on("agent_end", () => {
-		// mulch-903f: surface the `ml learn` nudge widget.
+	pi.on("agent_end", async (_event, ctx) => {
+		if (!resolved?.agent_end_widget) return;
+		if (!ctx.hasUI) return;
+		const learn = await runMlLearn({ exec: pi.exec, cwd: ctx.cwd });
+		const lines = composeLearnWidgetLines(learn);
+		ctx.ui.setWidget(LEARN_WIDGET_KEY, lines);
 	});
 }
