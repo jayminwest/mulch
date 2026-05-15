@@ -12,19 +12,22 @@ Pi-coding-agent extension that hard-wires mulch's `prime` / `record` rituals int
 | 3 | `mulch-71cf` | Per-file scope-load on `tool_call`, debounced + persisted |
 | 4 | `mulch-4d87` | `record_expertise` / `query_expertise` custom tools |
 | 5 | `mulch-903f` | `/ml:*` slash commands + `ml learn` widget on `agent_end` |
-| 6 | `mulch-d060` | `ml setup pi` recipe + pi-aware onboarding marker |
+| 6 | `mulch-d060` | ✅ `ml setup pi` recipe + pi-aware onboarding marker |
 | 7 | `mulch-7229` | Tests + this README rewrite |
 
 ## Install
 
-Once the rest of the plan lands, the canonical install path is:
+The canonical install path:
 
 ```bash
 ml setup pi              # writes .pi/settings.json + updates CLAUDE.md marker
 ml setup pi --check      # verify install state
+ml setup pi --remove     # uninstall both legs
 ```
 
-Until then this extension is for in-tree development only. Load it directly with:
+`ml setup pi` adds `"@os-eco/mulch-cli"` to `.pi/settings.json`'s `packages` array (preserving any existing entries) and refreshes the `<!-- mulch:start -->`-fenced section of `CLAUDE.md` / `AGENTS.md` to the short pi-aware variant. The marker carries a `:pi` suffix so onboarding detection knows the extension is active.
+
+For in-tree development without going through the setup recipe, load it directly with:
 
 ```bash
 pi -e ./extensions/pi/index.ts

@@ -10,12 +10,46 @@ import { hasMarkerSection, replaceMarkerSection, wrapInMarkers } from "../utils/
 import { isQuiet } from "../utils/palette.ts";
 import { getCurrentVersion } from "../utils/version.ts";
 
+export type OnboardVariant = "pi" | undefined;
+
 // Single marker carries both display and detection: snippets are considered
-// current iff they include the marker for the running CLI's package version.
+// current iff they include the marker for the running CLI's package version
+// AND the marker variant matches the project's current pi-install state.
 // Patch bumps therefore prompt re-run, which is the desired UX (the visible
-// version in CLAUDE.md should track the installed Mulch).
-export function getVersionMarker(): string {
-	return `<!-- mulch-onboard:v${getCurrentVersion()} -->`;
+// version in CLAUDE.md should track the installed Mulch). The `:pi` suffix
+// flips when `ml setup pi` writes or removes `.pi/settings.json`.
+export function getVersionMarker(variant?: OnboardVariant): string {
+	const suffix = variant === "pi" ? ":pi" : "";
+	return `<!-- mulch-onboard:v${getCurrentVersion()}${suffix} -->`;
+}
+
+// Short pi-aware snippet shipped when the pi extension is active. Lifecycle
+// rituals (prime / scope-load / record / learn-nudge) are handled by the
+// in-tree extension on pi events, so the CLAUDE.md prose only needs to point
+// the agent at the manual CLI escape hatches.
+function buildPiSnippet(sessionClose?: SessionCloseConfig): string {
+	const pkgVersion = getCurrentVersion();
+	return `## Project Expertise (Mulch)
+<!-- mulch-onboard:v${pkgVersion}:pi -->
+
+This project uses [Mulch](https://github.com/jayminwest/mulch) v${pkgVersion} via the in-tree
+\`@os-eco/pi-mulch\` pi-coding-agent extension. The extension auto-primes on \`session_start\`,
+scope-loads relevant records on file reads/edits, registers \`record_expertise\` and
+\`query_expertise\` custom tools, and surfaces an \`ml learn\` nudge widget on \`agent_end\`.
+
+**Manual escape hatches** (rarely needed — the extension handles the rituals):
+
+- \`/ml:prime [domain]\` — re-prime the conversation (optionally scoped to one domain).
+- \`ml record <domain> --type <type> --description "..."\` — record an insight outside the
+  \`record_expertise\` tool (e.g. from a shell prompt).
+- \`ml search "<query>"\` — search records across domains.
+- \`ml status\` / \`ml doctor\` — corpus health.
+
+Configuration lives under \`pi.*\` in \`.mulch/mulch.config.yaml\`. Run \`ml setup pi --check\`
+to verify the install state; \`ml setup pi --remove\` reverts to the standalone CLI snippet.
+
+${getSessionEndReminder("embedded", sessionClose)}
+`;
 }
 
 function buildSnippet(sessionClose?: SessionCloseConfig): string {
@@ -68,10 +102,39 @@ ${getSessionEndReminder("embedded", sessionClose)}
 const LEGACY_HEADER = "## Project Expertise (Mulch)";
 const LEGACY_TAIL = 'mulch validate && git add .mulch/ && git commit -m "mulch: record learnings"';
 
-function getSnippet(_provider: string | undefined, sessionClose?: SessionCloseConfig): string {
-	// All providers use the same standardized snippet.
+function getSnippet(
+	_provider: string | undefined,
+	sessionClose?: SessionCloseConfig,
+	variant?: OnboardVariant,
+): string {
+	if (variant === "pi") return buildPiSnippet(sessionClose);
 	return buildSnippet(sessionClose);
 }
+
+// True when `.pi/settings.json` lists `@os-eco/mulch-cli` in its `packages`
+// array (either as a bare string entry or as an object form with `source`).
+// Used by runOnboard to pick the pi-aware snippet variant without forcing
+// callers to thread the flag through every call site.
+export async function isPiInstalled(cwd: string): Promise<boolean> {
+	const settingsPath = join(cwd, ".pi", "settings.json");
+	if (!(await fileExists(settingsPath))) return false;
+	try {
+		const raw = await readFile(settingsPath, "utf-8");
+		const parsed = JSON.parse(raw) as { packages?: unknown };
+		if (!Array.isArray(parsed.packages)) return false;
+		return parsed.packages.some(
+			(p) =>
+				p === PI_PACKAGE_NAME ||
+				(typeof p === "object" &&
+					p !== null &&
+					(p as { source?: unknown }).source === PI_PACKAGE_NAME),
+		);
+	} catch {
+		return false;
+	}
+}
+
+export const PI_PACKAGE_NAME = "@os-eco/mulch-cli";
 
 // `ml onboard` may run before `ml init`, so reading the config gracefully
 // degrades to "no preset configured" rather than failing the command.
@@ -133,9 +196,9 @@ function replaceLegacySnippet(content: string, newSection: string): string {
 	return before + newSection + after;
 }
 
-function isSnippetCurrent(content: string): boolean {
+function isSnippetCurrent(content: string, variant?: OnboardVariant): boolean {
 	if (!hasMarkerSection(content)) return false;
-	return content.includes(getVersionMarker());
+	return content.includes(getVersionMarker(variant));
 }
 
 async function findSnippetLocations(cwd: string): Promise<OnboardTarget[]> {
@@ -225,10 +288,18 @@ export async function runOnboard(options: {
 	check?: boolean;
 	cwd?: string;
 	jsonMode?: boolean;
+	// Force the snippet variant. Unset = auto-detect via isPiInstalled() so
+	// repeat `ml onboard` runs after `ml setup pi` stay on the pi-aware copy.
+	variant?: OnboardVariant;
+	// Suppress all stdout/stderr output. Used when one recipe (`ml setup pi`)
+	// calls runOnboard internally to refresh the snippet — the recipe owns
+	// the user-facing message and runOnboard should not double-log.
+	silent?: boolean;
 }): Promise<void> {
 	const cwd = options.cwd ?? process.cwd();
 	const sessionClose = await readSessionCloseConfig(cwd);
-	const snippet = getSnippet(options.provider, sessionClose);
+	const variant = options.variant ?? ((await isPiInstalled(cwd)) ? "pi" : undefined);
+	const snippet = getSnippet(options.provider, sessionClose, variant);
 	const wrappedSnippet = wrapInMarkers(snippet);
 
 	if (options.stdout) {
@@ -247,7 +318,7 @@ export async function runOnboard(options: {
 		} else {
 			const content = await readFile(target.path, "utf-8");
 			if (hasMarkerSection(content)) {
-				action = isSnippetCurrent(content) ? "up_to_date" : "outdated";
+				action = isSnippetCurrent(content, variant) ? "up_to_date" : "outdated";
 			} else if (hasLegacySnippet(content)) {
 				action = "legacy";
 			} else {
@@ -302,7 +373,7 @@ export async function runOnboard(options: {
 
 		if (hasMarkerSection(content)) {
 			// Check if current
-			if (isSnippetCurrent(content)) {
+			if (isSnippetCurrent(content, variant)) {
 				action = "up_to_date";
 			} else {
 				// Replace marker section
@@ -323,6 +394,8 @@ export async function runOnboard(options: {
 			action = "appended";
 		}
 	}
+
+	if (options.silent) return;
 
 	if (options.jsonMode) {
 		outputJson({

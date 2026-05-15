@@ -21,6 +21,7 @@ import {
 	type RecipeWithSource,
 	resolveRecipe,
 } from "../utils/recipe-discovery.ts";
+import { PI_PACKAGE_NAME, runOnboard } from "./onboard.ts";
 
 // Read prime.session_close from .mulch/mulch.config.yaml. Returns undefined
 // when mulch isn't initialized yet (setup may run before `ml init`) so the
@@ -575,6 +576,154 @@ const codexRecipe: ProviderRecipe = {
 	},
 };
 
+// ── Pi (pi-coding-agent) ────────────────────────────────────
+
+// `ml setup pi` wires the in-tree `@os-eco/pi-mulch` extension
+// (extensions/pi/index.ts) into a project's pi-coding-agent runtime by:
+//   1. Adding "@os-eco/mulch-cli" to `.pi/settings.json` → packages so pi
+//      auto-loads the extension on every session (no global install needed).
+//   2. Refreshing the CLAUDE.md / AGENTS.md mulch section to the short pi-aware
+//      variant — the extension handles prime/scope-load/record rituals on
+//      lifecycle events, so the prose only needs to point at the manual escape
+//      hatches.
+// Both legs are idempotent and reversible (`--remove`). Marker suffix `:pi`
+// doubles as install-state detection: an onboard re-run after `ml setup pi`
+// keeps the pi variant because isPiInstalled() reads `.pi/settings.json`.
+
+function piSettingsPath(cwd: string): string {
+	return join(cwd, ".pi", "settings.json");
+}
+
+interface PiSettings {
+	packages?: unknown[];
+	[key: string]: unknown;
+}
+
+function packageEntryMatches(entry: unknown): boolean {
+	if (entry === PI_PACKAGE_NAME) return true;
+	if (typeof entry === "object" && entry !== null) {
+		const source = (entry as { source?: unknown }).source;
+		return source === PI_PACKAGE_NAME;
+	}
+	return false;
+}
+
+async function readPiSettings(path: string): Promise<PiSettings> {
+	if (!existsSync(path)) return {};
+	const raw = await readFile(path, "utf-8");
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) return {};
+	return JSON.parse(raw) as PiSettings;
+}
+
+const piRecipe: ProviderRecipe = {
+	async install(cwd) {
+		const settingsPath = piSettingsPath(cwd);
+		const settings = await readPiSettings(settingsPath);
+		const packages = Array.isArray(settings.packages) ? [...settings.packages] : [];
+		const alreadyHasPackage = packages.some(packageEntryMatches);
+
+		if (!alreadyHasPackage) {
+			packages.push(PI_PACKAGE_NAME);
+			settings.packages = packages;
+			await mkdir(dirname(settingsPath), { recursive: true });
+			await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
+		}
+
+		// Refresh the CLAUDE.md / AGENTS.md snippet to the pi-aware variant.
+		// runOnboard auto-detects via isPiInstalled(), but we pass variant
+		// explicitly so the refresh isn't a no-op when this is the very first
+		// install and the settings file isn't yet visible to a stat() race.
+		await runOnboard({ cwd, variant: "pi", silent: true });
+
+		if (alreadyHasPackage) {
+			return { success: true, message: "Pi integration already installed." };
+		}
+		return {
+			success: true,
+			message: "Installed Pi integration: .pi/settings.json + CLAUDE.md pi marker.",
+		};
+	},
+
+	async check(cwd) {
+		const settingsPath = piSettingsPath(cwd);
+		if (!existsSync(settingsPath)) {
+			return { success: false, message: ".pi/settings.json not found." };
+		}
+		let settings: PiSettings;
+		try {
+			settings = await readPiSettings(settingsPath);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			return {
+				success: false,
+				message: `.pi/settings.json is not valid JSON: ${msg}`,
+			};
+		}
+		const packages = Array.isArray(settings.packages) ? settings.packages : [];
+		if (!packages.some(packageEntryMatches)) {
+			return {
+				success: false,
+				message: `.pi/settings.json exists but does not list "${PI_PACKAGE_NAME}" in packages.`,
+			};
+		}
+		return {
+			success: true,
+			message: "Pi integration installed (.pi/settings.json lists @os-eco/mulch-cli).",
+		};
+	},
+
+	async remove(cwd) {
+		const settingsPath = piSettingsPath(cwd);
+		let removedPackage = false;
+
+		if (existsSync(settingsPath)) {
+			let settings: PiSettings;
+			try {
+				settings = await readPiSettings(settingsPath);
+			} catch {
+				// Malformed JSON — bail rather than overwrite user state.
+				return {
+					success: false,
+					message: ".pi/settings.json is not valid JSON; refusing to modify.",
+				};
+			}
+			if (Array.isArray(settings.packages)) {
+				const before = settings.packages.length;
+				const filtered = settings.packages.filter((p) => !packageEntryMatches(p));
+				removedPackage = filtered.length < before;
+				if (filtered.length === 0) {
+					delete settings.packages;
+				} else {
+					settings.packages = filtered;
+				}
+			}
+
+			if (Object.keys(settings).length === 0) {
+				// Settings file would become an empty object — delete instead so
+				// the next `ml setup pi --check` reports "not found" rather than
+				// "exists but missing package".
+				await unlink(settingsPath);
+			} else {
+				await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
+			}
+		}
+
+		// Revert CLAUDE.md / AGENTS.md to the full standalone snippet. Variant
+		// is forced rather than auto-detected because the settings file may
+		// have just been deleted but the FS cache could still report stale.
+		await runOnboard({ cwd, variant: undefined, silent: true });
+
+		if (!removedPackage) {
+			return { success: true, message: "No pi integration found; nothing to remove." };
+		}
+		return {
+			success: true,
+			message: "Removed pi integration: .pi/settings.json + CLAUDE.md reverted.",
+		};
+	},
+};
+
 // ── Recipe registry ─────────────────────────────────────────
 
 /**
@@ -586,6 +735,7 @@ const BUILTIN_RECIPES = {
 	claude: claudeRecipe,
 	cursor: cursorRecipe,
 	codex: codexRecipe,
+	pi: piRecipe,
 } as const satisfies Record<string, ProviderRecipe>;
 
 /** @deprecated kept as alias for `BUILTIN_RECIPES` — used by tests. */

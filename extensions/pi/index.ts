@@ -6,10 +6,11 @@
 //   • mulch-7359 — auto-prime (session_start → before_agent_start)
 //   • mulch-71cf — scope-load on tool_call
 //   • mulch-4d87 — record_expertise / query_expertise custom tools
-//   • mulch-903f — /ml:prime slash command + agent_end learn-nudge widget (this commit)
+//   • mulch-903f — /ml:prime slash command + agent_end learn-nudge widget
+//   • mulch-d060 — `ml setup pi` recipe + pi-aware onboarding marker (this commit)
 //
-// Pending steps fill in the remaining lifecycle handlers:
-//   • mulch-d060 — pi-aware onboarding marker (driven by setup recipe)
+// Pending steps:
+//   • mulch-7229 — tests + README rewrite
 //
 // Imports from @earendil-works/pi-coding-agent and typebox are declared as
 // peerDependencies (optional) in package.json so CLI-only users do not pay
