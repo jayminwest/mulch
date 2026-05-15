@@ -325,6 +325,148 @@ describe("setup command", () => {
 		});
 	});
 
+	// ── Pi recipe ──────────────────────────────────────────────
+
+	describe("pi recipe", () => {
+		const PI_PACKAGE = "@os-eco/mulch-cli";
+		const settingsPath = (cwd: string) => join(cwd, ".pi", "settings.json");
+
+		it("writes .pi/settings.json with the mulch package on fresh install", async () => {
+			const result = await recipes.pi.install(tmpDir);
+			expect(result.success).toBe(true);
+			expect(result.message).toContain("Installed Pi integration");
+
+			const settings = JSON.parse(await readFile(settingsPath(tmpDir), "utf-8"));
+			expect(settings.packages).toEqual([PI_PACKAGE]);
+		});
+
+		it("flips the CLAUDE.md marker to the :pi suffix", async () => {
+			await recipes.pi.install(tmpDir);
+
+			const claudeMd = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
+			expect(claudeMd).toContain("<!-- mulch:start -->");
+			expect(claudeMd).toMatch(/<!-- mulch-onboard:v[^>]+:pi -->/);
+			// Pi-aware snippet body, not the long standalone CLI variant.
+			expect(claudeMd).toContain("@os-eco/pi-mulch");
+			expect(claudeMd).toContain("/ml:prime");
+		});
+
+		it("preserves existing entries in .pi/settings.json", async () => {
+			await mkdir(join(tmpDir, ".pi"), { recursive: true });
+			await writeFile(
+				settingsPath(tmpDir),
+				JSON.stringify({ packages: ["some-other-package"], theme: "dark" }, null, 2),
+				"utf-8",
+			);
+
+			await recipes.pi.install(tmpDir);
+
+			const settings = JSON.parse(await readFile(settingsPath(tmpDir), "utf-8"));
+			expect(settings.packages).toEqual(["some-other-package", PI_PACKAGE]);
+			expect(settings.theme).toBe("dark");
+		});
+
+		it("is idempotent — second install does not duplicate the package", async () => {
+			await recipes.pi.install(tmpDir);
+			const result = await recipes.pi.install(tmpDir);
+			expect(result.success).toBe(true);
+			expect(result.message).toContain("already installed");
+
+			const settings = JSON.parse(await readFile(settingsPath(tmpDir), "utf-8"));
+			expect(settings.packages).toEqual([PI_PACKAGE]);
+
+			const claudeMd = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
+			const markerCount = (claudeMd.match(/<!-- mulch:start -->/g) ?? []).length;
+			expect(markerCount).toBe(1);
+		});
+
+		it("recognizes object-shaped package entries with a matching `source` field", async () => {
+			await mkdir(join(tmpDir, ".pi"), { recursive: true });
+			await writeFile(
+				settingsPath(tmpDir),
+				JSON.stringify({ packages: [{ source: PI_PACKAGE, options: {} }] }, null, 2),
+				"utf-8",
+			);
+
+			const installResult = await recipes.pi.install(tmpDir);
+			expect(installResult.message).toContain("already installed");
+
+			const checkResult = await recipes.pi.check(tmpDir);
+			expect(checkResult.success).toBe(true);
+		});
+
+		it("check reports failure when settings.json does not exist", async () => {
+			const result = await recipes.pi.check(tmpDir);
+			expect(result.success).toBe(false);
+			expect(result.message).toContain(".pi/settings.json not found");
+		});
+
+		it("check reports failure when package is not listed", async () => {
+			await mkdir(join(tmpDir, ".pi"), { recursive: true });
+			await writeFile(settingsPath(tmpDir), JSON.stringify({ packages: ["unrelated"] }), "utf-8");
+
+			const result = await recipes.pi.check(tmpDir);
+			expect(result.success).toBe(false);
+			expect(result.message).toContain(PI_PACKAGE);
+		});
+
+		it("check reports success once the package is present", async () => {
+			await recipes.pi.install(tmpDir);
+			const result = await recipes.pi.check(tmpDir);
+			expect(result.success).toBe(true);
+		});
+
+		it("remove strips both the package entry and the :pi marker suffix", async () => {
+			await recipes.pi.install(tmpDir);
+			const result = await recipes.pi.remove(tmpDir);
+			expect(result.success).toBe(true);
+			expect(result.message).toContain("Removed pi integration");
+
+			// Settings file is removed when no other entries remain.
+			expect(existsSync(settingsPath(tmpDir))).toBe(false);
+
+			// CLAUDE.md is reverted to the standalone (non-:pi) snippet.
+			const claudeMd = await readFile(join(tmpDir, "CLAUDE.md"), "utf-8");
+			expect(claudeMd).toContain("<!-- mulch:start -->");
+			expect(claudeMd).not.toMatch(/<!-- mulch-onboard:v[^>]+:pi -->/);
+			expect(claudeMd).toMatch(/<!-- mulch-onboard:v[^>]+ -->/);
+		});
+
+		it("remove preserves unrelated package entries and other top-level keys", async () => {
+			await mkdir(join(tmpDir, ".pi"), { recursive: true });
+			await writeFile(
+				settingsPath(tmpDir),
+				JSON.stringify({ packages: ["other"], theme: "dark" }, null, 2),
+				"utf-8",
+			);
+			await recipes.pi.install(tmpDir);
+			const result = await recipes.pi.remove(tmpDir);
+			expect(result.success).toBe(true);
+
+			expect(existsSync(settingsPath(tmpDir))).toBe(true);
+			const settings = JSON.parse(await readFile(settingsPath(tmpDir), "utf-8"));
+			expect(settings.packages).toEqual(["other"]);
+			expect(settings.theme).toBe("dark");
+		});
+
+		it("remove is safe when nothing is installed", async () => {
+			const result = await recipes.pi.remove(tmpDir);
+			expect(result.success).toBe(true);
+			expect(result.message).toContain("nothing to remove");
+		});
+
+		it("remove refuses to touch malformed JSON rather than overwriting it", async () => {
+			await mkdir(join(tmpDir, ".pi"), { recursive: true });
+			await writeFile(settingsPath(tmpDir), "{ not-json", "utf-8");
+
+			const result = await recipes.pi.remove(tmpDir);
+			expect(result.success).toBe(false);
+			expect(result.message).toContain("not valid JSON");
+			// File is untouched.
+			expect(await readFile(settingsPath(tmpDir), "utf-8")).toBe("{ not-json");
+		});
+	});
+
 	// ── Git hooks ─────────────────────────────────────────────
 
 	describe("git hooks", () => {
