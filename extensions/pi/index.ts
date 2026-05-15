@@ -4,10 +4,10 @@
 // Steps landed:
 //   • mulch-be45 — extension skeleton, peer deps, pi.* config block
 //   • mulch-7359 — auto-prime (session_start → before_agent_start)
-//   • mulch-71cf — scope-load on tool_call (this commit)
+//   • mulch-71cf — scope-load on tool_call
+//   • mulch-4d87 — record_expertise / query_expertise custom tools (this commit)
 //
 // Pending steps fill in the remaining lifecycle handlers:
-//   • mulch-4d87 — record_expertise / query_expertise custom tools
 //   • mulch-903f — slash commands + agent_end learn-nudge widget
 //   • mulch-d060 — pi-aware onboarding marker (driven by setup recipe)
 //
@@ -26,6 +26,7 @@ import {
 	SCOPE_LOAD_TOOL_NAMES,
 	type ScopeLoader,
 } from "./lib/scope-load.ts";
+import { buildQueryExpertiseTool, buildRecordExpertiseTool } from "./lib/tools.ts";
 
 export default function piMulchExtension(pi: ExtensionAPI): void {
 	// Resolved once per session_start so config edits take effect on /reload
@@ -68,6 +69,20 @@ export default function piMulchExtension(pi: ExtensionAPI): void {
 			});
 			const persisted = collectPersistedScopeLoadPaths(ctx.sessionManager.getEntries());
 			scopeLoader.restore(persisted);
+		}
+		if (resolved.tools) {
+			// Tools are dynamic per project (custom_types, per-domain rules) so we
+			// rebuild on every session_start. Schema definitions and the LLM-
+			// facing description both reflect the *live* mulch.config.yaml.
+			try {
+				const recordTool = await buildRecordExpertiseTool({ exec: pi.exec, cwd: ctx.cwd });
+				pi.registerTool(recordTool);
+				const queryTool = buildQueryExpertiseTool({ exec: pi.exec, cwd: ctx.cwd });
+				pi.registerTool(queryTool);
+			} catch {
+				// Registry/config read failed mid-session_start — stay inert so a
+				// transient YAML edit doesn't tear down the whole extension.
+			}
 		}
 	});
 
