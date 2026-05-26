@@ -1,0 +1,26 @@
+# .warren/triggers.yaml — scheduled runs for this project.
+#
+# Each entry is a cron-style trigger. Warren ticks once a minute and
+# spawns a run when a trigger is due.
+#
+# Required fields: id, kind, cron, role.
+# Optional fields: seed, timezone (default UTC), prompt.
+
+- id: nightwatch-patrol
+  kind: cron
+  cron: '0 3 * * *'
+  role: nightwatch
+  timezone: America/Los_Angeles
+  prompt: |
+    Scan this repo for quality issues. Follow your procedure exactly.
+    Today's date is {{date}}. If you find issues, file a plan. If the
+    codebase is clean, report clean and exit.
+
+- id: bugwatch-triage
+  kind: cron
+  cron: '0 8 * * 0,3'
+  role: bugwatch
+  timezone: America/Los_Angeles
+  prompt: |
+    Triage open bug seeds and plan fixes. Follow your procedure exactly.
+    Today's date is {{date}}. If no bugs qualify, report clean and exit.
