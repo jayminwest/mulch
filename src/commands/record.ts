@@ -907,15 +907,17 @@ Batch recording examples:
 			});
 
 			if (!built.record) {
-				const requireList = def.required.join(", ");
-				const fallback = positionalFallbackField(def);
-				const fallbackHint = fallback ? ` (or positional content for ${fallback})` : "";
-				const msg = `${def.name} records require: ${requireList}${fallbackHint}.`;
+				const missingFlags = built.missing.map((m) => m.flag);
+				const flagList =
+					missingFlags.length > 0 ? missingFlags.join(", ") : def.required.join(", ");
+				const retryCmd = buildRetryCommand(domain, content, options, built.missing);
+				const msg = `${def.name} records are missing required flag(s): ${flagList}. Example: ${retryCmd}`;
 				if (jsonMode) {
 					outputJsonError("record", msg);
 				} else {
-					console.error(chalk.red(`Error: ${msg}`));
-					const retryCmd = buildRetryCommand(domain, content, options, built.missing);
+					console.error(
+						chalk.red(`Error: ${def.name} records are missing required flag(s): ${flagList}.`),
+					);
 					console.error(chalk.dim(`  Retry: ${retryCmd}`));
 				}
 				process.exitCode = 1;

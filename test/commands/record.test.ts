@@ -2289,7 +2289,7 @@ describe("per-domain required_fields (R-01c)", () => {
 			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
 		);
 		expect(r.status).toBe(1);
-		expect(r.stderr).toMatch(/task records require: description/);
+		expect(r.stderr).toMatch(/task records are missing required flag\(s\): --description/);
 	});
 
 	it("missing/empty required_fields preserves back-compat", () => {
