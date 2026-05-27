@@ -1,0 +1,32 @@
+name: auto-merge
+
+# Enable GitHub's auto-merge on PRs authored by the repo owner so they
+# merge as soon as the `ci` required check passes. Other authors' PRs
+# still run CI but require a manual `gh pr merge` (or click). Squash is
+# the chosen merge method — keeps main history linear, drops the
+# burrow/run_xxx branch noise from agent-opened PRs.
+#
+# Uses AUTO_MERGE_PAT (not GITHUB_TOKEN) so that the resulting push to
+# main triggers downstream workflows (CI, Publish). GITHUB_TOKEN-authored
+# pushes are deliberately suppressed by GitHub to prevent recursive loops.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    runs-on: ubuntu-latest
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.user.login == github.repository_owner
+    steps:
+      - name: Enable auto-merge (squash)
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_PAT }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

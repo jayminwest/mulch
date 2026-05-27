@@ -81,10 +81,9 @@ For each relevant change:
 
 Removed config keys or types: leave them out of the doc entirely (CONFIG.md is reference, not changelog). The CHANGELOG entry covers the removal.
 
-### 8. Present summary
+### 8. Commit and present summary
 
+- Commit all changes with a message like "release: vX.Y.Z"
 - Show a summary of all changes made
 - List the version bump (old -> new)
 - Summarize what was documented in the changelog
-
-Do NOT commit or push. Just make the edits and present the summary.
