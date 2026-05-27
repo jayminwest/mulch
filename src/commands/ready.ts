@@ -12,6 +12,17 @@ interface AnnotatedRecord {
 	record: ExpertiseRecord;
 }
 
+// Strict numeric flag parsing — see mx-5b9578 / src/commands/rank.ts.
+// `Number.parseInt("10abc", 10)` silently returns 10; use regex + Number() so
+// typos like `--limit 10abc` or `--limit 3.7` are rejected.
+const POSITIVE_INT_RE = /^\d+$/;
+
+function parseStrictPositiveInt(raw: string): number | null {
+	if (!POSITIVE_INT_RE.test(raw)) return null;
+	const n = Number(raw);
+	return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
 function parseDuration(input: string): number {
 	const match = input.match(/^(\d+)(h|d|w)$/);
 	if (!match) {
@@ -43,13 +54,14 @@ export function registerReadyCommand(program: Command): void {
 
 			try {
 				const config = await readConfig();
-				const limit = Number.parseInt(options.limit, 10);
+				const limit = parseStrictPositiveInt(options.limit);
 
-				if (Number.isNaN(limit) || limit < 1) {
+				if (limit === null) {
+					const msg = `--limit must be a positive integer (got "${options.limit}").`;
 					if (jsonMode) {
-						outputJsonError("ready", "Limit must be a positive integer.");
+						outputJsonError("ready", msg);
 					} else {
-						console.error(chalk.red("Error: --limit must be a positive integer."));
+						console.error(chalk.red(`Error: ${msg}`));
 					}
 					process.exitCode = 1;
 					return;

@@ -29,6 +29,17 @@ interface PreCompactPayload {
 	replacement?: ExpertiseRecord;
 }
 
+// Strict numeric flag parsing — see mx-5b9578 / src/commands/rank.ts.
+// `Number.parseInt("10abc", 10)` silently returns 10; use regex + Number() so
+// typos like `--min-group abc` or `--max-records 50xyz` are rejected.
+const POSITIVE_INT_RE = /^\d+$/;
+
+function parseStrictPositiveInt(raw: string): number | null {
+	if (!POSITIVE_INT_RE.test(raw)) return null;
+	const n = Number(raw);
+	return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
 interface CompactCandidate {
 	domain: string;
 	type: RecordType;
@@ -272,8 +283,32 @@ async function handleAuto(
 
 	const dryRun = options.dryRun === true;
 	const skipConfirmation = options.yes === true;
-	const minGroupSize = Number.parseInt(options.minGroup as string, 10) || 5;
-	const maxRecords = Number.parseInt(options.maxRecords as string, 10) || 50;
+
+	const minGroupRaw = options.minGroup as string | undefined;
+	const minGroupSize = minGroupRaw === undefined ? 5 : parseStrictPositiveInt(minGroupRaw);
+	if (minGroupSize === null) {
+		const msg = `--min-group must be a positive integer (got "${minGroupRaw}").`;
+		if (jsonMode) {
+			outputJsonError("compact", msg);
+		} else {
+			console.error(chalk.red(`Error: ${msg}`));
+		}
+		process.exitCode = 1;
+		return;
+	}
+
+	const maxRecordsRaw = options.maxRecords as string | undefined;
+	const maxRecords = maxRecordsRaw === undefined ? 50 : parseStrictPositiveInt(maxRecordsRaw);
+	if (maxRecords === null) {
+		const msg = `--max-records must be a positive integer (got "${maxRecordsRaw}").`;
+		if (jsonMode) {
+			outputJsonError("compact", msg);
+		} else {
+			console.error(chalk.red(`Error: ${msg}`));
+		}
+		process.exitCode = 1;
+		return;
+	}
 
 	// Filter to specific domain if provided, otherwise check all domains
 	const domainsToCheck = domain ? [domain] : Object.keys(config.domains);

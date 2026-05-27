@@ -100,6 +100,17 @@ export function estimateRecordText(record: ExpertiseRecord): string {
 	return def.formatCompactLine(record);
 }
 
+// Strict numeric flag parsing — see mx-5b9578 / src/commands/rank.ts.
+// `Number.parseInt("10abc", 10)` silently returns 10; use regex + Number() so
+// typos like `--budget 5000abc` or `--budget 3.7` are rejected.
+const POSITIVE_INT_RE = /^\d+$/;
+
+function parseStrictPositiveInt(raw: string): number | null {
+	if (!POSITIVE_INT_RE.test(raw)) return null;
+	const n = Number(raw);
+	return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
 export function registerPrimeCommand(program: Command): void {
 	program
 		.command("prime")
@@ -261,7 +272,23 @@ export function registerPrimeCommand(program: Command): void {
 
 				// Determine budget settings
 				const budgetEnabled = !jsonMode && options.limit !== false;
-				const budget = options.budget ? Number.parseInt(options.budget, 10) : DEFAULT_BUDGET;
+				let budget: number;
+				if (options.budget) {
+					const parsed = parseStrictPositiveInt(options.budget);
+					if (parsed === null) {
+						const msg = `--budget must be a positive integer (got "${options.budget}").`;
+						if (jsonMode) {
+							outputJsonError("prime", msg);
+						} else {
+							console.error(`Error: ${msg}`);
+						}
+						process.exitCode = 1;
+						return;
+					}
+					budget = parsed;
+				} else {
+					budget = DEFAULT_BUDGET;
+				}
 
 				// Load records once, unfiltered. Both branches (manifest and full)
 				// need either counts or the records themselves; one read keeps the

@@ -1378,3 +1378,63 @@ EOF`,
 		expect(live).toHaveLength(2);
 	});
 });
+
+describe("ml compact --auto strict numeric flag parsing", () => {
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-compact-strict-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("rejects --min-group with trailing garbage instead of falling back to default", async () => {
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"--auto",
+			"--min-group",
+			"abc",
+		]);
+		expect(result.stderr).toContain("--min-group must be a positive integer");
+		expect(result.stderr).toContain('"abc"');
+		expect(result.exitCode).toBe(1);
+	});
+
+	it("rejects --min-group with a non-integer (e.g. 3.7)", async () => {
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"--auto",
+			"--min-group",
+			"3.7",
+		]);
+		expect(result.stderr).toContain("--min-group must be a positive integer");
+		expect(result.exitCode).toBe(1);
+	});
+
+	it("rejects --max-records with trailing garbage", async () => {
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"--auto",
+			"--max-records",
+			"50xyz",
+		]);
+		expect(result.stderr).toContain("--max-records must be a positive integer");
+		expect(result.stderr).toContain('"50xyz"');
+		expect(result.exitCode).toBe(1);
+	});
+
+	it("rejects --min-group 0", async () => {
+		const result = await runCompact(tmpDir, registerCompactCommand, [
+			"compact",
+			"--auto",
+			"--min-group",
+			"0",
+		]);
+		expect(result.stderr).toContain("--min-group must be a positive integer");
+		expect(result.exitCode).toBe(1);
+	});
+});

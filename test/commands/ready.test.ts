@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Command } from "commander";
+import { registerReadyCommand } from "../../src/commands/ready.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import { getExpertisePath, initMulchDir, writeConfig } from "../../src/utils/config.ts";
@@ -193,5 +195,77 @@ describe("getRecordSummary", () => {
 			recorded_at: new Date().toISOString(),
 		};
 		expect(getRecordSummary(record)).toBe("Memory leak in parser");
+	});
+});
+
+function makeReadyProgram(): Command {
+	const program = new Command();
+	program.name("mulch").option("--json", "output as structured JSON").exitOverride();
+	registerReadyCommand(program);
+	return program;
+}
+
+describe("ready command --limit strict parsing", () => {
+	let originalCwd: string;
+
+	beforeEach(() => {
+		originalCwd = process.cwd();
+	});
+
+	afterEach(() => {
+		process.chdir(originalCwd);
+		process.exitCode = 0;
+	});
+
+	it("rejects --limit with trailing garbage instead of silently truncating", async () => {
+		process.chdir(tmpDir);
+		const errSpy = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const program = makeReadyProgram();
+			await program.parseAsync(["node", "mulch", "ready", "--limit", "10abc"]);
+			expect(errSpy.mock.calls[0]?.[0]).toContain("--limit must be a positive integer");
+			expect(errSpy.mock.calls[0]?.[0]).toContain('"10abc"');
+			expect(process.exitCode).toBe(1);
+		} finally {
+			errSpy.mockRestore();
+		}
+	});
+
+	it("rejects --limit with non-integer value (e.g. 3.7)", async () => {
+		process.chdir(tmpDir);
+		const errSpy = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const program = makeReadyProgram();
+			await program.parseAsync(["node", "mulch", "ready", "--limit", "3.7"]);
+			expect(errSpy.mock.calls[0]?.[0]).toContain("--limit must be a positive integer");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			errSpy.mockRestore();
+		}
+	});
+
+	it("rejects --limit 0", async () => {
+		process.chdir(tmpDir);
+		const errSpy = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const program = makeReadyProgram();
+			await program.parseAsync(["node", "mulch", "ready", "--limit", "0"]);
+			expect(errSpy.mock.calls[0]?.[0]).toContain("--limit must be a positive integer");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			errSpy.mockRestore();
+		}
+	});
+
+	it("accepts a valid positive integer --limit", async () => {
+		process.chdir(tmpDir);
+		const logSpy = spyOn(console, "log").mockImplementation(() => {});
+		try {
+			const program = makeReadyProgram();
+			await program.parseAsync(["node", "mulch", "ready", "--limit", "5"]);
+			expect(process.exitCode).not.toBe(1);
+		} finally {
+			logSpy.mockRestore();
+		}
 	});
 });

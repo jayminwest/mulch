@@ -2398,6 +2398,49 @@ describe("prime command", () => {
 				errorSpy.mockRestore();
 			}
 		});
+
+		it("rejects --budget with trailing garbage", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+			process.chdir(tmpDir);
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--budget", "5000abc"]);
+				expect(errorSpy.mock.calls[0]?.[0]).toContain("--budget must be a positive integer");
+				expect(errorSpy.mock.calls[0]?.[0]).toContain('"5000abc"');
+				expect(process.exitCode).toBe(1);
+			} finally {
+				errorSpy.mockRestore();
+			}
+		});
+
+		it("rejects --budget with non-integer (e.g. 3.7)", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+			process.chdir(tmpDir);
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--budget", "3.7"]);
+				expect(errorSpy.mock.calls[0]?.[0]).toContain("--budget must be a positive integer");
+				expect(process.exitCode).toBe(1);
+			} finally {
+				errorSpy.mockRestore();
+			}
+		});
+
+		it("rejects --budget 0", async () => {
+			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+			process.chdir(tmpDir);
+			const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+			try {
+				const program = makeProgram();
+				await program.parseAsync(["node", "mulch", "prime", "--budget", "0"]);
+				expect(errorSpy.mock.calls[0]?.[0]).toContain("--budget must be a positive integer");
+				expect(process.exitCode).toBe(1);
+			} finally {
+				errorSpy.mockRestore();
+			}
+		});
 	});
 
 	describe("prime output enrichment", () => {
