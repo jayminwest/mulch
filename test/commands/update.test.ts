@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 describe("update command (deprecated)", () => {
 	it("shows deprecation warning and exits with code 1", () => {
 		try {
-			execSync("bun src/cli.ts update", {
+			execFileSync("bun", ["src/cli.ts", "update"], {
 				encoding: "utf-8",
 				timeout: 15000,
 			});
@@ -19,7 +19,7 @@ describe("update command (deprecated)", () => {
 
 	it("shows deprecation warning even with --check", () => {
 		try {
-			execSync("bun src/cli.ts update --check", {
+			execFileSync("bun", ["src/cli.ts", "update", "--check"], {
 				encoding: "utf-8",
 				timeout: 15000,
 			});

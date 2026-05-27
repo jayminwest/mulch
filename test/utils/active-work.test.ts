@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,16 +15,16 @@ import {
 } from "../../src/utils/active-work.ts";
 
 function initGitRepo(dir: string): void {
-	execSync("git init -q -b main", { cwd: dir, stdio: "pipe" });
-	execSync("git config user.email 'test@test.com'", { cwd: dir, stdio: "pipe" });
-	execSync("git config user.name 'Test'", { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["config", "user.name", "Test"], { cwd: dir, stdio: "pipe" });
 }
 
 async function commitOnBranch(dir: string, branch: string): Promise<void> {
-	execSync(`git checkout -q -b ${branch}`, { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["checkout", "-q", "-b", branch], { cwd: dir, stdio: "pipe" });
 	await writeFile(join(dir, "stamp.txt"), branch);
-	execSync("git add .", { cwd: dir, stdio: "pipe" });
-	execSync("git commit -q -m 'stamp'", { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["add", "."], { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["commit", "-q", "-m", "stamp"], { cwd: dir, stdio: "pipe" });
 }
 
 async function writeSeedsIssues(

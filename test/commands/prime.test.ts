@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -3641,9 +3641,12 @@ describe("prime command", () => {
 			// realpath() needed because macOS /var → /private/var; --git-common-dir
 			// returns the resolved path so isInsideWorktree comparisons need parity.
 			gitDir = await realpath(await mkdtemp(join(tmpdir(), "mulch-prime-slice2-")));
-			execSync("git init -q -b main", { cwd: gitDir, stdio: "pipe" });
-			execSync("git config user.email 'test@test.com'", { cwd: gitDir, stdio: "pipe" });
-			execSync("git config user.name 'Test'", { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["init", "-q", "-b", "main"], { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["config", "user.email", "test@test.com"], {
+				cwd: gitDir,
+				stdio: "pipe",
+			});
+			execFileSync("git", ["config", "user.name", "Test"], { cwd: gitDir, stdio: "pipe" });
 			await mkdir(join(gitDir, ".mulch"), { recursive: true });
 			await mkdir(join(gitDir, ".mulch", "expertise"), { recursive: true });
 		});
@@ -3693,7 +3696,7 @@ describe("prime command", () => {
 			const abs = join(gitDir, relPath);
 			await mkdir(join(abs, ".."), { recursive: true });
 			await writeFile(abs, "// stub\n");
-			execSync(`git add ${relPath}`, { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["add", relPath], { cwd: gitDir, stdio: "pipe" });
 		}
 
 		it("--full context-scopes to changed files by default", async () => {
@@ -3788,8 +3791,11 @@ describe("prime command", () => {
 		it("no signals (clean repo, no in-progress work) skips auto-scope", async () => {
 			await seedMixedDomain();
 			// Commit the config so there are no changed/untracked files outside .mulch
-			execSync("git add -A", { cwd: gitDir, stdio: "pipe" });
-			execSync("git commit -q -m 'seed' --allow-empty", { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["add", "-A"], { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["commit", "-q", "-m", "seed", "--allow-empty"], {
+				cwd: gitDir,
+				stdio: "pipe",
+			});
 			process.chdir(gitDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
 			const errSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -3924,9 +3930,12 @@ describe("prime command", () => {
 		beforeEach(async () => {
 			originalCwd = process.cwd();
 			gitDir = await realpath(await mkdtemp(join(tmpdir(), "mulch-prime-slice3-")));
-			execSync("git init -q -b main", { cwd: gitDir, stdio: "pipe" });
-			execSync("git config user.email 'test@test.com'", { cwd: gitDir, stdio: "pipe" });
-			execSync("git config user.name 'Test'", { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["init", "-q", "-b", "main"], { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["config", "user.email", "test@test.com"], {
+				cwd: gitDir,
+				stdio: "pipe",
+			});
+			execFileSync("git", ["config", "user.name", "Test"], { cwd: gitDir, stdio: "pipe" });
 			await mkdir(join(gitDir, ".mulch"), { recursive: true });
 			await mkdir(join(gitDir, ".mulch", "expertise"), { recursive: true });
 		});
@@ -4114,7 +4123,7 @@ describe("prime command", () => {
 			// supplies the ActiveContext; omitting --all lets it kick in.
 			await mkdir(join(gitDir, "src"), { recursive: true });
 			await writeFile(join(gitDir, "src", "cli.ts"), "// stub\n");
-			execSync("git add src/cli.ts", { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["add", "src/cli.ts"], { cwd: gitDir, stdio: "pipe" });
 			await mkdir(join(gitDir, ".seeds"), { recursive: true });
 			await writeFile(
 				join(gitDir, ".seeds", "issues.jsonl"),
