@@ -1342,6 +1342,124 @@ describe("record command help text", () => {
 	});
 });
 
+describe("--content flag for convention (pl-21a3)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-content-flag-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+		await createExpertiseFile(getExpertisePath("testing", tmpDir));
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("writes a valid record when --content is supplied as a named flag", async () => {
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "testing", "--type", "convention", "--content", "flag content"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded convention/);
+
+		const records = await readExpertiseFile(getExpertisePath("testing", tmpDir));
+		expect(records).toHaveLength(1);
+		expect(records[0]?.type).toBe("convention");
+		expect(records[0]).toMatchObject({ content: "flag content" });
+	});
+
+	it("still accepts the positional [content] argument (no regression)", async () => {
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "testing", "positional content", "--type", "convention"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		expect(r.stdout).toMatch(/Recorded convention/);
+
+		const records = await readExpertiseFile(getExpertisePath("testing", tmpDir));
+		expect(records).toHaveLength(1);
+		expect(records[0]).toMatchObject({ content: "positional content" });
+	});
+
+	it("explicit --content wins when both --content and positional are supplied", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"testing",
+				"positional value",
+				"--type",
+				"convention",
+				"--content",
+				"flag value",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+
+		const records = await readExpertiseFile(getExpertisePath("testing", tmpDir));
+		expect(records).toHaveLength(1);
+		expect(records[0]).toMatchObject({ content: "flag value" });
+	});
+
+	it("missing content prints a concrete --content retry example (no tautological wording)", () => {
+		const r = spawnSync(
+			"bun",
+			[cliPath, "record", "testing", "--type", "convention", "--name", "foo"],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toMatch(/missing required flag\(s\): --content/);
+		expect(r.stderr).toMatch(/Retry: ml record testing --type convention/);
+		expect(r.stderr).toMatch(/--content/);
+		// Regression guard: the old tautological phrasing must not return.
+		expect(r.stderr).not.toContain("positional content for content");
+		expect(r.stderr).not.toMatch(/records require:/);
+	});
+
+	it("missing content in --json mode surfaces --content in the error payload", () => {
+		const r = spawnSync("bun", [cliPath, "record", "testing", "--type", "convention", "--json"], {
+			cwd: tmpDir,
+			encoding: "utf-8",
+			timeout: 8000,
+		});
+		expect(r.status).toBe(1);
+		const out = JSON.parse(r.stderr);
+		expect(out.success).toBe(false);
+		expect(out.command).toBe("record");
+		expect(out.error).toMatch(/missing required flag\(s\): --content/);
+		expect(out.error).toMatch(/Example: ml record testing --type convention .*--content/);
+		expect(out.error).not.toContain("positional content for content");
+	});
+
+	it("--help after-help block points convention at --content, not --description", () => {
+		const helpOutput = execFileSync("bun", [cliPath, "record", "--help"], {
+			encoding: "utf-8",
+			timeout: 5000,
+		});
+		// Locate the line that documents convention requirements.
+		const conventionLine = helpOutput.split("\n").find((line) => /^\s*convention\s/.test(line));
+		expect(conventionLine).toBeDefined();
+		expect(conventionLine).toContain("--content");
+		expect(conventionLine).toContain("[content]");
+		expect(conventionLine).not.toContain("--description");
+	});
+
+	it("--help options list registers --content with a description", () => {
+		const helpOutput = execFileSync("bun", [cliPath, "record", "--help"], {
+			encoding: "utf-8",
+			timeout: 5000,
+		});
+		expect(helpOutput).toMatch(/--content <content>/);
+	});
+});
+
 describe("batch mode (--batch)", () => {
 	let tmpDir: string;
 
