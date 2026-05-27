@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-05-27
+
+A discoverability fix for `ml record --type convention` (plan pl-21a3, parent mulch-4f80): adds a named `--content <text>` flag and replaces the tautological missing-content error with a concrete retry example. No schema, hook, or config changes. 1460 tests across 69 files / 3778 expect() calls (up from 1453 / 69 / 3749 in 0.10.3).
+
+### Added
+
+- **`ml record --content <text>` flag for convention records** (mulch-6871, #32): convention's required `content` field used to be reachable only via a positional argument, which made it undiscoverable from `--help`. `--content` is now a first-class named option; the positional form still works, and an explicit `--content` wins when both are supplied (read first inside `collectField`). After-help block updated to show `convention   --content (or positional [content])`; `--content` threaded through `buildRetryCommand` so retry hints preserve it.
+
+### Fixed
+
+- **Missing-content error for `ml record convention` now names the flag and shows a retry command** (mulch-2f54, #33): the validation message used to read `convention records require: content (or positional content for content).` — tautological, and it never named the actual CLI flag. It now reads `convention records are missing required flag(s): --content.` followed by an inline `Retry: ml record <domain> --type convention --content "<content>"` example. The `--json` error path emits the same shape on stderr.
+
+### Testing
+
+- 1460 tests across 69 files, 3778 expect() calls (up from 1453 / 69 / 3749 in 0.10.3). New `--content flag for convention (pl-21a3)` describe block in `test/commands/record.test.ts` (mulch-ca83, #34): 7 tests covering the named flag write path, positional regression guard, explicit-flag-wins-over-positional precedence, the rewritten missing-content error (both text and `--json` shapes), and `--help` registration of `--content <content>` plus the updated after-help line.
+
 ## [0.10.3] - 2026-05-27
 
 A hardening release out of nightwatch plan pl-c92f: tighter numeric-flag parsing in `ml ready` / `ml prime` / `ml compact`, a prerelease-aware `compareSemver`, conversion of the last `execSync` call site to `execFileSync`, and direct unit coverage for two previously transitively-tested utility modules. No public CLI surface, schema, hook, or config changes. 1453 tests across 69 files / 3749 expect() calls (up from 1382 / 67 / 3621 in 0.10.2).
@@ -732,7 +748,8 @@ Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provid
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.3...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.4...HEAD
+[0.10.4]: https://github.com/jayminwest/mulch/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/jayminwest/mulch/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/jayminwest/mulch/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/jayminwest/mulch/compare/v0.10.0...v0.10.1

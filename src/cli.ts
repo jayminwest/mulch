@@ -59,7 +59,7 @@ try {
 	process.exit(1);
 }
 
-export const VERSION = "0.10.3";
+export const VERSION = "0.10.4";
 
 const rawArgs = process.argv.slice(2);
 
