@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-05-27
+
+A hardening release out of nightwatch plan pl-c92f: tighter numeric-flag parsing in `ml ready` / `ml prime` / `ml compact`, a prerelease-aware `compareSemver`, conversion of the last `execSync` call site to `execFileSync`, and direct unit coverage for two previously transitively-tested utility modules. No public CLI surface, schema, hook, or config changes. 1453 tests across 69 files / 3749 expect() calls (up from 1382 / 67 / 3621 in 0.10.2).
+
+### Fixed
+
+- **`compareSemver` mishandled prerelease / non-numeric version segments** (mulch-88fa, #26): inputs like `1.2.3-beta` ran each segment through `Number()`, so the patch became `NaN` and both `NaN < x` and `NaN > x` are false — the comparator falsely reported `1.2.3-beta == 1.2.4`. Now splits on the prerelease boundary up front, compares `major.minor.patch` numerically, and only consults the prerelease tail on a main-version tie per semver 2.0.0 §11.4 (release outranks prerelease, numeric identifiers compare numerically and rank below alphanumeric, longer identifier lists win on tie). Build metadata after `+` is ignored. Affects every code path that compares the local version to the upstream npm version (upgrade nudges, `ml upgrade`, `ml status`).
+- **Strict numeric parsing for `--limit` / `--budget` / `--min-group` / `--max-records`** (mulch-8bd6, #25): `ml ready --limit 10abc`, `ml prime --budget 3.7`, and `ml compact --auto --min-group 0` previously slipped through `Number.parseInt()`'s silent truncation. They now reject non-integer / non-positive input with a targeted error and `exit 1`, matching the convention `ml rank` already used (mx-5b9578). Each command inlines its own `parseStrictPositiveInt` rather than introducing a shared util — the plan was explicit about no new abstractions.
+
+### Changed
+
+- **`src/utils/version.ts` probes npm via `execFileSync`** (mulch-8405, #27): the last `execSync` call site in the codebase is gone. `getLatestVersion()` now spawns `npm` directly with an argv array instead of through a shell. Test helpers across `active-work`, `git`, `git-context`, `sync`, `prime`, `record`, `update`, `upgrade`, and `completions` were converted in the same pass for consistency. Acceptance: `grep -r 'execSync(' src test` returns zero hits. No behavior change.
+
+### Testing
+
+- 1453 tests across 69 files, 3749 expect() calls (up from 1382 / 67 / 3621 in 0.10.2).
+- **New direct suite for `src/utils/prime-ranking.ts`** (mulch-bc7b, #28): 36 tests covering every exported symbol — `resolveTierWeights`, `computeTrustScore`, `sortByTrust`, `whySurfaced`, `formatSurfaceReason`, `buildSurfaceAnnotations`, the `RECENT_AUTHORSHIP_DAYS` constant — plus `SurfaceReason` exhaustiveness. Previously covered only transitively through `ml prime` / `ml rank` integration tests.
+- **New direct suite for `src/utils/anchor-validity.ts`** (mulch-2525, #29): 19 tests covering `getRecordAnchors` (files / `dir_anchors` / `evidence.file` extraction, empty/non-string filtering, non-array guards), `computeAnchorValidity` (null fraction for zero anchors, all-valid, all-broken, partial, `evidence.file` resolution against `projectRoot`), and `passedAnchorGrace` (boundary inclusivity, fractional days, `graceDays=0` edge).
+
 ## [0.10.2] - 2026-05-26
 
 A cleanup release: adds `ml move` for transferring records between domains (#23), rolls back the experimental pi-mulch extension (mulch-88e9), and removes the `pi.*` config namespace. Three built-in provider recipes remain: claude, cursor, codex. 1382 tests across 67 files / 3621 expect() calls (down from 1465 / 72 / 3856 in 0.10.1 — the pi test suites accounted for the difference).
@@ -713,7 +732,8 @@ Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provid
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/jayminwest/mulch/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/jayminwest/mulch/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/jayminwest/mulch/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/jayminwest/mulch/compare/v0.9.0...v0.10.0
