@@ -3642,7 +3642,10 @@ describe("prime command", () => {
 			// returns the resolved path so isInsideWorktree comparisons need parity.
 			gitDir = await realpath(await mkdtemp(join(tmpdir(), "mulch-prime-slice2-")));
 			execFileSync("git", ["init", "-q", "-b", "main"], { cwd: gitDir, stdio: "pipe" });
-			execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["config", "user.email", "test@test.com"], {
+				cwd: gitDir,
+				stdio: "pipe",
+			});
 			execFileSync("git", ["config", "user.name", "Test"], { cwd: gitDir, stdio: "pipe" });
 			await mkdir(join(gitDir, ".mulch"), { recursive: true });
 			await mkdir(join(gitDir, ".mulch", "expertise"), { recursive: true });
@@ -3789,7 +3792,10 @@ describe("prime command", () => {
 			await seedMixedDomain();
 			// Commit the config so there are no changed/untracked files outside .mulch
 			execFileSync("git", ["add", "-A"], { cwd: gitDir, stdio: "pipe" });
-			execFileSync("git", ["commit", "-q", "-m", "seed", "--allow-empty"], { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["commit", "-q", "-m", "seed", "--allow-empty"], {
+				cwd: gitDir,
+				stdio: "pipe",
+			});
 			process.chdir(gitDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
 			const errSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -3925,7 +3931,10 @@ describe("prime command", () => {
 			originalCwd = process.cwd();
 			gitDir = await realpath(await mkdtemp(join(tmpdir(), "mulch-prime-slice3-")));
 			execFileSync("git", ["init", "-q", "-b", "main"], { cwd: gitDir, stdio: "pipe" });
-			execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: gitDir, stdio: "pipe" });
+			execFileSync("git", ["config", "user.email", "test@test.com"], {
+				cwd: gitDir,
+				stdio: "pipe",
+			});
 			execFileSync("git", ["config", "user.name", "Test"], { cwd: gitDir, stdio: "pipe" });
 			await mkdir(join(gitDir, ".mulch"), { recursive: true });
 			await mkdir(join(gitDir, ".mulch", "expertise"), { recursive: true });

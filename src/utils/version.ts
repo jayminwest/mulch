@@ -17,15 +17,11 @@ export function getCurrentVersion(): string {
  */
 export function getLatestVersion(): string | null {
 	try {
-		const result = execFileSync(
-			"npm",
-			["view", "@os-eco/mulch-cli", "version"],
-			{
-				encoding: "utf-8",
-				timeout: 10000,
-				stdio: ["pipe", "pipe", "pipe"],
-			},
-		);
+		const result = execFileSync("npm", ["view", "@os-eco/mulch-cli", "version"], {
+			encoding: "utf-8",
+			timeout: 10000,
+			stdio: ["pipe", "pipe", "pipe"],
+		});
 		return result.trim();
 	} catch {
 		return null;
