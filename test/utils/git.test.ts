@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,9 +12,9 @@ import {
 } from "../../src/utils/git.ts";
 
 function initGitRepo(dir: string): void {
-	execSync("git init -q -b main", { cwd: dir, stdio: "pipe" });
-	execSync("git config user.email 'test@test.com'", { cwd: dir, stdio: "pipe" });
-	execSync("git config user.name 'Test'", { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["config", "user.name", "Test"], { cwd: dir, stdio: "pipe" });
 }
 
 describe("git utils — slice 2 helpers", () => {
@@ -36,7 +36,7 @@ describe("git utils — slice 2 helpers", () => {
 		it("returns staged additions", async () => {
 			initGitRepo(tmpDir);
 			await writeFile(join(tmpDir, "a.txt"), "a");
-			execSync("git add a.txt", { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["add", "a.txt"], { cwd: tmpDir, stdio: "pipe" });
 			expect(getActiveFiles(tmpDir)).toEqual(["a.txt"]);
 		});
 
@@ -49,8 +49,8 @@ describe("git utils — slice 2 helpers", () => {
 		it("returns unstaged modifications after commit", async () => {
 			initGitRepo(tmpDir);
 			await writeFile(join(tmpDir, "file.txt"), "original");
-			execSync("git add .", { cwd: tmpDir, stdio: "pipe" });
-			execSync("git commit -q -m initial", { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["add", "."], { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["commit", "-q", "-m", "initial"], { cwd: tmpDir, stdio: "pipe" });
 			await writeFile(join(tmpDir, "file.txt"), "modified");
 			expect(getActiveFiles(tmpDir)).toContain("file.txt");
 		});
@@ -58,9 +58,9 @@ describe("git utils — slice 2 helpers", () => {
 		it("returns rename destination only", async () => {
 			initGitRepo(tmpDir);
 			await writeFile(join(tmpDir, "old.txt"), "x");
-			execSync("git add .", { cwd: tmpDir, stdio: "pipe" });
-			execSync("git commit -q -m initial", { cwd: tmpDir, stdio: "pipe" });
-			execSync("git mv old.txt new.txt", { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["add", "."], { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["commit", "-q", "-m", "initial"], { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["mv", "old.txt", "new.txt"], { cwd: tmpDir, stdio: "pipe" });
 			const files = getActiveFiles(tmpDir);
 			expect(files).toContain("new.txt");
 			expect(files).not.toContain("old.txt");

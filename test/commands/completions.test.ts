@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 describe("completions command", () => {
 	it("outputs bash completion script", () => {
-		const result = execSync("bun src/cli.ts completions bash", {
+		const result = execFileSync("bun", ["src/cli.ts", "completions", "bash"], {
 			encoding: "utf-8",
 			timeout: 15000,
 		});
@@ -14,7 +14,7 @@ describe("completions command", () => {
 	});
 
 	it("outputs zsh completion script", () => {
-		const result = execSync("bun src/cli.ts completions zsh", {
+		const result = execFileSync("bun", ["src/cli.ts", "completions", "zsh"], {
 			encoding: "utf-8",
 			timeout: 15000,
 		});
@@ -25,7 +25,7 @@ describe("completions command", () => {
 	});
 
 	it("outputs fish completion script", () => {
-		const result = execSync("bun src/cli.ts completions fish", {
+		const result = execFileSync("bun", ["src/cli.ts", "completions", "fish"], {
 			encoding: "utf-8",
 			timeout: 15000,
 		});
@@ -35,7 +35,7 @@ describe("completions command", () => {
 	});
 
 	it("includes ml alias in bash completions", () => {
-		const result = execSync("bun src/cli.ts completions bash", {
+		const result = execFileSync("bun", ["src/cli.ts", "completions", "bash"], {
 			encoding: "utf-8",
 			timeout: 15000,
 		});
@@ -53,7 +53,7 @@ describe("completions command", () => {
 	});
 
 	it("does not include hidden commands (update)", () => {
-		const result = execSync("bun src/cli.ts completions bash", {
+		const result = execFileSync("bun", ["src/cli.ts", "completions", "bash"], {
 			encoding: "utf-8",
 			timeout: 15000,
 		});

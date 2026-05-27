@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,8 @@ function runUpgrade(args: string): {
 	status: number;
 } {
 	try {
-		const stdout = execSync(`bun src/cli.ts upgrade ${args}`, {
+		const argv = args.length > 0 ? args.split(/\s+/).filter(Boolean) : [];
+		const stdout = execFileSync("bun", ["src/cli.ts", "upgrade", ...argv], {
 			encoding: "utf-8",
 			timeout: 20000,
 			cwd: root,

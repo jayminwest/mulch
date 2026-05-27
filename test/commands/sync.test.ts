@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,21 +19,21 @@ function makeProgram(): Command {
 }
 
 function initGitRepo(dir: string): void {
-	execSync("git init", { cwd: dir, stdio: "pipe" });
-	execSync("git config user.email 'test@test.com'", {
+	execFileSync("git", ["init"], { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["config", "user.email", "test@test.com"], {
 		cwd: dir,
 		stdio: "pipe",
 	});
-	execSync("git config user.name 'Test User'", { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["config", "user.name", "Test User"], { cwd: dir, stdio: "pipe" });
 }
 
 function gitCommitAll(dir: string, message: string): void {
-	execSync("git add .", { cwd: dir, stdio: "pipe" });
-	execSync(`git commit -m "${message}"`, { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["add", "."], { cwd: dir, stdio: "pipe" });
+	execFileSync("git", ["commit", "-m", message], { cwd: dir, stdio: "pipe" });
 }
 
 function getGitLog(dir: string): string {
-	return execSync("git log --oneline", {
+	return execFileSync("git", ["log", "--oneline"], {
 		cwd: dir,
 		encoding: "utf-8",
 		stdio: ["pipe", "pipe", "pipe"],
@@ -41,7 +41,7 @@ function getGitLog(dir: string): string {
 }
 
 function isGitClean(dir: string): boolean {
-	const status = execSync("git status --porcelain .mulch/", {
+	const status = execFileSync("git", ["status", "--porcelain", ".mulch/"], {
 		cwd: dir,
 		encoding: "utf-8",
 		stdio: ["pipe", "pipe", "pipe"],

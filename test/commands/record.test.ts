@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -1305,7 +1305,7 @@ describe("processStdinRecords", () => {
 
 describe("record command help text", () => {
 	it("--help displays required fields per record type", () => {
-		const helpOutput = execSync("bun src/cli.ts record --help", {
+		const helpOutput = execFileSync("bun", ["src/cli.ts", "record", "--help"], {
 			encoding: "utf-8",
 			timeout: 5000,
 		});
@@ -1331,7 +1331,7 @@ describe("record command help text", () => {
 	});
 
 	it("--help displays batch recording examples", () => {
-		const helpOutput = execSync("bun src/cli.ts record --help", {
+		const helpOutput = execFileSync("bun", ["src/cli.ts", "record", "--help"], {
 			encoding: "utf-8",
 			timeout: 5000,
 		});
@@ -2487,8 +2487,9 @@ describe("dir_anchors (R-01)", () => {
 		tmpDir = await mkdtemp(join(tmpdir(), "mulch-dir-anchors-"));
 		// Real git repo so getContextFiles() can run; auto-population tests
 		// stage files into it to drive the heuristic.
-		execSync("git init -q", { cwd: tmpDir });
-		execSync("git config user.email t@t && git config user.name t", { cwd: tmpDir });
+		execFileSync("git", ["init", "-q"], { cwd: tmpDir });
+		execFileSync("git", ["config", "user.email", "t@t"], { cwd: tmpDir });
+		execFileSync("git", ["config", "user.name", "t"], { cwd: tmpDir });
 		await initMulchDir(tmpDir);
 		await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
 		await createExpertiseFile(getExpertisePath("cli", tmpDir));
@@ -2610,11 +2611,11 @@ describe("dir_anchors (R-01)", () => {
 	});
 
 	it("auto-populates dir_anchors from common parent of 3+ changed files", async () => {
-		execSync("mkdir -p src/utils", { cwd: tmpDir });
+		execFileSync("mkdir", ["-p", "src/utils"], { cwd: tmpDir });
 		await writeFile(join(tmpDir, "src/utils/a.ts"), "// a", "utf-8");
 		await writeFile(join(tmpDir, "src/utils/b.ts"), "// b", "utf-8");
 		await writeFile(join(tmpDir, "src/utils/c.ts"), "// c", "utf-8");
-		execSync("git add src/utils", { cwd: tmpDir });
+		execFileSync("git", ["add", "src/utils"], { cwd: tmpDir });
 
 		const r = spawnSync(
 			"bun",
@@ -2627,10 +2628,10 @@ describe("dir_anchors (R-01)", () => {
 	});
 
 	it("does NOT auto-populate when only 2 files share a parent dir", async () => {
-		execSync("mkdir -p src/utils", { cwd: tmpDir });
+		execFileSync("mkdir", ["-p", "src/utils"], { cwd: tmpDir });
 		await writeFile(join(tmpDir, "src/utils/a.ts"), "// a", "utf-8");
 		await writeFile(join(tmpDir, "src/utils/b.ts"), "// b", "utf-8");
-		execSync("git add src/utils", { cwd: tmpDir });
+		execFileSync("git", ["add", "src/utils"], { cwd: tmpDir });
 
 		const r = spawnSync("bun", [cliPath, "record", "cli", "--type", "convention", "no auto-pop"], {
 			cwd: tmpDir,
@@ -2643,11 +2644,11 @@ describe("dir_anchors (R-01)", () => {
 	});
 
 	it("explicit --dir-anchor wins over auto-population", async () => {
-		execSync("mkdir -p src/utils", { cwd: tmpDir });
+		execFileSync("mkdir", ["-p", "src/utils"], { cwd: tmpDir });
 		await writeFile(join(tmpDir, "src/utils/a.ts"), "// a", "utf-8");
 		await writeFile(join(tmpDir, "src/utils/b.ts"), "// b", "utf-8");
 		await writeFile(join(tmpDir, "src/utils/c.ts"), "// c", "utf-8");
-		execSync("git add src/utils", { cwd: tmpDir });
+		execFileSync("git", ["add", "src/utils"], { cwd: tmpDir });
 
 		const r = spawnSync(
 			"bun",

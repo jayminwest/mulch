@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,11 +17,15 @@ export function getCurrentVersion(): string {
  */
 export function getLatestVersion(): string | null {
 	try {
-		const result = execSync("npm view @os-eco/mulch-cli version", {
-			encoding: "utf-8",
-			timeout: 10000,
-			stdio: ["pipe", "pipe", "pipe"],
-		});
+		const result = execFileSync(
+			"npm",
+			["view", "@os-eco/mulch-cli", "version"],
+			{
+				encoding: "utf-8",
+				timeout: 10000,
+				stdio: ["pipe", "pipe", "pipe"],
+			},
+		);
 		return result.trim();
 	} catch {
 		return null;
