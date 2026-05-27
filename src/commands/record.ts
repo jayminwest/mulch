@@ -143,6 +143,7 @@ function buildRetryCommand(
 		parts.push(`--classification ${options.classification as string}`);
 	}
 	if (options.name) parts.push(`--name ${JSON.stringify(options.name as string)}`);
+	if (options.content) parts.push(`--content ${JSON.stringify(options.content as string)}`);
 	if (options.description)
 		parts.push(`--description ${JSON.stringify(options.description as string)}`);
 	if (options.resolution)
@@ -445,6 +446,10 @@ export function registerRecordCommand(program: Command): void {
 				.default("tactical"),
 		)
 		.option("--name <name>", "name of the convention or pattern")
+		.option(
+			"--content <content>",
+			"content for convention records (explicit flag wins over positional [content])",
+		)
 		.option("--description <description>", "description of the record")
 		.option("--resolution <resolution>", "resolution for failure records")
 		.option("--title <title>", "title for decision records")
@@ -487,7 +492,7 @@ export function registerRecordCommand(program: Command): void {
 			"after",
 			`
 Required fields per record type:
-  convention   [content] or --description
+  convention   --content (or positional [content])
   pattern      --name, --description (or [content])
   failure      --description, --resolution
   decision     --title, --rationale

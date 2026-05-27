@@ -1315,7 +1315,7 @@ describe("record command help text", () => {
 
 		// Verify each record type is listed with its required fields
 		expect(helpOutput).toContain("convention");
-		expect(helpOutput).toContain("[content] or --description");
+		expect(helpOutput).toContain("--content (or positional [content])");
 
 		expect(helpOutput).toContain("pattern");
 		expect(helpOutput).toContain("--name, --description");
