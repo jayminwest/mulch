@@ -171,7 +171,7 @@ export function registerLearnCommand(program: Command): void {
 				if (jsonMode) {
 					outputJsonError("learn", (err as Error).message);
 				} else {
-					console.error(`Error: ${(err as Error).message}`);
+					console.error(chalk.red(`Error: ${(err as Error).message}`));
 				}
 				process.exitCode = 1;
 			}

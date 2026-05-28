@@ -311,10 +311,10 @@ export function registerMoveCommand(program: Command): void {
 					if ((err as NodeJS.ErrnoException).code === "ENOENT") {
 						const msg = "No .mulch/ directory found. Run `mulch init` first.";
 						if (jsonMode) outputJsonError("move", msg);
-						else console.error(`Error: ${msg}`);
+						else console.error(chalk.red(`Error: ${msg}`));
 					} else {
 						if (jsonMode) outputJsonError("move", (err as Error).message);
-						else console.error(`Error: ${(err as Error).message}`);
+						else console.error(chalk.red(`Error: ${(err as Error).message}`));
 					}
 					process.exitCode = 1;
 				}

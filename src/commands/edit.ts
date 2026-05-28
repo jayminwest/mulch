@@ -211,13 +211,13 @@ export function registerEditCommand(program: Command): void {
 				if (jsonMode) {
 					outputJsonError("edit", "No .mulch/ directory found. Run `mulch init` first.");
 				} else {
-					console.error("Error: No .mulch/ directory found. Run `mulch init` first.");
+					console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
 				}
 			} else {
 				if (jsonMode) {
 					outputJsonError("edit", (err as Error).message);
 				} else {
-					console.error(`Error: ${(err as Error).message}`);
+					console.error(chalk.red(`Error: ${(err as Error).message}`));
 				}
 			}
 			process.exitCode = 1;

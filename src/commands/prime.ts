@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import chalk from "chalk";
 import type { Command } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
@@ -147,7 +148,7 @@ export function registerPrimeCommand(program: Command): void {
 					if (jsonMode) {
 						outputJsonError("prime", msg);
 					} else {
-						console.error(`Error: ${msg}`);
+						console.error(chalk.red(`Error: ${msg}`));
 					}
 					process.exitCode = 1;
 					return;
@@ -159,7 +160,7 @@ export function registerPrimeCommand(program: Command): void {
 					if (jsonMode) {
 						outputJsonError("prime", msg);
 					} else {
-						console.error(`Error: ${msg}`);
+						console.error(chalk.red(`Error: ${msg}`));
 					}
 					process.exitCode = 1;
 					return;
@@ -180,7 +181,7 @@ export function registerPrimeCommand(program: Command): void {
 					if (jsonMode) {
 						outputJsonError("prime", msg);
 					} else {
-						console.error(`Error: ${msg}`);
+						console.error(chalk.red(`Error: ${msg}`));
 					}
 					process.exitCode = 1;
 					return;
@@ -252,7 +253,7 @@ export function registerPrimeCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError("prime", msg);
 						} else {
-							console.error(`Error: ${msg}`);
+							console.error(chalk.red(`Error: ${msg}`));
 						}
 						process.exitCode = 1;
 						return;
@@ -280,7 +281,7 @@ export function registerPrimeCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError("prime", msg);
 						} else {
-							console.error(`Error: ${msg}`);
+							console.error(chalk.red(`Error: ${msg}`));
 						}
 						process.exitCode = 1;
 						return;
@@ -511,7 +512,7 @@ export function registerPrimeCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError("prime", reason);
 						} else {
-							console.error(`Error: ${reason}`);
+							console.error(chalk.red(`Error: ${reason}`));
 						}
 						process.exitCode = 1;
 						return;
@@ -672,13 +673,13 @@ export function registerPrimeCommand(program: Command): void {
 					if (jsonMode) {
 						outputJsonError("prime", "No .mulch/ directory found. Run `mulch init` first.");
 					} else {
-						console.error("Error: No .mulch/ directory found. Run `mulch init` first.");
+						console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
 					}
 				} else {
 					if (jsonMode) {
 						outputJsonError("prime", (err as Error).message);
 					} else {
-						console.error(`Error: ${(err as Error).message}`);
+						console.error(chalk.red(`Error: ${(err as Error).message}`));
 					}
 				}
 				process.exitCode = 1;

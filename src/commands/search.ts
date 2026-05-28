@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { type Command, Option } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
 import { DEFAULT_SEARCH_BOOST_FACTOR } from "../schemas/config.ts";
@@ -313,13 +314,13 @@ export function registerSearchCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError("search", "No .mulch/ directory found. Run `mulch init` first.");
 						} else {
-							console.error("Error: No .mulch/ directory found. Run `mulch init` first.");
+							console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
 						}
 					} else {
 						if (jsonMode) {
 							outputJsonError("search", (err as Error).message);
 						} else {
-							console.error(`Error: ${(err as Error).message}`);
+							console.error(chalk.red(`Error: ${(err as Error).message}`));
 						}
 					}
 					process.exitCode = 1;

@@ -163,14 +163,14 @@ export function registerRankCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError("rank", msg);
 						} else {
-							console.error(`Error: ${msg}`);
+							console.error(chalk.red(`Error: ${msg}`));
 						}
 					} else {
 						const msg = (err as Error).message;
 						if (jsonMode) {
 							outputJsonError("rank", msg);
 						} else {
-							console.error(`Error: ${msg}`);
+							console.error(chalk.red(`Error: ${msg}`));
 						}
 					}
 					process.exitCode = 1;

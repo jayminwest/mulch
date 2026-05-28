@@ -366,7 +366,7 @@ export function registerOnboardCommand(program: Command): void {
 				if (jsonMode) {
 					outputJsonError("onboard", (err as Error).message);
 				} else {
-					console.error(`Error: ${(err as Error).message}`);
+					console.error(chalk.red(`Error: ${(err as Error).message}`));
 				}
 				process.exitCode = 1;
 			}

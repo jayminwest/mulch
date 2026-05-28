@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import { type Command, Option } from "commander";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
@@ -88,7 +89,7 @@ export function registerQueryCommand(program: Command): void {
 					if (jsonMode) {
 						outputJsonError("query", "Please specify a domain or use --all to query all domains.");
 					} else {
-						console.error("Error: Please specify a domain or use --all to query all domains.");
+						console.error(chalk.red("Error: Please specify a domain or use --all to query all domains."));
 					}
 					process.exitCode = 1;
 					return;
@@ -200,13 +201,13 @@ export function registerQueryCommand(program: Command): void {
 					if (jsonMode) {
 						outputJsonError("query", "No .mulch/ directory found. Run `ml init` first.");
 					} else {
-						console.error("Error: No .mulch/ directory found. Run `ml init` first.");
+						console.error(chalk.red("Error: No .mulch/ directory found. Run `ml init` first."));
 					}
 				} else {
 					if (jsonMode) {
 						outputJsonError("query", (err as Error).message);
 					} else {
-						console.error(`Error: ${(err as Error).message}`);
+						console.error(chalk.red(`Error: ${(err as Error).message}`));
 					}
 				}
 				process.exitCode = 1;
