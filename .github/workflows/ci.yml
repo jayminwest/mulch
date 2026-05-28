@@ -18,8 +18,41 @@ jobs:
           # semver range via the GitHub tags API, which intermittently 404s.
           bun-version: latest
 
-      - run: bun install
-      - run: bun run lint
-      - run: bun run typecheck
-      - run: bun test
-      - run: bun run check:agents
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Run tests (CI reporter)
+        run: bun run test:ci
+
+      - name: Aggregate quality checks
+        run: bun run check:all
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-test-coverage
+          path: coverage/lcov.info
+          if-no-files-found: warn
+
+      - name: Upload test junit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-test-junit
+          path: junit.xml
+          if-no-files-found: warn
+
+      - name: Test timing summary
+        if: always()
+        run: bun run report:timing
+
+      - name: Code-quality metrics summary
+        if: always()
+        run: bun run report:quality
