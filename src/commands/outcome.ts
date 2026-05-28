@@ -5,6 +5,7 @@ import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { parseStrictNonNegativeNumber } from "../utils/numeric-flags.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
 
 export function registerOutcomeCommand(program: Command): void {
@@ -121,7 +122,18 @@ export function registerOutcomeCommand(program: Command): void {
 						recorded_at: new Date().toISOString(),
 					};
 					if (options.duration !== undefined) {
-						o.duration = Number.parseFloat(options.duration as string);
+						const parsed = parseStrictNonNegativeNumber(options.duration as string);
+						if (parsed === null) {
+							const msg = `--duration must be a non-negative number (got "${options.duration as string}").`;
+							if (jsonMode) {
+								outputJsonError("outcome", msg);
+							} else {
+								console.error(chalk.red(`Error: ${msg}`));
+							}
+							process.exitCode = 1;
+							return;
+						}
+						o.duration = parsed;
 					}
 					if (options.agent) {
 						o.agent = options.agent as string;

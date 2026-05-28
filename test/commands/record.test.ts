@@ -2812,3 +2812,128 @@ describe("dir_anchors (R-01)", () => {
 		expect(ok).toBe(false);
 	});
 });
+
+describe("--outcome-duration strict numeric parsing (mulch-5b9c)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-outdur-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { cli: {} } }, tmpDir);
+		await createExpertiseFile(getExpertisePath("cli", tmpDir));
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("rejects non-numeric --outcome-duration and does not append a record", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"pattern",
+				"--name",
+				"x",
+				"--description",
+				"y",
+				"--outcome-status",
+				"success",
+				"--outcome-duration",
+				"foo",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).not.toBe(0);
+		expect(r.stderr).toMatch(/--outcome-duration must be a non-negative number/);
+		expect(r.stderr).toContain('"foo"');
+
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records).toHaveLength(0);
+	});
+
+	it("rejects --outcome-duration with trailing garbage (parseFloat trap)", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"pattern",
+				"--name",
+				"x",
+				"--description",
+				"y",
+				"--outcome-status",
+				"success",
+				"--outcome-duration",
+				"10abc",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).not.toBe(0);
+		expect(r.stderr).toMatch(/non-negative number/);
+
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records).toHaveLength(0);
+	});
+
+	it("emits JSON error envelope under --json", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"--json",
+				"record",
+				"cli",
+				"--type",
+				"pattern",
+				"--name",
+				"x",
+				"--description",
+				"y",
+				"--outcome-status",
+				"success",
+				"--outcome-duration",
+				"foo",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).not.toBe(0);
+		const parsed = JSON.parse(r.stderr.trim());
+		expect(parsed).toMatchObject({ success: false, command: "record" });
+		expect(parsed.error).toMatch(/non-negative number/);
+	});
+
+	it("accepts valid numeric --outcome-duration", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"record",
+				"cli",
+				"--type",
+				"pattern",
+				"--name",
+				"x",
+				"--description",
+				"y",
+				"--outcome-status",
+				"success",
+				"--outcome-duration",
+				"1500",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).toBe(0);
+		const records = await readExpertiseFile(getExpertisePath("cli", tmpDir));
+		expect(records).toHaveLength(1);
+		const outcomes = records[0]?.outcomes;
+		expect(outcomes?.[0]?.duration).toBe(1500);
+	});
+});

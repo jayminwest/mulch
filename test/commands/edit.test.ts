@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import { getExpertisePath, initMulchDir, writeConfig } from "../../src/utils/config.ts";
@@ -316,5 +317,55 @@ describe("edit command", () => {
 			expect(updated[0]?.rationale).toBe("Type safety");
 		}
 		expect(updated[0]?.outcomes?.[0]?.status).toBe("success");
+	});
+});
+
+describe("edit --outcome-duration strict numeric parsing (mulch-5b9c)", () => {
+	const cliPath = resolve(process.cwd(), "src/cli.ts");
+	let tmpDir: string;
+	let recordId: string;
+
+	beforeEach(async () => {
+		tmpDir = await mkdtemp(join(tmpdir(), "mulch-edit-dur-"));
+		await initMulchDir(tmpDir);
+		await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
+		const filePath = getExpertisePath("testing", tmpDir);
+		await createExpertiseFile(filePath);
+		await appendRecord(filePath, {
+			type: "convention",
+			content: "x",
+			classification: "foundational",
+			recorded_at: new Date().toISOString(),
+		});
+		const records = await readExpertiseFile(filePath);
+		const id = records[0]?.id;
+		if (!id) throw new Error("expected id");
+		recordId = id;
+	});
+
+	afterEach(async () => {
+		await rm(tmpDir, { recursive: true, force: true });
+	});
+
+	it("rejects non-numeric --outcome-duration and does not mutate the record", async () => {
+		const r = spawnSync(
+			"bun",
+			[
+				cliPath,
+				"edit",
+				"testing",
+				recordId,
+				"--outcome-status",
+				"success",
+				"--outcome-duration",
+				"foo",
+			],
+			{ cwd: tmpDir, encoding: "utf-8", timeout: 8000 },
+		);
+		expect(r.status).not.toBe(0);
+		expect(r.stderr).toMatch(/--outcome-duration must be a non-negative number/);
+
+		const records = await readExpertiseFile(getExpertisePath("testing", tmpDir));
+		expect(records[0]?.outcomes ?? []).toHaveLength(0);
 	});
 });

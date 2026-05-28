@@ -6,6 +6,7 @@ import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { parseStrictNonNegativeNumber } from "../utils/numeric-flags.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
 
 // snake_case field name → camelCase Commander option key.
@@ -125,7 +126,18 @@ export function registerEditCommand(program: Command): void {
 						status: options.outcomeStatus as "success" | "failure" | "partial",
 					};
 					if (options.outcomeDuration !== undefined) {
-						o.duration = Number.parseFloat(options.outcomeDuration as string);
+						const parsed = parseStrictNonNegativeNumber(options.outcomeDuration as string);
+						if (parsed === null) {
+							const msg = `--outcome-duration must be a non-negative number (got "${options.outcomeDuration as string}").`;
+							if (jsonMode) {
+								outputJsonError("edit", msg);
+							} else {
+								console.error(chalk.red(`Error: ${msg}`));
+							}
+							process.exitCode = 1;
+							return;
+						}
+						o.duration = parsed;
 					}
 					if (options.outcomeTestResults) {
 						o.test_results = options.outcomeTestResults as string;
