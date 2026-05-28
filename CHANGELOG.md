@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-05-28
+
+A nightwatch hardening release out of plan pl-7a81 (parent mulch-e7f6): strict regex parsing for `--outcome-duration` / `--duration` (#37), normalized fatal-error coloring across the remaining CLI sites (#38), file-path context in Claude `settings.json` parse errors (#39), and `--json` honored by the deprecated `mulch update` command (#40). No schema, hook, config, or public command surface changes. 1482 tests across 70 files / 3831 expect() calls (up from 1460 / 69 / 3778 in 0.10.4).
+
+### Added
+
+- **`src/utils/numeric-flags.ts`** (mulch-5b9c, #37): extracts `parseStrictPositiveInt` and `parseStrictNonNegativeNumber` — regex-gated parsers used by `record` / `edit` / `outcome` for `--outcome-duration` / `--duration`. Mirrors the inline parsers already in `ready` / `prime` / `compact` / `rank` (mx-5b9578) and is the first time the convention has been shared via a util module.
+
+### Fixed
+
+- **`--outcome-duration` / `--duration` silently accepted garbage input** (mulch-5b9c, #37): `record`, `edit`, and `outcome` parsed these flags with bare `Number.parseFloat`, so `--outcome-duration 10abc` wrote `10` and `--duration 3.7xyz` wrote `3.7` to `.mulch/expertise/*.jsonl`. They now go through `parseStrictNonNegativeNumber` and reject anything that isn't a clean non-negative number with `--<flag> must be a non-negative number (got "<raw>")`, exit `1`, and write nothing. `--json` mode emits the standard error envelope on stderr.
+- **Fatal-error stderr coloring was inconsistent** (mulch-2a17, #38): the remaining plain `console.error("Error: …")` sites in `query.ts`, `prime.ts`, `search.ts`, and several other commands now wrap fatal messages in `chalk.red(...)`, matching the convention used by `record` / `sync` / `validate`. No wording changes; `--json` error envelopes are unchanged (chalk only applies to the human-readable branch).
+- **Claude `settings.json` parse errors lacked file-path context** (mulch-1b36, #39): a corrupted `.claude/settings.json` used to surface as a bare `Unexpected token …` from `JSON.parse`. The Claude recipe's install / check / remove now route through a `parseClaudeSettings()` helper that rethrows as `Failed to parse Claude settings at <absolute-path>: <reason>`, matching the `file:line` context convention `readExpertiseFile` already uses (mx-7c199c).
+- **`mulch update` ignored `--json`** (mulch-a8cd, #40): the deprecated `update` command always printed its yellow deprecation warning to stdout, breaking the JSON-output contract every other command honors. When `--json` is active it now emits `{success:false, command:"update", error:…}` to stderr via `outputJsonError` and exits `1`; the human-readable yellow warning is unchanged.
+
+### CI
+
+- **Pin `bun-version` in `.github/workflows/ci.yml`** (#39): `setup-bun@v2` was reading `engines.bun` (`>=1.0.0`) and resolving the range via the GitHub tags API, which intermittently 404s and reds the job. Explicit `bun-version` skips that range-resolution path.
+
+### Testing
+
+- 1482 tests across 70 files, 3831 expect() calls (up from 1460 / 69 / 3778 in 0.10.4).
+- New `test/utils/numeric-flags.test.ts` covering both parsers' accept/reject boundaries.
+- New spawn-integration tests in `test/commands/record.test.ts`, `test/commands/edit.test.ts`, and `test/commands/outcome.test.ts` asserting (a) invalid `--outcome-duration` / `--duration` exits non-zero and writes no record/outcome, (b) valid inputs round-trip unchanged, (c) `--json` mode produces the standard error envelope on stderr.
+- New `test/commands/setup.test.ts` cases covering the wrapped Claude `settings.json` parse error (path is present, original `SyntaxError` reason is preserved).
+- New `test/commands/update.test.ts` cases for the deprecated command honoring `--json`.
+
 ## [0.10.4] - 2026-05-27
 
 A discoverability fix for `ml record --type convention` (plan pl-21a3, parent mulch-4f80): adds a named `--content <text>` flag and replaces the tautological missing-content error with a concrete retry example. No schema, hook, or config changes. 1460 tests across 69 files / 3778 expect() calls (up from 1453 / 69 / 3749 in 0.10.3).
@@ -748,7 +775,8 @@ Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provid
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.4...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.5...HEAD
+[0.10.5]: https://github.com/jayminwest/mulch/compare/v0.10.4...v0.10.5
 [0.10.4]: https://github.com/jayminwest/mulch/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/jayminwest/mulch/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/jayminwest/mulch/compare/v0.10.1...v0.10.2

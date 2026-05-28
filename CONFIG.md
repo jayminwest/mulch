@@ -1,6 +1,6 @@
 # Mulch Configuration Guide
 
-This guide covers `mulch.config.yaml` and the surrounding `.mulch/` surface for **v0.10.4**. It is the reference doc for orgs running Mulch across many repos and many ICs.
+This guide covers `mulch.config.yaml` and the surrounding `.mulch/` surface for **v0.10.5**. It is the reference doc for orgs running Mulch across many repos and many ICs.
 
 If you're new to Mulch, start with the [README](./README.md) — it covers what Mulch is and the day-one commands. This document assumes you already know `ml record` / `ml prime` and want to tune them.
 
