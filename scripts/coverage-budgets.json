@@ -1,0 +1,11 @@
+{
+	"_comment": "Coverage floors enforced by scripts/check-coverage.ts against the `All files` row of Bun's text coverage reporter. `packages` keys (path prefixes) declare per-package floors checked against the average of matching per-file rows. Baselined from `bun test --coverage` against the current tree; each floor sits ~1pt below observed. The ratchet only goes UP — raise floors as coverage improves; lowering requires deleting tests, which should be a conscious decision with a tracker reference. The script never auto-edits this file: loosening requires an explicit commit by a human.",
+	"functions": 84,
+	"lines": 83,
+	"packages": {
+		"src/commands/": { "functions": 84, "lines": 66 },
+		"src/registry/": { "functions": 95, "lines": 94 },
+		"src/schemas/": { "functions": 99, "lines": 98 },
+		"src/utils/": { "functions": 93, "lines": 92 }
+	}
+}
