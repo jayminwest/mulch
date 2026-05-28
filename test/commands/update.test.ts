@@ -30,4 +30,22 @@ describe("update command (deprecated)", () => {
 			expect(error.stdout).toContain("deprecated");
 		}
 	});
+
+	it("emits JSON error envelope to stderr with --json", () => {
+		try {
+			execFileSync("bun", ["src/cli.ts", "--json", "update"], {
+				encoding: "utf-8",
+				timeout: 15000,
+			});
+			throw new Error("Expected non-zero exit code");
+		} catch (err) {
+			const error = err as { status: number; stdout: string; stderr: string };
+			expect(error.status).toBe(1);
+			expect(error.stdout).toBe("");
+			const parsed = JSON.parse(error.stderr);
+			expect(parsed.success).toBe(false);
+			expect(parsed.command).toBe("update");
+			expect(parsed.error).toContain("deprecated");
+		}
+	});
 });
