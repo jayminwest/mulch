@@ -300,7 +300,9 @@ export function registerDeleteCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError("delete", "No .mulch/ directory found. Run `mulch init` first.");
 						} else {
-							console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
+							console.error(
+								chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."),
+							);
 						}
 					} else {
 						if (jsonMode) {

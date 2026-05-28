@@ -89,7 +89,9 @@ export function registerQueryCommand(program: Command): void {
 					if (jsonMode) {
 						outputJsonError("query", "Please specify a domain or use --all to query all domains.");
 					} else {
-						console.error(chalk.red("Error: Please specify a domain or use --all to query all domains."));
+						console.error(
+							chalk.red("Error: Please specify a domain or use --all to query all domains."),
+						);
 					}
 					process.exitCode = 1;
 					return;

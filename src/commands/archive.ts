@@ -198,7 +198,9 @@ export function registerArchiveCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError("archive", "No .mulch/ directory found. Run `mulch init` first.");
 						} else {
-							console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
+							console.error(
+								chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."),
+							);
 						}
 					} else {
 						if (jsonMode) {
