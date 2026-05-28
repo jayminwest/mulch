@@ -189,6 +189,15 @@ function createMulchHookGroup(): ClaudeHookGroup {
 	};
 }
 
+function parseClaudeSettings(raw: string, settingsPath: string): ClaudeSettings {
+	try {
+		return JSON.parse(raw) as ClaudeSettings;
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		throw new Error(`Failed to parse Claude settings at ${settingsPath}: ${msg}`);
+	}
+}
+
 const claudeRecipe: ProviderRecipe = {
 	async install(cwd) {
 		const settingsPath = claudeSettingsPath(cwd);
@@ -196,7 +205,7 @@ const claudeRecipe: ProviderRecipe = {
 
 		if (existsSync(settingsPath)) {
 			const raw = await readFile(settingsPath, "utf-8");
-			settings = JSON.parse(raw) as ClaudeSettings;
+			settings = parseClaudeSettings(raw, settingsPath);
 		}
 
 		if (!settings.hooks) {
@@ -231,7 +240,7 @@ const claudeRecipe: ProviderRecipe = {
 		}
 
 		const raw = await readFile(settingsPath, "utf-8");
-		const settings = JSON.parse(raw) as ClaudeSettings;
+		const settings = parseClaudeSettings(raw, settingsPath);
 
 		if (!settings.hooks) {
 			return {
@@ -263,7 +272,7 @@ const claudeRecipe: ProviderRecipe = {
 		}
 
 		const raw = await readFile(settingsPath, "utf-8");
-		const settings = JSON.parse(raw) as ClaudeSettings;
+		const settings = parseClaudeSettings(raw, settingsPath);
 
 		if (!settings.hooks) {
 			return {

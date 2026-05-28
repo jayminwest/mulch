@@ -84,6 +84,47 @@ describe("setup command", () => {
 			expect(result.success).toBe(true);
 		});
 
+		it("install surfaces settings.json path when JSON is corrupt", async () => {
+			const settingsPath = join(tmpDir, ".claude", "settings.json");
+			await mkdir(join(tmpDir, ".claude"), { recursive: true });
+			await writeFile(settingsPath, "{not json", "utf-8");
+			let err: Error | undefined;
+			try {
+				await recipes.claude.install(tmpDir);
+			} catch (e) {
+				err = e as Error;
+			}
+			expect(err).toBeDefined();
+			expect(err?.message).toContain(settingsPath);
+			expect(err?.message).toContain("Failed to parse Claude settings");
+		});
+
+		it("check surfaces settings.json path when JSON is corrupt", async () => {
+			const settingsPath = join(tmpDir, ".claude", "settings.json");
+			await mkdir(join(tmpDir, ".claude"), { recursive: true });
+			await writeFile(settingsPath, "{not json", "utf-8");
+			let err: Error | undefined;
+			try {
+				await recipes.claude.check(tmpDir);
+			} catch (e) {
+				err = e as Error;
+			}
+			expect(err?.message).toContain(settingsPath);
+		});
+
+		it("remove surfaces settings.json path when JSON is corrupt", async () => {
+			const settingsPath = join(tmpDir, ".claude", "settings.json");
+			await mkdir(join(tmpDir, ".claude"), { recursive: true });
+			await writeFile(settingsPath, "{not json", "utf-8");
+			let err: Error | undefined;
+			try {
+				await recipes.claude.remove(tmpDir);
+			} catch (e) {
+				err = e as Error;
+			}
+			expect(err?.message).toContain(settingsPath);
+		});
+
 		it("check reports failure when no settings exist", async () => {
 			const result = await recipes.claude.check(tmpDir);
 			expect(result.success).toBe(false);
