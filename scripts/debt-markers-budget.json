@@ -1,0 +1,9 @@
+{
+	"_comment": "Debt-marker scanner config used by scripts/check-debt-markers.ts. `trackerPatterns` are JavaScript regex sources (matched case-insensitively); a TODO/FIXME/HACK/XXX line passes if ANY pattern matches it. Mulch trackers: `mulch-XXXX` seeds issues, `mx-XXXX` mulch records, `#NNN` GitHub refs, and any URL. `allowlist` entries are `path:line` strings grandfathering an existing untracked marker. The ratchet only goes DOWN — pair new markers with a tracker reference or remove them; do not append to the allowlist without justification. The script never auto-edits this file: loosening requires an explicit commit by a human.",
+	"trackerPatterns": [
+		"\\b(?:mulch|mx)-[0-9a-f]+\\b",
+		"#\\d+\\b",
+		"https?://\\S+"
+	],
+	"allowlist": []
+}

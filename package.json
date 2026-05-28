@@ -17,6 +17,8 @@
     "lint": "biome check --error-on-warnings src/ test/",
     "lint:fix": "biome check --write src/ test/",
     "typecheck": "tsc --noEmit",
+    "check:size": "bun run scripts/check-file-sizes.ts",
+    "check:debt": "bun run scripts/check-debt-markers.ts",
     "version:bump": "bun run scripts/version-bump.ts"
   },
   "engines": {

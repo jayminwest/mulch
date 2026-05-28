@@ -1,0 +1,30 @@
+{
+	"_comment": "Per-file line-count budgets enforced by scripts/check-file-sizes.ts. New `.ts`/`.tsx` files default to `threshold` lines. Files listed in `budgets` are grandfathered at their commit-time line count and may not grow past their entry — the ratchet only goes DOWN. Loosening (raising `threshold` or a budget entry) requires an explicit commit by a human; the script never auto-edits this file.",
+	"threshold": 500,
+	"budgets": {
+		"test/commands/prime.test.ts": 4350,
+		"test/commands/record.test.ts": 2750,
+		"test/commands/compact.test.ts": 1500,
+		"test/commands/query.test.ts": 1400,
+		"src/utils/format.ts": 1300,
+		"src/commands/record.ts": 1250,
+		"src/commands/doctor.ts": 1200,
+		"src/commands/compact.ts": 1150,
+		"test/commands/search.test.ts": 1150,
+		"test/commands/doctor.test.ts": 1000,
+		"src/commands/setup.ts": 950,
+		"test/commands/config.test.ts": 900,
+		"src/commands/prime.ts": 750,
+		"src/utils/audit.ts": 750,
+		"test/commands/onboard.test.ts": 750,
+		"test/commands/setup.test.ts": 700,
+		"test/commands/delete.test.ts": 700,
+		"test/commands/sync.test.ts": 700,
+		"src/commands/prune.ts": 700,
+		"test/commands/prune-supersession.test.ts": 650,
+		"test/commands/prune-anchors.test.ts": 650,
+		"test/commands/audit.test.ts": 600,
+		"test/commands/status.test.ts": 600,
+		"test/api.test.ts": 600
+	}
+}
