@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.7] - 2026-06-02
+
+A targeted bug-fix release. Published consumers of `@os-eco/mulch-cli` running in an interactive TTY hit pino's pretty-transport path even though `pino-pretty` ships only as a devDependency, causing pino to throw `unable to determine transport target for "pino-pretty"`. The diagnostic logger now probes `pino-pretty` resolvability and degrades to JSON-on-stderr when it is absent, honoring the documented JSON-for-consumers promise. No schema, hook-event, config-key, or public CLI-command changes. 1497 tests across 71 files / 3854 expect() calls (up from 1494 / 71 / 3849 in 0.10.6).
+
+### Fixed
+
+- **`src/log.ts` — JSON fallback when `pino-pretty` is unavailable** (closes mulch-35c9): `pino-pretty` is a devDependency, so published consumers running in an interactive TTY previously crashed when the logger selected the pretty transport. `createLogger()` now gates the pretty path on a new `isPinoPrettyAvailable()` probe (`createRequire(...).resolve("pino-pretty")`) and falls back to newline-delimited JSON on stderr when the package is absent. Adds a test-injectable `prettyAvailable` option to `createLogger()` and exports `isPinoPrettyAvailable()`.
+
 ## [0.10.6] - 2026-05-28
 
 The **Level 5 agent-readiness uplift** (validation mission VAL-MULCH-*): mulch adopts the portable L5 toolkit from the os-eco `templates/l5-toolkit/` tree — a structured diagnostic logger, ratchet/reporter scripts with baselined budgets, governance config, and operator docs. No schema, hook-event, config-key, or public CLI-command changes; the only runtime-visible addition is a stderr diagnostic channel gated behind `MULCH_DEBUG`. 1494 tests across 71 files / 3849 expect() calls (up from 1482 / 70 / 3831 in 0.10.5).
@@ -814,7 +822,8 @@ Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provid
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.6...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.7...HEAD
+[0.10.7]: https://github.com/jayminwest/mulch/compare/v0.10.6...v0.10.7
 [0.10.6]: https://github.com/jayminwest/mulch/compare/v0.10.5...v0.10.6
 [0.10.5]: https://github.com/jayminwest/mulch/compare/v0.10.4...v0.10.5
 [0.10.4]: https://github.com/jayminwest/mulch/compare/v0.10.3...v0.10.4
