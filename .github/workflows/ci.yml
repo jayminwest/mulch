@@ -35,7 +35,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bun-test-coverage
           path: coverage/lcov.info
@@ -43,7 +43,7 @@ jobs:
 
       - name: Upload test junit artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bun-test-junit
           path: junit.xml
