@@ -8,9 +8,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 bun test              # bun test (all tests)
 bun test --watch      # bun test --watch
 bun test test/commands/record.test.ts  # single test file
-bun run lint          # bunx biome check .
+bun run lint          # biome check --error-on-warnings src/ test/
 bun run typecheck     # tsc --noEmit
+bun run check:all     # canonical quiet runner — all nine quality gates
+bun run verify        # alias for check:all (agent-facing entry point)
 ```
+
+`check:all` follows the os-eco fleet standard (`docs/check-all-standard.md`
+at the os-eco root): `scripts/check-all.ts` resolves the ordered gate
+manifest (lint → typecheck → check:agents → check:dups → check:deps →
+check:size → check:debt → check:coverage → check:ci-parity) from
+`package.json`. The runner and `scripts/check-ci-parity.ts` are
+byte-identical fleet-wide — never edit them in place; per-repo CI-parity
+escape hatches (aliases / ciOnly) live in `scripts/ci-parity-config.json`.
 
 ## Architecture
 

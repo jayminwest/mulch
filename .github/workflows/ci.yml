@@ -21,16 +21,16 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
+      # test:ci is the check:coverage gate's CI variant (junit/lcov
+      # reporters for the artifact uploads below) — aliased in
+      # scripts/ci-parity-config.json.
       - name: Run tests (CI reporter)
         run: bun run test:ci
 
-      - name: Aggregate quality checks
+      # Runs the full canonical gate manifest (lint, typecheck,
+      # check:agents/dups/deps/size/debt/coverage/ci-parity) via the
+      # quiet runner — see docs/check-all-standard.md at the os-eco root.
+      - name: Quality gates (check:all)
         run: bun run check:all
 
       - name: Upload coverage artifact

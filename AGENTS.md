@@ -48,6 +48,9 @@ mulch/
 │   ├── registry/           # type registry (built-in + custom types)
 │   └── utils/              # lock, expertise IO, git/worktree, runtime flags
 ├── scripts/                # quality-gate + report scripts and their budgets
+│   ├── check-all.ts            # canonical quiet gate runner (byte-identical fleet-wide)
+│   ├── check-ci-parity.ts      # CI <-> check:all parity detector (byte-identical fleet-wide)
+│   ├── ci-parity-config.json   # per-repo parity escape hatches (aliases / ciOnly)
 │   ├── validate-agents-md.ts   # validates this file's references
 │   ├── check-file-sizes.ts
 │   ├── check-debt-markers.ts
@@ -86,13 +89,29 @@ bun run typecheck                 # tsc --noEmit
 Quality gates and reports (each lives in `scripts/`):
 
 ```bash
+bun run check:all                 # scripts/check-all.ts — quiet runner, all nine gates
+bun run verify                    # alias for check:all (agent-facing entry point)
 bun run check:size                # scripts/check-file-sizes.ts
 bun run check:debt                # scripts/check-debt-markers.ts
+bun run check:dups                # jscpd duplication budget (.jscpd.json)
+bun run check:deps                # knip unused/undeclared dependency check
 bun run check:coverage            # scripts/check-coverage.ts
 bun run check:agents              # scripts/validate-agents-md.ts (this file)
+bun run check:ci-parity           # scripts/check-ci-parity.ts — CI parity meta-gate
 bun run report:timing             # slowest suites/tests from the JUnit report
 bun run report:quality            # consolidated quality summary
 ```
+
+`check:all` follows the os-eco fleet `check:all` standard
+(docs/check-all-standard.md at the os-eco meta-repo root): the quiet runner
+resolves its ordered manifest — `lint`, `typecheck`, `check:agents`,
+`check:dups`, `check:deps`, `check:size`, `check:debt`,
+`check:coverage`, `check:ci-parity` — from `package.json` and prints one
+aligned line per gate plus a tally. `scripts/check-all.ts` and
+`scripts/check-ci-parity.ts` are byte-identical fleet-wide; never edit
+them in place. Per-repo variation lives in `package.json` script bodies
+and `scripts/ci-parity-config.json` (CI-side aliases and intentionally
+CI-only steps).
 
 The ratchet gates read JSON budgets from `scripts/`:
 `scripts/file-size-budgets.json`, `scripts/debt-markers-budget.json`,
@@ -162,8 +181,8 @@ When an agent works in mulch, it should:
 3. **Make focused changes.** One concern per commit. Preserve existing
    conventions — adapt, do not overwrite. Read `CLAUDE.md` for the
    architecture and TypeScript conventions.
-4. **Run gates locally.** `bun run lint`, `bun run typecheck`, and
-   `bun test` must all exit 0 before commit. Run `bun run check:agents`
+4. **Run gates locally.** `bun run verify` (the full `check:all`
+   manifest) must exit 0 before commit. Run `bun run check:agents`
    after editing this file.
 5. **Pin debt markers.** Any new `TODO` / `FIXME` / `HACK` must
    reference a tracker id on the same line, or `bun run check:debt`
@@ -187,7 +206,7 @@ Before ending a session:
 
 1. Run `ml learn` to see what changed and which domains to record into.
 2. Record any session insights with `ml record`.
-3. Run the gate suite (`bun run lint`, `bun run typecheck`, `bun test`).
+3. Run the gate suite (`bun run verify`).
 4. File issues for remaining work (`sd create --title "..."`); close
    finished issues (`sd close <id>`).
 5. `ml sync` to commit `.mulch/`; push only when the user requests it.

@@ -1,0 +1,7 @@
+{
+	"$comment": "Per-repo escape hatches for scripts/check-ci-parity.ts (docs/check-all-standard.md §6 at the os-eco root). Justify every entry. aliases: `test:ci` runs the same bun-test suite as the check:coverage gate, with CI-only junit/lcov reporters so the workflow can upload coverage and test-report artifacts. ciOnly: `report:timing` and `report:quality` are if:always() CI summary steps (test-timing and code-quality digests) with no gate semantics — they never fail the build locally or in CI.",
+	"aliases": {
+		"test:ci": "check:coverage"
+	},
+	"ciOnly": ["report:timing", "report:quality"]
+}

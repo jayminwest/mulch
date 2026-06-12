@@ -3,7 +3,7 @@
 	"threshold": 500,
 	"budgets": {
 		"test/commands/prime.test.ts": 4350,
-		"test/commands/record.test.ts": 2750,
+		"test/commands/record.test.ts": 2500,
 		"test/commands/compact.test.ts": 1500,
 		"test/commands/query.test.ts": 1400,
 		"src/utils/format.ts": 1300,
