@@ -37,7 +37,7 @@ export function registerUpgradeCommand(program: Command): void {
 						command: "upgrade",
 						current,
 						latest,
-						upToDate: true,
+						up_to_date: true,
 						updated: false,
 					});
 				} else {
@@ -53,7 +53,7 @@ export function registerUpgradeCommand(program: Command): void {
 						command: "upgrade",
 						current,
 						latest,
-						upToDate: false,
+						up_to_date: false,
 						updated: false,
 					});
 				} else {
@@ -83,7 +83,7 @@ export function registerUpgradeCommand(program: Command): void {
 					command: "upgrade",
 					current,
 					latest,
-					upToDate: false,
+					up_to_date: false,
 					updated: true,
 				});
 			} else {

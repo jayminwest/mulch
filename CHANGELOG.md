@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`ml upgrade --json` key canonicalized to `up_to_date`** (closes mulch-4ca6): the `upgrade` JSON output previously emitted `upToDate` (camelCase) while `ml onboard --json` emitted the same concept as the snake_case action value `up_to_date`. The `upgrade` payload now uses `up_to_date` to match the rest of mulch's snake_case JSON convention (e.g. `not_installed`, `default_mode`, `extracts_files`). Consumers that read `parsed.upToDate` must switch to `parsed.up_to_date`; the boolean semantics are unchanged.
+
 ## [0.10.7] - 2026-06-02
 
 A targeted bug-fix release. Published consumers of `@os-eco/mulch-cli` running in an interactive TTY hit pino's pretty-transport path even though `pino-pretty` ships only as a devDependency, causing pino to throw `unable to determine transport target for "pino-pretty"`. The diagnostic logger now probes `pino-pretty` resolvability and degrades to JSON-on-stderr when it is absent, honoring the documented JSON-for-consumers promise. No schema, hook-event, config-key, or public CLI-command changes. 1497 tests across 71 files / 3854 expect() calls (up from 1494 / 71 / 3849 in 0.10.6).

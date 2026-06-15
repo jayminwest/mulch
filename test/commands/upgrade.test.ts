@@ -64,7 +64,7 @@ describe("upgrade command", () => {
 				expect(parsed.command).toBe("upgrade");
 				expect(typeof parsed.current).toBe("string");
 				expect(typeof parsed.latest).toBe("string");
-				expect(typeof parsed.upToDate).toBe("boolean");
+				expect(typeof parsed.up_to_date).toBe("boolean");
 				expect(parsed.updated).toBe(false);
 			}
 		});
