@@ -58,6 +58,7 @@ domains:
       - convention
       - failure
   quality-gates: {}
+  refactoring: {}
 governance:
   max_entries: 100
   warn_entries: 150
