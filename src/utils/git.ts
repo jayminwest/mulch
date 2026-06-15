@@ -105,8 +105,16 @@ export function getActiveFiles(cwd: string): string[] {
 }
 
 export function fileMatchesAny(file: string, changedFiles: string[]): boolean {
+	// Suffix matches must align on a path-segment boundary so that 'cli.ts'
+	// does not falsely match 'other-cli.ts'. Either the strings are equal, or
+	// the longer side has a '/' immediately before the suffix.
+	const suffixMatches = (longer: string, shorter: string): boolean => {
+		if (longer.length <= shorter.length) return false;
+		if (!longer.endsWith(shorter)) return false;
+		return longer[longer.length - shorter.length - 1] === "/";
+	};
 	return changedFiles.some(
-		(changed) => changed === file || changed.endsWith(file) || file.endsWith(changed),
+		(changed) => changed === file || suffixMatches(changed, file) || suffixMatches(file, changed),
 	);
 }
 
