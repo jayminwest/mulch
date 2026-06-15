@@ -59,6 +59,7 @@ domains:
       - failure
   quality-gates: {}
   refactoring: {}
+  patterns: {}
 governance:
   max_entries: 100
   warn_entries: 150

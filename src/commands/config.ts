@@ -32,7 +32,7 @@ export function registerConfigCommand(program: Command): void {
 			try {
 				cfg = await readConfig();
 			} catch (err) {
-				process.stderr.write(`${(err as Error).message}\n`);
+				process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
 				process.exitCode = 1;
 				return;
 			}
@@ -72,7 +72,7 @@ export function registerConfigCommand(program: Command): void {
 			try {
 				await runConfigSet(path, value);
 			} catch (err) {
-				process.stderr.write(`${(err as Error).message}\n`);
+				process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
 				process.exitCode = 1;
 			}
 		});
@@ -90,7 +90,7 @@ export function registerConfigCommand(program: Command): void {
 			try {
 				await runConfigUnset(path);
 			} catch (err) {
-				process.stderr.write(`${(err as Error).message}\n`);
+				process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
 				process.exitCode = 1;
 			}
 		});
@@ -119,7 +119,9 @@ async function runConfigSet(rawPath: string, rawValue: string): Promise<void> {
 	try {
 		parsedValue = yaml.load(rawValue);
 	} catch (err) {
-		throw new Error(`Invalid YAML for <value>: ${(err as Error).message}`);
+		throw new Error(
+			`Invalid YAML for <value>: ${err instanceof Error ? err.message : String(err)}`,
+		);
 	}
 
 	await withFileLock(configPath, async () => {

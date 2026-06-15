@@ -773,7 +773,7 @@ async function handleApply(
 		try {
 			indicesToRemove = resolveRecordIds(records, identifiers);
 		} catch (err) {
-			const msg = (err as Error).message;
+			const msg = err instanceof Error ? err.message : String(err);
 			if (jsonMode) {
 				outputJsonError("compact", msg);
 			} else {

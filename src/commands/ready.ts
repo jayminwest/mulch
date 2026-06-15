@@ -86,9 +86,11 @@ export function registerReadyCommand(program: Command): void {
 						sinceMs = parseDuration(options.since);
 					} catch (err) {
 						if (jsonMode) {
-							outputJsonError("ready", (err as Error).message);
+							outputJsonError("ready", err instanceof Error ? err.message : String(err));
 						} else {
-							console.error(chalk.red(`Error: ${(err as Error).message}`));
+							console.error(
+								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
+							);
 						}
 						process.exitCode = 1;
 						return;
@@ -168,9 +170,9 @@ export function registerReadyCommand(program: Command): void {
 					}
 				} else {
 					if (jsonMode) {
-						outputJsonError("ready", (err as Error).message);
+						outputJsonError("ready", err instanceof Error ? err.message : String(err));
 					} else {
-						console.error(chalk.red(`Error: ${(err as Error).message}`));
+						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
 					}
 				}
 				process.exitCode = 1;

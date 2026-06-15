@@ -152,7 +152,7 @@ export function registerRankCommand(program: Command): void {
 							console.error(chalk.red(`Error: ${msg}`));
 						}
 					} else {
-						const msg = (err as Error).message;
+						const msg = err instanceof Error ? err.message : String(err);
 						if (jsonMode) {
 							outputJsonError("rank", msg);
 						} else {

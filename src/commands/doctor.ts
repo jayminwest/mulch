@@ -64,7 +64,7 @@ async function checkConfig(cwd?: string): Promise<DoctorCheck> {
 		return {
 			name: "config",
 			status: "fail",
-			message: `Config error: ${(err as Error).message}`,
+			message: `Config error: ${err instanceof Error ? err.message : String(err)}`,
 			fixable: false,
 			details: [],
 		};

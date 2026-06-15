@@ -223,9 +223,14 @@ export function registerSyncCommand(program: Command): void {
 					}
 				} catch (err) {
 					if (jsonMode) {
-						outputJsonError("sync", `Validation error: ${(err as Error).message}`);
+						outputJsonError(
+							"sync",
+							`Validation error: ${err instanceof Error ? err.message : String(err)}`,
+						);
 					} else {
-						console.error(chalk.red(`Validation error: ${(err as Error).message}`));
+						console.error(
+							chalk.red(`Validation error: ${err instanceof Error ? err.message : String(err)}`),
+						);
 					}
 					process.exitCode = 1;
 					return;
@@ -288,9 +293,11 @@ export function registerSyncCommand(program: Command): void {
 				}
 			} catch (err) {
 				if (jsonMode) {
-					outputJsonError("sync", `Git error: ${(err as Error).message}`);
+					outputJsonError("sync", `Git error: ${err instanceof Error ? err.message : String(err)}`);
 				} else {
-					console.error(chalk.red(`Git error: ${(err as Error).message}`));
+					console.error(
+						chalk.red(`Git error: ${err instanceof Error ? err.message : String(err)}`),
+					);
 				}
 				process.exitCode = 1;
 			}
