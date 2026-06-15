@@ -5,22 +5,12 @@ import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile } from "../utils/expertise.ts";
 import { formatTimeAgo, getRecordSummary } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { accent } from "../utils/palette.ts";
 
 interface AnnotatedRecord {
 	domain: string;
 	record: ExpertiseRecord;
-}
-
-// Strict numeric flag parsing — see mx-5b9578 / src/commands/rank.ts.
-// `Number.parseInt("10abc", 10)` silently returns 10; use regex + Number() so
-// typos like `--limit 10abc` or `--limit 3.7` are rejected.
-const POSITIVE_INT_RE = /^\d+$/;
-
-function parseStrictPositiveInt(raw: string): number | null {
-	if (!POSITIVE_INT_RE.test(raw)) return null;
-	const n = Number(raw);
-	return Number.isFinite(n) && n >= 1 ? n : null;
 }
 
 function parseDuration(input: string): number {

@@ -42,6 +42,7 @@ import {
 } from "../utils/git.ts";
 import { runHooks } from "../utils/hooks.ts";
 import { outputJsonError } from "../utils/json-output.ts";
+import { parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 import {
 	buildSurfaceAnnotations,
@@ -99,17 +100,6 @@ export function estimateRecordText(record: ExpertiseRecord): string {
 	const def = getRegistry().get(record.type);
 	if (!def) return `[${record.type}]`;
 	return def.formatCompactLine(record);
-}
-
-// Strict numeric flag parsing — see mx-5b9578 / src/commands/rank.ts.
-// `Number.parseInt("10abc", 10)` silently returns 10; use regex + Number() so
-// typos like `--budget 5000abc` or `--budget 3.7` are rejected.
-const POSITIVE_INT_RE = /^\d+$/;
-
-function parseStrictPositiveInt(raw: string): number | null {
-	if (!POSITIVE_INT_RE.test(raw)) return null;
-	const n = Number(raw);
-	return Number.isFinite(n) && n >= 1 ? n : null;
 }
 
 export function registerPrimeCommand(program: Command): void {
