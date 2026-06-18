@@ -306,9 +306,11 @@ export function registerDeleteCommand(program: Command): void {
 						}
 					} else {
 						if (jsonMode) {
-							outputJsonError("delete", (err as Error).message);
+							outputJsonError("delete", err instanceof Error ? err.message : String(err));
 						} else {
-							console.error(chalk.red(`Error: ${(err as Error).message}`));
+							console.error(
+								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
+							);
 						}
 					}
 					process.exitCode = 1;

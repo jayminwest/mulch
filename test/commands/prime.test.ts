@@ -1170,6 +1170,17 @@ describe("prime command", () => {
 			expect(fileMatchesAny("src/commands/prime.ts", ["prime.ts"])).toBe(true);
 		});
 
+		it("fileMatchesAny requires path-segment boundary on suffix match", () => {
+			// Non-boundary suffix must NOT match: 'cli.ts' is a string suffix of
+			// 'src/other-cli.ts' but they are different basenames.
+			expect(fileMatchesAny("cli.ts", ["src/other-cli.ts"])).toBe(false);
+			expect(fileMatchesAny("src/other-cli.ts", ["cli.ts"])).toBe(false);
+			expect(fileMatchesAny("prime.ts", ["src/commands/reprime.ts"])).toBe(false);
+			// Boundary-aligned suffix still matches.
+			expect(fileMatchesAny("cli.ts", ["src/cli.ts"])).toBe(true);
+			expect(fileMatchesAny("commands/prime.ts", ["src/commands/prime.ts"])).toBe(true);
+		});
+
 		it("filterByContext keeps conventions (no files field)", () => {
 			const records = filterByContext(
 				[

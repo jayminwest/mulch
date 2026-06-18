@@ -15,6 +15,7 @@ import { getRecordSummary } from "../utils/format.ts";
 import { runHooks } from "../utils/hooks.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
+import { parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
 
 // Payload sent to `pre-compact` hooks. A hook may print `{ replacement: <full
@@ -27,17 +28,6 @@ interface PreCompactPayload {
 	type: RecordType;
 	records: ExpertiseRecord[];
 	replacement?: ExpertiseRecord;
-}
-
-// Strict numeric flag parsing — see mx-5b9578 / src/commands/rank.ts.
-// `Number.parseInt("10abc", 10)` silently returns 10; use regex + Number() so
-// typos like `--min-group abc` or `--max-records 50xyz` are rejected.
-const POSITIVE_INT_RE = /^\d+$/;
-
-function parseStrictPositiveInt(raw: string): number | null {
-	if (!POSITIVE_INT_RE.test(raw)) return null;
-	const n = Number(raw);
-	return Number.isFinite(n) && n >= 1 ? n : null;
 }
 
 interface CompactCandidate {
@@ -783,7 +773,7 @@ async function handleApply(
 		try {
 			indicesToRemove = resolveRecordIds(records, identifiers);
 		} catch (err) {
-			const msg = (err as Error).message;
+			const msg = err instanceof Error ? err.message : String(err);
 			if (jsonMode) {
 				outputJsonError("compact", msg);
 			} else {

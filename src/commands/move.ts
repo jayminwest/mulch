@@ -313,8 +313,11 @@ export function registerMoveCommand(program: Command): void {
 						if (jsonMode) outputJsonError("move", msg);
 						else console.error(chalk.red(`Error: ${msg}`));
 					} else {
-						if (jsonMode) outputJsonError("move", (err as Error).message);
-						else console.error(chalk.red(`Error: ${(err as Error).message}`));
+						if (jsonMode) outputJsonError("move", err instanceof Error ? err.message : String(err));
+						else
+							console.error(
+								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
+							);
 					}
 					process.exitCode = 1;
 				}

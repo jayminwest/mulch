@@ -110,9 +110,9 @@ export function registerDeleteDomainCommand(program: Command): void {
 					}
 				} else {
 					if (jsonMode) {
-						outputJsonError("delete-domain", (err as Error).message);
+						outputJsonError("delete-domain", err instanceof Error ? err.message : String(err));
 					} else {
-						console.error(chalk.red(`Error: ${(err as Error).message}`));
+						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
 					}
 				}
 				process.exitCode = 1;
