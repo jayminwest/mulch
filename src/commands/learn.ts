@@ -169,9 +169,9 @@ export function registerLearnCommand(program: Command): void {
 				console.log();
 			} catch (err) {
 				if (jsonMode) {
-					outputJsonError("learn", (err as Error).message);
+					outputJsonError("learn", err instanceof Error ? err.message : String(err));
 				} else {
-					console.error(chalk.red(`Error: ${(err as Error).message}`));
+					console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
 				}
 				process.exitCode = 1;
 			}

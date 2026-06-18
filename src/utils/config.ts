@@ -265,7 +265,7 @@ export async function readConfig(cwd: string = process.cwd()): Promise<MulchConf
 		parsed = (yaml.load(content) ?? {}) as MulchConfig;
 	} catch (err) {
 		throw new Error(
-			`Failed to parse mulch.config.yaml: ${(err as Error).message}. Check the YAML syntax.`,
+			`Failed to parse mulch.config.yaml: ${err instanceof Error ? err.message : String(err)}. Check the YAML syntax.`,
 		);
 	}
 	if (!parsed || typeof parsed !== "object") {

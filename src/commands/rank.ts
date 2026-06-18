@@ -6,6 +6,7 @@ import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { filterByType, readExpertiseFile } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { parseStrictNonNegativeNumber, parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { accent } from "../utils/palette.ts";
 import { computeConfirmationScore, type ScoredRecord } from "../utils/scoring.ts";
 
@@ -17,21 +18,6 @@ interface RankedRecord {
 
 function formatScore(score: number): string {
 	return Number.isInteger(score) ? String(score) : score.toFixed(1);
-}
-
-const POSITIVE_INT_RE = /^\d+$/;
-const NON_NEGATIVE_NUMBER_RE = /^\d+(\.\d+)?$/;
-
-function parseStrictPositiveInt(raw: string): number | null {
-	if (!POSITIVE_INT_RE.test(raw)) return null;
-	const n = Number(raw);
-	return Number.isFinite(n) && n >= 1 ? n : null;
-}
-
-function parseStrictNonNegativeNumber(raw: string): number | null {
-	if (!NON_NEGATIVE_NUMBER_RE.test(raw)) return null;
-	const n = Number(raw);
-	return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 export function registerRankCommand(program: Command): void {
@@ -166,7 +152,7 @@ export function registerRankCommand(program: Command): void {
 							console.error(chalk.red(`Error: ${msg}`));
 						}
 					} else {
-						const msg = (err as Error).message;
+						const msg = err instanceof Error ? err.message : String(err);
 						if (jsonMode) {
 							outputJsonError("rank", msg);
 						} else {

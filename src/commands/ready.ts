@@ -5,22 +5,12 @@ import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile } from "../utils/expertise.ts";
 import { formatTimeAgo, getRecordSummary } from "../utils/format.ts";
 import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { accent } from "../utils/palette.ts";
 
 interface AnnotatedRecord {
 	domain: string;
 	record: ExpertiseRecord;
-}
-
-// Strict numeric flag parsing — see mx-5b9578 / src/commands/rank.ts.
-// `Number.parseInt("10abc", 10)` silently returns 10; use regex + Number() so
-// typos like `--limit 10abc` or `--limit 3.7` are rejected.
-const POSITIVE_INT_RE = /^\d+$/;
-
-function parseStrictPositiveInt(raw: string): number | null {
-	if (!POSITIVE_INT_RE.test(raw)) return null;
-	const n = Number(raw);
-	return Number.isFinite(n) && n >= 1 ? n : null;
 }
 
 function parseDuration(input: string): number {
@@ -96,9 +86,11 @@ export function registerReadyCommand(program: Command): void {
 						sinceMs = parseDuration(options.since);
 					} catch (err) {
 						if (jsonMode) {
-							outputJsonError("ready", (err as Error).message);
+							outputJsonError("ready", err instanceof Error ? err.message : String(err));
 						} else {
-							console.error(chalk.red(`Error: ${(err as Error).message}`));
+							console.error(
+								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
+							);
 						}
 						process.exitCode = 1;
 						return;
@@ -178,9 +170,9 @@ export function registerReadyCommand(program: Command): void {
 					}
 				} else {
 					if (jsonMode) {
-						outputJsonError("ready", (err as Error).message);
+						outputJsonError("ready", err instanceof Error ? err.message : String(err));
 					} else {
-						console.error(chalk.red(`Error: ${(err as Error).message}`));
+						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
 					}
 				}
 				process.exitCode = 1;

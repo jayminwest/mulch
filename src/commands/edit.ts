@@ -215,9 +215,9 @@ export function registerEditCommand(program: Command): void {
 				}
 			} else {
 				if (jsonMode) {
-					outputJsonError("edit", (err as Error).message);
+					outputJsonError("edit", err instanceof Error ? err.message : String(err));
 				} else {
-					console.error(chalk.red(`Error: ${(err as Error).message}`));
+					console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
 				}
 			}
 			process.exitCode = 1;

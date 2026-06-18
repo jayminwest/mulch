@@ -155,9 +155,9 @@ export function registerRestoreCommand(program: Command): void {
 					}
 				} else {
 					if (jsonMode) {
-						outputJsonError("restore", (err as Error).message);
+						outputJsonError("restore", err instanceof Error ? err.message : String(err));
 					} else {
-						console.error(chalk.red(`Error: ${(err as Error).message}`));
+						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
 					}
 				}
 				process.exitCode = 1;
