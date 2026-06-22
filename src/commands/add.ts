@@ -19,7 +19,7 @@ export function registerAddCommand(program: Command): void {
 				if (jsonMode) {
 					outputJsonError("add", "No .mulch/ directory found. Run `mulch init` first.");
 				} else {
-					console.error(chalk.red("No .mulch/ directory found. Run `mulch init` first."));
+					console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
 				}
 				process.exitCode = 1;
 				return;
@@ -31,7 +31,7 @@ export function registerAddCommand(program: Command): void {
 				if (jsonMode) {
 					outputJsonError("add", `Domain "${domain}" already exists.`);
 				} else {
-					console.error(chalk.red(`Domain "${domain}" already exists.`));
+					console.error(chalk.red(`Error: Domain "${domain}" already exists.`));
 				}
 				process.exitCode = 1;
 				return;
