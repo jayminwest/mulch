@@ -23,7 +23,7 @@ export function registerStatusCommand(program: Command): void {
 				if (jsonMode) {
 					outputJsonError("status", "No .mulch/ directory found. Run `mulch init` first.");
 				} else {
-					console.error(chalk.red("No .mulch/ directory found. Run `mulch init` first."));
+					console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
 				}
 				process.exitCode = 1;
 				return;

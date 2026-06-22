@@ -207,7 +207,7 @@ export function registerAuditCommand(program: Command): void {
 				if (jsonMode || opts.ci) {
 					outputJsonError("audit", msg);
 				} else {
-					console.error(chalk.red(msg));
+					console.error(chalk.red(`Error: ${msg}`));
 				}
 				process.exitCode = 1;
 				return;
@@ -224,7 +224,7 @@ export function registerAuditCommand(program: Command): void {
 			if (opts.domain && !(opts.domain in config.domains)) {
 				const msg = `Domain "${opts.domain}" not found in config.`;
 				if (jsonMode || opts.ci) outputJsonError("audit", msg);
-				else console.error(chalk.red(msg));
+				else console.error(chalk.red(`Error: ${msg}`));
 				process.exitCode = 1;
 				return;
 			}
