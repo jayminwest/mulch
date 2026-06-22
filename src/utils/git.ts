@@ -20,7 +20,9 @@ export function getChangedFiles(cwd: string, since: string): string[] {
 
 	// Committed changes (since ref)
 	try {
-		const committed = execFileSync("git", ["diff", "--name-only", since], {
+		// `--end-of-options` (git 2.24+) hardens against a user-supplied ref
+		// starting with `-` being parsed as a git option (flag injection).
+		const committed = execFileSync("git", ["diff", "--name-only", "--end-of-options", since], {
 			cwd,
 			encoding: "utf-8",
 			stdio: ["pipe", "pipe", "pipe"],
