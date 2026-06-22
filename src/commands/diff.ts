@@ -127,11 +127,18 @@ export function registerDiffCommand(program: Command): void {
 			try {
 				let diffOutput: string;
 				try {
-					diffOutput = execFileSync("git", ["diff", options.since, "--", ".mulch/expertise/"], {
-						cwd,
-						encoding: "utf-8",
-						stdio: ["pipe", "pipe", "pipe"],
-					});
+					diffOutput = execFileSync(
+						"git",
+						// `--end-of-options` (git 2.24+) prevents a user-supplied ref
+						// starting with `-` from being parsed as a git option. The
+						// trailing `--` still separates revisions from pathspecs.
+						["diff", "--end-of-options", options.since, "--", ".mulch/expertise/"],
+						{
+							cwd,
+							encoding: "utf-8",
+							stdio: ["pipe", "pipe", "pipe"],
+						},
+					);
 				} catch {
 					// ref doesn't exist or no changes, treat as empty diff
 					diffOutput = "";

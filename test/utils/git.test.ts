@@ -9,6 +9,7 @@ import {
 	activeContextHasSignal,
 	filterByActiveContext,
 	getActiveFiles,
+	getChangedFiles,
 } from "../../src/utils/git.ts";
 
 function initGitRepo(dir: string): void {
@@ -79,6 +80,44 @@ describe("git utils — slice 2 helpers", () => {
 			await writeFile(join(tmpDir, "a.txt"), "a");
 			const out = getActiveFiles(tmpDir);
 			expect(out).toEqual([...out].sort());
+		});
+	});
+
+	describe("getChangedFiles flag-injection hardening", () => {
+		it("does not interpret a ref starting with `-` as a git option", async () => {
+			initGitRepo(tmpDir);
+			await writeFile(join(tmpDir, "a.txt"), "a");
+			execFileSync("git", ["add", "."], { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["commit", "-q", "-m", "initial"], {
+				cwd: tmpDir,
+				stdio: "pipe",
+			});
+			// A ref like `--all` or `-S` must not be parsed as a flag. With
+			// `--end-of-options` in place git rejects it as an unknown
+			// revision; getChangedFiles swallows the error and returns the
+			// worktree/staged fall-through (here: empty). Without the
+			// hardening, `--all` would have been accepted as the `--all` flag
+			// to `git diff` and produced output for every ref.
+			const out = getChangedFiles(tmpDir, "--all");
+			expect(out).toEqual([]);
+		});
+
+		it("still resolves a normal ref like HEAD", async () => {
+			initGitRepo(tmpDir);
+			await writeFile(join(tmpDir, "a.txt"), "a");
+			execFileSync("git", ["add", "."], { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["commit", "-q", "-m", "initial"], {
+				cwd: tmpDir,
+				stdio: "pipe",
+			});
+			await writeFile(join(tmpDir, "a.txt"), "a2");
+			execFileSync("git", ["add", "."], { cwd: tmpDir, stdio: "pipe" });
+			execFileSync("git", ["commit", "-q", "-m", "second"], {
+				cwd: tmpDir,
+				stdio: "pipe",
+			});
+			const out = getChangedFiles(tmpDir, "HEAD~1");
+			expect(out).toContain("a.txt");
 		});
 	});
 
