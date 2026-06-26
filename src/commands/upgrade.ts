@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson } from "../utils/json-output.ts";
 import { printError, printSuccess, printWarning } from "../utils/palette.ts";
 import { compareSemver, getCurrentVersion, getLatestVersion } from "../utils/version.ts";
 
@@ -16,10 +16,11 @@ export function registerUpgradeCommand(program: Command): void {
 			const latest = getLatestVersion();
 			if (latest === null) {
 				if (jsonMode) {
-					outputJsonError(
-						"upgrade",
-						"Unable to reach npm registry. Check your internet connection.",
-					);
+					outputJson({
+						success: false,
+						command: "upgrade",
+						error: "Unable to reach npm registry. Check your internet connection.",
+					});
 				} else {
 					printError("Failed to check for updates: Unable to reach npm registry");
 				}
@@ -69,7 +70,11 @@ export function registerUpgradeCommand(program: Command): void {
 
 			if (result.exitCode !== 0) {
 				if (jsonMode) {
-					outputJsonError("upgrade", `bun install failed with exit code ${result.exitCode}`);
+					outputJson({
+						success: false,
+						command: "upgrade",
+						error: `bun install failed with exit code ${result.exitCode}`,
+					});
 				} else {
 					printError(`Failed to upgrade: bun install failed with exit code ${result.exitCode}`);
 				}
