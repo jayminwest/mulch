@@ -72,9 +72,10 @@ export function registerEditCommand(program: Command): void {
 						`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 					);
 				} else {
-					console.error(chalk.red(`Error: domain "${domain}" not found in config.`));
 					console.error(
-						chalk.red(`Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`),
+						chalk.red(
+							`Error: Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
+						),
 					);
 				}
 				process.exitCode = 1;

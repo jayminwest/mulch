@@ -133,7 +133,7 @@ export async function searchExpertise(
 	if (options.domain) {
 		if (!(options.domain in config.domains)) {
 			throw new Error(
-				`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+				`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 			);
 		}
 		domainsToSearch = [options.domain];

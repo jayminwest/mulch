@@ -194,11 +194,11 @@ export function registerPrimeCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError(
 								"prime",
-								`Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+								`Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 						} else {
 							console.error(
-								`Error: Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+								`Error: Domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 							console.error(
 								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,
@@ -215,11 +215,11 @@ export function registerPrimeCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError(
 								"prime",
-								`Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+								`Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 						} else {
 							console.error(
-								`Error: Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+								`Error: Excluded domain "${d}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 							console.error(
 								`Hint: Run \`ml add ${d}\` to create this domain, or check .mulch/mulch.config.yaml`,

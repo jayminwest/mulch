@@ -68,8 +68,11 @@ export function registerArchiveCommand(program: Command): void {
 								`Domain "${domain}" not found in config. Available domains: ${available}`,
 							);
 						} else {
-							console.error(chalk.red(`Error: domain "${domain}" not found in config.`));
-							console.error(chalk.red(`Available domains: ${available}`));
+							console.error(
+								chalk.red(
+									`Error: Domain "${domain}" not found in config. Available domains: ${available}`,
+								),
+							);
 						}
 						process.exitCode = 1;
 						return;

@@ -155,11 +155,11 @@ export function registerSearchCommand(program: Command): void {
 							if (jsonMode) {
 								outputJsonError(
 									"search",
-									`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+									`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 								);
 							} else {
 								console.error(
-									`Error: Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+									`Error: Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 								);
 								console.error(
 									`Hint: Run \`mulch add ${options.domain}\` to create this domain, or check .mulch/mulch.config.yaml`,
