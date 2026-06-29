@@ -57,10 +57,9 @@ export function registerDeleteCommand(program: Command): void {
 								`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 						} else {
-							console.error(chalk.red(`Error: domain "${domain}" not found in config.`));
 							console.error(
 								chalk.red(
-									`Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
+									`Error: Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 								),
 							);
 						}

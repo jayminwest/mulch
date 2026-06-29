@@ -63,12 +63,12 @@ export function registerReadyCommand(program: Command): void {
 						if (jsonMode) {
 							outputJsonError(
 								"ready",
-								`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ")}`,
+								`Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 							);
 						} else {
 							console.error(
 								chalk.red(
-									`Error: domain "${options.domain}" not found. Available: ${Object.keys(config.domains).join(", ")}`,
+									`Error: Domain "${options.domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 								),
 							);
 						}

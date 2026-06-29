@@ -37,7 +37,11 @@ export function registerDeleteDomainCommand(program: Command): void {
 							`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
 						);
 					} else {
-						console.error(chalk.red(`Error: domain "${domain}" not found in config.`));
+						console.error(
+							chalk.red(
+								`Error: Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
+							),
+						);
 						console.error(
 							chalk.red(
 								`Hint: Run \`mulch add ${domain}\` to create it, or check \`mulch status\` for existing domains.`,
