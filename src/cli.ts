@@ -74,12 +74,16 @@ const rawArgs = process.argv.slice(2);
 if ((rawArgs.includes("-v") || rawArgs.includes("--version")) && rawArgs.includes("--json")) {
 	const platform = `${process.platform}-${process.arch}`;
 	console.log(
-		JSON.stringify({
-			name: "@os-eco/mulch-cli",
-			version: VERSION,
-			runtime: "bun",
-			platform,
-		}),
+		JSON.stringify(
+			{
+				name: "@os-eco/mulch-cli",
+				version: VERSION,
+				runtime: "bun",
+				platform,
+			},
+			null,
+			2,
+		),
 	);
 	process.exit();
 }

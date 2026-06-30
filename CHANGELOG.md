@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`ml --version --json` now emits 2-space-indented JSON** (closes mulch-6d8a): the early-exit `--version --json` path in `src/cli.ts` previously emitted a single-line `JSON.stringify(...)` payload while every other `--json`-mode response in mulch is 2-space-indented via `outputJson`. The output is now formatted with `JSON.stringify(..., null, 2)` so machine consumers see one consistent JSON shape across the CLI. Fields (`name`, `version`, `runtime`, `platform`) and values are unchanged; consumers that `JSON.parse` the output are unaffected.
 - **`ml upgrade --json` key canonicalized to `up_to_date`** (closes mulch-4ca6): the `upgrade` JSON output previously emitted `upToDate` (camelCase) while `ml onboard --json` emitted the same concept as the snake_case action value `up_to_date`. The `upgrade` payload now uses `up_to_date` to match the rest of mulch's snake_case JSON convention (e.g. `not_installed`, `default_mode`, `extracts_files`). Consumers that read `parsed.upToDate` must switch to `parsed.up_to_date`; the boolean semantics are unchanged.
 
 ## [0.10.7] - 2026-06-02
