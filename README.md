@@ -10,6 +10,8 @@ Agents start every session from zero. The pattern your agent discovered yesterda
 
 **Mulch is a passive layer.** It does not contain an LLM. Agents use Mulch — Mulch does not use agents.
 
+Mulch is also the memory layer inside [Warren](https://github.com/jayminwest/warren), which runs coding agents as isolated workloads on infrastructure you control. A `.mulch/` directory in a project turns it on there.
+
 ## Install
 
 ```bash
