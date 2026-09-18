@@ -1,5 +1,4 @@
 import { writeFile } from "node:fs/promises";
-import chalk from "chalk";
 import type { Command } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
 import type { ExpertiseRecord } from "../schemas/record.ts";
@@ -41,7 +40,7 @@ import {
 	isGitRepo,
 } from "../utils/git.ts";
 import { runHooks } from "../utils/hooks.ts";
-import { outputJsonError } from "../utils/json-output.ts";
+import { outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 import {
@@ -135,24 +134,14 @@ export function registerPrimeCommand(program: Command): void {
 
 				if (options.manifest && options.full) {
 					const msg = "Cannot combine --manifest with --full.";
-					if (jsonMode) {
-						outputJsonError("prime", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("prime", jsonMode, msg);
 					return;
 				}
 
 				if (options.dryRun && options.manifest) {
 					const msg =
 						"Cannot combine --dry-run with --manifest. Manifest mode lists domains, not records; --dry-run previews which records would be primed.";
-					if (jsonMode) {
-						outputJsonError("prime", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("prime", jsonMode, msg);
 					return;
 				}
 
@@ -168,12 +157,7 @@ export function registerPrimeCommand(program: Command): void {
 				if (options.manifest && isScoped) {
 					const msg =
 						"--manifest cannot be combined with scoping arguments. Manifest mode lists available domains; use `ml prime <domain>` or `ml prime --files <path>` to load records.";
-					if (jsonMode) {
-						outputJsonError("prime", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("prime", jsonMode, msg);
 					return;
 				}
 
@@ -240,12 +224,7 @@ export function registerPrimeCommand(program: Command): void {
 					const cwd = process.cwd();
 					if (!isGitRepo(cwd)) {
 						const msg = "Not in a git repository. --context requires git.";
-						if (jsonMode) {
-							outputJsonError("prime", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("prime", jsonMode, msg);
 						return;
 					}
 					filesToFilter = getChangedFiles(cwd, "HEAD~1");
@@ -268,12 +247,7 @@ export function registerPrimeCommand(program: Command): void {
 					const parsed = parseStrictPositiveInt(options.budget);
 					if (parsed === null) {
 						const msg = `--budget must be a positive integer (got "${options.budget}").`;
-						if (jsonMode) {
-							outputJsonError("prime", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("prime", jsonMode, msg);
 						return;
 					}
 					budget = parsed;
@@ -499,12 +473,7 @@ export function registerPrimeCommand(program: Command): void {
 					const hookRes = await runHooks<typeof hookPayload>("pre-prime", hookPayload);
 					if (hookRes.blocked) {
 						const reason = hookRes.blockReason ?? "pre-prime hook blocked output";
-						if (jsonMode) {
-							outputJsonError("prime", reason);
-						} else {
-							console.error(chalk.red(`Error: ${reason}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("prime", jsonMode, reason);
 						return;
 					}
 					for (const w of hookRes.warnings) {
@@ -659,20 +628,7 @@ export function registerPrimeCommand(program: Command): void {
 					console.log(output);
 				}
 			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-					if (jsonMode) {
-						outputJsonError("prime", "No .mulch/ directory found. Run `mulch init` first.");
-					} else {
-						console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-					}
-				} else {
-					if (jsonMode) {
-						outputJsonError("prime", err instanceof Error ? err.message : String(err));
-					} else {
-						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-					}
-				}
-				process.exitCode = 1;
+				reportCommandError("prime", jsonMode, err);
 			}
 		});
 }

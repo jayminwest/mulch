@@ -23,10 +23,10 @@ import {
 } from "../utils/expertise.ts";
 import { getContextFiles, getCurrentCommit } from "../utils/git-context.ts";
 import { runHooks } from "../utils/hooks.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
-import { parseStrictNonNegativeNumber } from "../utils/numeric-flags.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
+import { addCustomTypeFieldOptions, parseOutcomeFlags } from "../utils/record-flags.ts";
 import { isAllowDomainMismatch } from "../utils/runtime-flags.ts";
 
 function buildTypeRequirements(): Record<string, string> {
@@ -431,6 +431,99 @@ export async function processStdinRecords(
 	return { created, updated, skipped, errors, warnings };
 }
 
+/**
+ * Run a bulk ingest (--batch / --stdin) and report the outcome.
+ * `readInput` runs inside the error boundary so a failed file read is
+ * reported the same way as a parse or validation failure.
+ */
+async function runBulkRecord(
+	domain: string,
+	jsonMode: boolean,
+	force: boolean,
+	dryRun: boolean,
+	action: "batch" | "stdin",
+	readInput?: () => string,
+): Promise<void> {
+	try {
+		const result = await processStdinRecords(domain, jsonMode, force, dryRun, readInput?.());
+
+		if (result.errors.length > 0) {
+			if (jsonMode) {
+				outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
+			} else {
+				console.error(chalk.red("Validation errors:"));
+				for (const error of result.errors) {
+					console.error(chalk.red(`  ${error}`));
+				}
+			}
+		}
+
+		if (jsonMode) {
+			outputJson({
+				success: result.errors.length === 0 || result.created + result.updated > 0,
+				command: "record",
+				action: dryRun ? "dry-run" : action,
+				domain,
+				created: result.created,
+				updated: result.updated,
+				skipped: result.skipped,
+				errors: result.errors,
+				warnings: result.warnings,
+			});
+		} else {
+			if (dryRun) {
+				const total = result.created + result.updated;
+				if (total > 0 || result.skipped > 0) {
+					if (!isQuiet())
+						console.log(
+							`${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
+						);
+					if (result.created > 0) {
+						if (!isQuiet()) console.log(chalk.dim(`  Create: ${result.created}`));
+					}
+					if (result.updated > 0) {
+						if (!isQuiet()) console.log(chalk.dim(`  Update: ${result.updated}`));
+					}
+					if (result.skipped > 0) {
+						if (!isQuiet()) console.log(chalk.dim(`  Skip: ${result.skipped}`));
+					}
+					if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
+				} else {
+					if (!isQuiet()) console.log(chalk.yellow("No records would be processed."));
+				}
+			} else {
+				if (result.created > 0) {
+					if (!isQuiet())
+						console.log(
+							`${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
+						);
+				}
+				if (result.updated > 0) {
+					if (!isQuiet())
+						console.log(
+							`${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
+						);
+				}
+				if (result.skipped > 0) {
+					if (!isQuiet())
+						console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
+				}
+			}
+		}
+
+		if (result.errors.length > 0 && result.created + result.updated === 0) {
+			process.exitCode = 1;
+		}
+	} catch (err) {
+		if (jsonMode) {
+			outputJsonError("record", err instanceof Error ? err.message : String(err));
+		} else {
+			console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+		}
+		process.exitCode = 1;
+	}
+}
+
 export function registerRecordCommand(program: Command): void {
 	const registry = getRegistry();
 	const typeChoices = registry.names();
@@ -507,21 +600,7 @@ Batch recording examples:
 `,
 		);
 
-	// Dynamically register --<field> flags for custom-type fields not already
-	// covered by the built-in flag set. This makes Phase 2 custom_types
-	// (declared in mulch.config.yaml) feel first-class on the CLI.
-	const declaredOptionNames = new Set(
-		cmd.options.map((o) => o.name()).concat(["files"]), // --files declared above
-	);
-	for (const def of registry.enabled()) {
-		if (def.kind === "builtin") continue;
-		for (const field of [...def.required, ...def.optional]) {
-			const flagName = field.replace(/_/g, "-");
-			if (declaredOptionNames.has(flagName)) continue;
-			declaredOptionNames.add(flagName);
-			cmd.option(`--${flagName} <${field}>`, `${def.name} field: ${field}`);
-		}
-	}
+	addCustomTypeFieldOptions(cmd, registry, (type, field) => `${type} field: ${field}`);
 
 	cmd.action(
 		async (domain: string, content: string | undefined, options: Record<string, unknown>) => {
@@ -530,7 +609,6 @@ Batch recording examples:
 			// Handle --batch mode
 			if (options.batch) {
 				const batchFile = options.batch as string;
-				const dryRun = options.dryRun === true;
 
 				if (!existsSync(batchFile)) {
 					if (jsonMode) {
@@ -542,181 +620,26 @@ Batch recording examples:
 					return;
 				}
 
-				try {
-					const fileContent = readFileSync(batchFile, "utf-8");
-					const result = await processStdinRecords(
-						domain,
-						jsonMode,
-						options.force === true,
-						dryRun,
-						fileContent,
-					);
-
-					if (result.errors.length > 0) {
-						if (jsonMode) {
-							outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
-						} else {
-							console.error(chalk.red("Validation errors:"));
-							for (const error of result.errors) {
-								console.error(chalk.red(`  ${error}`));
-							}
-						}
-					}
-
-					if (jsonMode) {
-						outputJson({
-							success: result.errors.length === 0 || result.created + result.updated > 0,
-							command: "record",
-							action: dryRun ? "dry-run" : "batch",
-							domain,
-							created: result.created,
-							updated: result.updated,
-							skipped: result.skipped,
-							errors: result.errors,
-							warnings: result.warnings,
-						});
-					} else {
-						if (dryRun) {
-							const total = result.created + result.updated;
-							if (total > 0 || result.skipped > 0) {
-								if (!isQuiet())
-									console.log(
-										`${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
-									);
-								if (result.created > 0) {
-									if (!isQuiet()) console.log(chalk.dim(`  Create: ${result.created}`));
-								}
-								if (result.updated > 0) {
-									if (!isQuiet()) console.log(chalk.dim(`  Update: ${result.updated}`));
-								}
-								if (result.skipped > 0) {
-									if (!isQuiet()) console.log(chalk.dim(`  Skip: ${result.skipped}`));
-								}
-								if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
-							} else {
-								if (!isQuiet()) console.log(chalk.yellow("No records would be processed."));
-							}
-						} else {
-							if (result.created > 0) {
-								if (!isQuiet())
-									console.log(
-										`${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
-									);
-							}
-							if (result.updated > 0) {
-								if (!isQuiet())
-									console.log(
-										`${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
-									);
-							}
-							if (result.skipped > 0) {
-								if (!isQuiet())
-									console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
-							}
-						}
-					}
-
-					if (result.errors.length > 0 && result.created + result.updated === 0) {
-						process.exitCode = 1;
-					}
-				} catch (err) {
-					if (jsonMode) {
-						outputJsonError("record", err instanceof Error ? err.message : String(err));
-					} else {
-						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-					}
-					process.exitCode = 1;
-				}
+				await runBulkRecord(
+					domain,
+					jsonMode,
+					options.force === true,
+					options.dryRun === true,
+					"batch",
+					() => readFileSync(batchFile, "utf-8"),
+				);
 				return;
 			}
 
 			// Handle --stdin mode
 			if (options.stdin === true) {
-				const dryRun = options.dryRun === true;
-
-				try {
-					const result = await processStdinRecords(
-						domain,
-						jsonMode,
-						options.force === true,
-						dryRun,
-					);
-
-					if (result.errors.length > 0) {
-						if (jsonMode) {
-							outputJsonError("record", `Validation errors: ${result.errors.join("; ")}`);
-						} else {
-							console.error(chalk.red("Validation errors:"));
-							for (const error of result.errors) {
-								console.error(chalk.red(`  ${error}`));
-							}
-						}
-					}
-
-					if (jsonMode) {
-						outputJson({
-							success: result.errors.length === 0 || result.created + result.updated > 0,
-							command: "record",
-							action: dryRun ? "dry-run" : "stdin",
-							domain,
-							created: result.created,
-							updated: result.updated,
-							skipped: result.skipped,
-							errors: result.errors,
-							warnings: result.warnings,
-						});
-					} else {
-						if (dryRun) {
-							const total = result.created + result.updated;
-							if (total > 0 || result.skipped > 0) {
-								if (!isQuiet())
-									console.log(
-										`${brand("✓")} ${brand(`Dry-run complete. Would process ${total} record(s) in ${domain}:`)}`,
-									);
-								if (result.created > 0) {
-									if (!isQuiet()) console.log(chalk.dim(`  Create: ${result.created}`));
-								}
-								if (result.updated > 0) {
-									if (!isQuiet()) console.log(chalk.dim(`  Update: ${result.updated}`));
-								}
-								if (result.skipped > 0) {
-									if (!isQuiet()) console.log(chalk.dim(`  Skip: ${result.skipped}`));
-								}
-								if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
-							} else {
-								if (!isQuiet()) console.log(chalk.yellow("No records would be processed."));
-							}
-						} else {
-							if (result.created > 0) {
-								if (!isQuiet())
-									console.log(
-										`${brand("✓")} ${brand(`Created ${result.created} record(s) in ${domain}`)}`,
-									);
-							}
-							if (result.updated > 0) {
-								if (!isQuiet())
-									console.log(
-										`${brand("✓")} ${brand(`Updated ${result.updated} record(s) in ${domain}`)}`,
-									);
-							}
-							if (result.skipped > 0) {
-								if (!isQuiet())
-									console.log(chalk.yellow(`Skipped ${result.skipped} duplicate(s) in ${domain}`));
-							}
-						}
-					}
-
-					if (result.errors.length > 0 && result.created + result.updated === 0) {
-						process.exitCode = 1;
-					}
-				} catch (err) {
-					if (jsonMode) {
-						outputJsonError("record", err instanceof Error ? err.message : String(err));
-					} else {
-						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-					}
-					process.exitCode = 1;
-				}
+				await runBulkRecord(
+					domain,
+					jsonMode,
+					options.force === true,
+					options.dryRun === true,
+					"stdin",
+				);
 				return;
 			}
 			const config = await readConfig();
@@ -731,12 +654,7 @@ Batch recording examples:
 			// Validate --type is provided for non-stdin mode
 			if (!options.type) {
 				const choicesMsg = `--type is required (${typeChoices.join(", ")})`;
-				if (jsonMode) {
-					outputJsonError("record", choicesMsg);
-				} else {
-					console.error(chalk.red(`Error: ${choicesMsg}`));
-				}
-				process.exitCode = 1;
+				reportCommandError("record", jsonMode, choicesMsg);
 				return;
 			}
 
@@ -798,33 +716,14 @@ Batch recording examples:
 							.filter(Boolean)
 					: undefined;
 
-			let outcomes: Outcome[] | undefined;
-			if (options.outcomeStatus) {
-				const o: Outcome = {
-					status: options.outcomeStatus as "success" | "failure" | "partial",
-				};
-				if (options.outcomeDuration !== undefined) {
-					const parsed = parseStrictNonNegativeNumber(options.outcomeDuration as string);
-					if (parsed === null) {
-						const msg = `--outcome-duration must be a non-negative number (got "${options.outcomeDuration as string}").`;
-						if (jsonMode) {
-							outputJsonError("record", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					o.duration = parsed;
-				}
-				if (options.outcomeTestResults) {
-					o.test_results = options.outcomeTestResults as string;
-				}
-				if (options.outcomeAgent) {
-					o.agent = options.outcomeAgent as string;
-				}
-				outcomes = [o];
+			const parsedOutcome = parseOutcomeFlags(options);
+			if (parsedOutcome.error) {
+				reportCommandError("record", jsonMode, parsedOutcome.error);
+				return;
 			}
+			const outcomes: Outcome[] | undefined = parsedOutcome.outcome
+				? [parsedOutcome.outcome]
+				: undefined;
 
 			// dir_anchors: explicit --dir-anchor wins; otherwise infer from changed
 			// files (3+ files sharing a parent directory). Normalized to drop
@@ -839,12 +738,7 @@ Batch recording examples:
 					}
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : String(err);
-					if (jsonMode) {
-						outputJsonError("record", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("record", jsonMode, msg);
 					return;
 				}
 				explicitDirAnchors = (options.dirAnchor as string[])
@@ -862,12 +756,7 @@ Batch recording examples:
 			const def = getRegistry().get(recordType);
 			if (!def) {
 				const msg = `Unknown record type "${recordType}". Available: ${typeChoices.join(", ")}.`;
-				if (jsonMode) {
-					outputJsonError("record", msg);
-				} else {
-					console.error(chalk.red(`Error: ${msg}`));
-				}
-				process.exitCode = 1;
+				reportCommandError("record", jsonMode, msg);
 				return;
 			}
 
@@ -1025,12 +914,7 @@ Batch recording examples:
 				);
 				if (preResult.blocked) {
 					const reason = preResult.blockReason ?? "pre-record hook blocked the write";
-					if (jsonMode) {
-						outputJsonError("record", reason);
-					} else {
-						console.error(chalk.red(`Error: ${reason}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("record", jsonMode, reason);
 					return;
 				}
 				preRecordWarnings = preResult.warnings;
@@ -1042,12 +926,7 @@ Batch recording examples:
 								.map((e) => `${e.instancePath} ${e.message}`)
 								.join("; ");
 							const msg = `pre-record hook produced an invalid record: ${errs}`;
-							if (jsonMode) {
-								outputJsonError("record", msg);
-							} else {
-								console.error(chalk.red(`Error: ${msg}`));
-							}
-							process.exitCode = 1;
+							reportCommandError("record", jsonMode, msg);
 							return;
 						}
 						record = mutated;

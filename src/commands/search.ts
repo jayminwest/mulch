@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { type Command, Option } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
 import { DEFAULT_SEARCH_BOOST_FACTOR } from "../schemas/config.ts";
@@ -21,7 +20,7 @@ import {
 	getRecordSummary,
 	type PrimeFormat,
 } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { type ScoredRecord, sortByConfirmationScore } from "../utils/scoring.ts";
 
 function formatArchivedSection(domain: string, records: ExpertiseRecord[]): string {
@@ -310,24 +309,7 @@ export function registerSearchCommand(program: Command): void {
 						}
 					}
 				} catch (err) {
-					if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-						if (jsonMode) {
-							outputJsonError("search", "No .mulch/ directory found. Run `mulch init` first.");
-						} else {
-							console.error(
-								chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."),
-							);
-						}
-					} else {
-						if (jsonMode) {
-							outputJsonError("search", err instanceof Error ? err.message : String(err));
-						} else {
-							console.error(
-								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
-							);
-						}
-					}
-					process.exitCode = 1;
+					reportCommandError("search", jsonMode, err);
 				}
 			},
 		);

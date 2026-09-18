@@ -4,7 +4,7 @@ import type { ExpertiseRecord } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile } from "../utils/expertise.ts";
 import { formatTimeAgo, getRecordSummary } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { accent } from "../utils/palette.ts";
 
@@ -48,12 +48,7 @@ export function registerReadyCommand(program: Command): void {
 
 				if (limit === null) {
 					const msg = `--limit must be a positive integer (got "${options.limit}").`;
-					if (jsonMode) {
-						outputJsonError("ready", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("ready", jsonMode, msg);
 					return;
 				}
 
@@ -162,20 +157,7 @@ export function registerReadyCommand(program: Command): void {
 					}
 				}
 			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-					if (jsonMode) {
-						outputJsonError("ready", "No .mulch/ directory found. Run `mulch init` first.");
-					} else {
-						console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-					}
-				} else {
-					if (jsonMode) {
-						outputJsonError("ready", err instanceof Error ? err.message : String(err));
-					} else {
-						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-					}
-				}
-				process.exitCode = 1;
+				reportCommandError("ready", jsonMode, err);
 			}
 		});
 }

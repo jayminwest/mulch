@@ -5,7 +5,7 @@ import { archiveRecords } from "../utils/archive.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
 
@@ -77,12 +77,7 @@ export function registerArchiveCommand(program: Command): void {
 
 					const reasonText = options.reason.trim();
 					if (reasonText.length === 0) {
-						if (jsonMode) {
-							outputJsonError("archive", "--reason must not be empty.");
-						} else {
-							console.error(chalk.red("Error: --reason must not be empty."));
-						}
-						process.exitCode = 1;
+						reportCommandError("archive", jsonMode, "--reason must not be empty.");
 						return;
 					}
 
@@ -123,12 +118,7 @@ export function registerArchiveCommand(program: Command): void {
 						: [id as string];
 
 					if (rawIds.length === 0) {
-						if (jsonMode) {
-							outputJsonError("archive", "--records requires at least one ID.");
-						} else {
-							console.error(chalk.red("Error: --records requires at least one ID."));
-						}
-						process.exitCode = 1;
+						reportCommandError("archive", jsonMode, "--records requires at least one ID.");
 						return;
 					}
 
@@ -161,12 +151,7 @@ export function registerArchiveCommand(program: Command): void {
 					});
 
 					if (!lockResult.ok) {
-						if (jsonMode) {
-							outputJsonError("archive", lockResult.error);
-						} else {
-							console.error(chalk.red(`Error: ${lockResult.error}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("archive", jsonMode, lockResult.error);
 						return;
 					}
 
@@ -194,24 +179,7 @@ export function registerArchiveCommand(program: Command): void {
 						}
 					}
 				} catch (err) {
-					if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-						if (jsonMode) {
-							outputJsonError("archive", "No .mulch/ directory found. Run `mulch init` first.");
-						} else {
-							console.error(
-								chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."),
-							);
-						}
-					} else {
-						if (jsonMode) {
-							outputJsonError("archive", err instanceof Error ? err.message : String(err));
-						} else {
-							console.error(
-								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
-							);
-						}
-					}
-					process.exitCode = 1;
+					reportCommandError("archive", jsonMode, err);
 				}
 			},
 		);

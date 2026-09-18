@@ -13,9 +13,9 @@ import {
 } from "../utils/anchor-validity.ts";
 import { archiveRecords } from "../utils/archive.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
-import { readExpertiseFile, writeExpertiseFile } from "../utils/expertise.ts";
+import { isRecordStale, readExpertiseFile, writeExpertiseFile } from "../utils/expertise.ts";
 import { runHooks } from "../utils/hooks.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 
@@ -46,31 +46,6 @@ interface RecordAction {
 		total: number;
 		broken: { kind: string; path: string }[];
 	};
-}
-
-export function isStale(
-	record: ExpertiseRecord,
-	now: Date,
-	shelfLife: { tactical: number; observational: number },
-): boolean {
-	const classification: Classification = record.classification;
-
-	if (classification === "foundational") {
-		return false;
-	}
-
-	const recordedAt = new Date(record.recorded_at);
-	const ageInDays = Math.floor((now.getTime() - recordedAt.getTime()) / (1000 * 60 * 60 * 24));
-
-	if (classification === "tactical") {
-		return ageInDays > shelfLife.tactical;
-	}
-
-	if (classification === "observational") {
-		return ageInDays > shelfLife.observational;
-	}
-
-	return false;
 }
 
 /**
@@ -247,12 +222,7 @@ export function registerPruneCommand(program: Command): void {
 				const anchorValidationErrors = validateAnchorValidityConfig(anchorCfg);
 				if (anchorValidationErrors.length > 0) {
 					const msg = `Invalid decay.anchor_validity config: ${anchorValidationErrors.join("; ")}. Edit .mulch/mulch.config.yaml.`;
-					if (jsonMode) {
-						outputJsonError("prune", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("prune", jsonMode, msg);
 					return;
 				}
 				const anchorThreshold = anchorCfg.threshold ?? DEFAULT_ANCHOR_VALIDITY_THRESHOLD;
@@ -316,7 +286,7 @@ export function registerPruneCommand(program: Command): void {
 					anchor_decay: ExpertiseRecord[];
 				}> = [];
 				for (const { domain, records } of liveByDomain) {
-					const stale = records.filter((r) => isStale(r, now, shelfLife));
+					const stale = records.filter((r) => isRecordStale(r, now, shelfLife));
 					const staleIds = new Set(stale.map((r) => r.id).filter((id): id is string => !!id));
 					const demote = records.filter(
 						(r) => r.id !== undefined && supersededIds.has(r.id) && !staleIds.has(r.id),
@@ -336,12 +306,7 @@ export function registerPruneCommand(program: Command): void {
 					const hookRes = await runHooks("pre-prune", { candidates: candidatesByDomain });
 					if (hookRes.blocked) {
 						const reason = hookRes.blockReason ?? "pre-prune hook blocked";
-						if (jsonMode) {
-							outputJsonError("prune", reason);
-						} else {
-							console.error(chalk.red(`Error: ${reason}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("prune", jsonMode, reason);
 						return;
 					}
 					for (const w of hookRes.warnings) {
@@ -373,7 +338,7 @@ export function registerPruneCommand(program: Command): void {
 						let supersessionDemoted = 0;
 
 						for (const record of records) {
-							if (isStale(record, now, shelfLife)) {
+							if (isRecordStale(record, now, shelfLife)) {
 								pruned++;
 								archived.push(record);
 								domainActions.push({

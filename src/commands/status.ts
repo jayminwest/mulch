@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import chalk from "chalk";
 import type { Command } from "commander";
 import { getExpertisePath, getMulchDir, readConfig } from "../utils/config.ts";
 import {
@@ -9,7 +8,7 @@ import {
 	readExpertiseFile,
 } from "../utils/expertise.ts";
 import { formatStatusOutput } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, reportCommandError } from "../utils/json-output.ts";
 
 export function registerStatusCommand(program: Command): void {
 	program
@@ -20,12 +19,11 @@ export function registerStatusCommand(program: Command): void {
 			const mulchDir = getMulchDir();
 
 			if (!existsSync(mulchDir)) {
-				if (jsonMode) {
-					outputJsonError("status", "No .mulch/ directory found. Run `mulch init` first.");
-				} else {
-					console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-				}
-				process.exitCode = 1;
+				reportCommandError(
+					"status",
+					jsonMode,
+					"No .mulch/ directory found. Run `mulch init` first.",
+				);
 				return;
 			}
 

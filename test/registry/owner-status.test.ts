@@ -3,9 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Ajv from "ajv";
-import { buildBuiltinRegistry } from "../../src/registry/builtins.ts";
 import { initRegistryFromConfig } from "../../src/registry/init.ts";
-import { getRegistry, resetRegistry } from "../../src/registry/type-registry.ts";
+import {
+	buildBuiltinRegistry,
+	getRegistry,
+	resetRegistry,
+} from "../../src/registry/type-registry.ts";
 import { DEFAULT_CONFIG } from "../../src/schemas/config.ts";
 import { recordSchema } from "../../src/schemas/record-schema.ts";
 import { initMulchDir, writeConfig } from "../../src/utils/config.ts";

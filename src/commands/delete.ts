@@ -4,7 +4,7 @@ import type { ExpertiseRecord } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
 
@@ -29,6 +29,61 @@ function printDeletedRecord(record: ExpertiseRecord, domain: string, dryRun: boo
 	console.log(
 		`${prefix}${brand(`${verb} ${record.type}`)}${rid} ${brand(`from ${domain}`)}: ${getRecordSummary(record)}`,
 	);
+}
+
+/**
+ * Bulk delete under the domain lock. `selection` says whether the resolved IDs
+ * are the records to delete (--records) or the records to keep (--all-except).
+ */
+async function deleteSelected(
+	filePath: string,
+	domain: string,
+	rawIds: string[],
+	selection: "delete" | "keep",
+	dryRun: boolean,
+	jsonMode: boolean,
+): Promise<void> {
+	await withFileLock(filePath, async () => {
+		const records = await readExpertiseFile(filePath);
+		const selected = new Set<number>();
+
+		for (const rawId of rawIds) {
+			const resolved = resolveRecordId(records, rawId);
+			if (!resolved.ok) {
+				reportCommandError("delete", jsonMode, resolved.error);
+				return;
+			}
+			selected.add(resolved.index);
+		}
+
+		const isDeleted = (i: number) => selected.has(i) === (selection === "delete");
+		const deleted = records.filter((_, i) => isDeleted(i));
+		const kept = records.filter((_, i) => !isDeleted(i));
+
+		if (!dryRun) {
+			await writeExpertiseFile(filePath, kept);
+		}
+
+		if (jsonMode) {
+			outputJson({
+				success: true,
+				command: "delete",
+				domain,
+				dryRun,
+				deleted: deleted.map(buildDeletedInfo),
+				kept: kept.length,
+			});
+		} else {
+			if (!isQuiet()) {
+				for (const r of deleted) {
+					printDeletedRecord(r, domain, dryRun);
+				}
+				if (!dryRun && deleted.length > 1) {
+					console.log(brand(`✓ Deleted ${deleted.length} records from ${domain}`));
+				}
+			}
+		}
+	});
 }
 
 export function registerDeleteCommand(program: Command): void {
@@ -112,12 +167,7 @@ export function registerDeleteCommand(program: Command): void {
 
 							const resolved = resolveRecordId(records, id as string);
 							if (!resolved.ok) {
-								if (jsonMode) {
-									outputJsonError("delete", resolved.error);
-								} else {
-									console.error(chalk.red(`Error: ${resolved.error}`));
-								}
-								process.exitCode = 1;
+								reportCommandError("delete", jsonMode, resolved.error);
 								return;
 							}
 							const targetIndex = resolved.index;
@@ -174,60 +224,11 @@ export function registerDeleteCommand(program: Command): void {
 							.filter(Boolean);
 
 						if (ids.length === 0) {
-							if (jsonMode) {
-								outputJsonError("delete", "--records requires at least one ID.");
-							} else {
-								console.error(chalk.red("Error: --records requires at least one ID."));
-							}
-							process.exitCode = 1;
+							reportCommandError("delete", jsonMode, "--records requires at least one ID.");
 							return;
 						}
 
-						await withFileLock(filePath, async () => {
-							const records = await readExpertiseFile(filePath);
-							const toDeleteIndices = new Set<number>();
-
-							for (const rawId of ids) {
-								const resolved = resolveRecordId(records, rawId);
-								if (!resolved.ok) {
-									if (jsonMode) {
-										outputJsonError("delete", resolved.error);
-									} else {
-										console.error(chalk.red(`Error: ${resolved.error}`));
-									}
-									process.exitCode = 1;
-									return;
-								}
-								toDeleteIndices.add(resolved.index);
-							}
-
-							const deleted = records.filter((_, i) => toDeleteIndices.has(i));
-							const kept = records.filter((_, i) => !toDeleteIndices.has(i));
-
-							if (!options.dryRun) {
-								await writeExpertiseFile(filePath, kept);
-							}
-
-							if (jsonMode) {
-								outputJson({
-									success: true,
-									command: "delete",
-									domain,
-									dryRun: options.dryRun,
-									deleted: deleted.map(buildDeletedInfo),
-									kept: kept.length,
-								});
-							} else {
-								if (!isQuiet()) {
-									for (const r of deleted) {
-										printDeletedRecord(r, domain, options.dryRun);
-									}
-									if (!options.dryRun && deleted.length > 1) {
-										console.log(brand(`✓ Deleted ${deleted.length} records from ${domain}`));
-									}
-								}
-							}
-						});
+						await deleteSelected(filePath, domain, ids, "delete", options.dryRun, jsonMode);
 						return;
 					}
 
@@ -239,81 +240,19 @@ export function registerDeleteCommand(program: Command): void {
 							.filter(Boolean);
 
 						if (keepRawIds.length === 0) {
-							if (jsonMode) {
-								outputJsonError("delete", "--all-except requires at least one ID to keep.");
-							} else {
-								console.error(chalk.red("Error: --all-except requires at least one ID to keep."));
-							}
-							process.exitCode = 1;
+							reportCommandError(
+								"delete",
+								jsonMode,
+								"--all-except requires at least one ID to keep.",
+							);
 							return;
 						}
 
-						await withFileLock(filePath, async () => {
-							const records = await readExpertiseFile(filePath);
-							const keepIndices = new Set<number>();
-
-							for (const rawId of keepRawIds) {
-								const resolved = resolveRecordId(records, rawId);
-								if (!resolved.ok) {
-									if (jsonMode) {
-										outputJsonError("delete", resolved.error);
-									} else {
-										console.error(chalk.red(`Error: ${resolved.error}`));
-									}
-									process.exitCode = 1;
-									return;
-								}
-								keepIndices.add(resolved.index);
-							}
-
-							const deleted = records.filter((_, i) => !keepIndices.has(i));
-							const kept = records.filter((_, i) => keepIndices.has(i));
-
-							if (!options.dryRun) {
-								await writeExpertiseFile(filePath, kept);
-							}
-
-							if (jsonMode) {
-								outputJson({
-									success: true,
-									command: "delete",
-									domain,
-									dryRun: options.dryRun,
-									deleted: deleted.map(buildDeletedInfo),
-									kept: kept.length,
-								});
-							} else {
-								if (!isQuiet()) {
-									for (const r of deleted) {
-										printDeletedRecord(r, domain, options.dryRun);
-									}
-									if (!options.dryRun && deleted.length > 1) {
-										console.log(brand(`✓ Deleted ${deleted.length} records from ${domain}`));
-									}
-								}
-							}
-						});
+						await deleteSelected(filePath, domain, keepRawIds, "keep", options.dryRun, jsonMode);
 						return;
 					}
 				} catch (err) {
-					if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-						if (jsonMode) {
-							outputJsonError("delete", "No .mulch/ directory found. Run `mulch init` first.");
-						} else {
-							console.error(
-								chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."),
-							);
-						}
-					} else {
-						if (jsonMode) {
-							outputJsonError("delete", err instanceof Error ? err.message : String(err));
-						} else {
-							console.error(
-								chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`),
-							);
-						}
-					}
-					process.exitCode = 1;
+					reportCommandError("delete", jsonMode, err);
 				}
 			},
 		);

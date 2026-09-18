@@ -3,7 +3,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { getExpertisePath, getMulchDir, readConfig, writeConfig } from "../utils/config.ts";
 import { createExpertiseFile } from "../utils/expertise.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, reportCommandError } from "../utils/json-output.ts";
 import { isQuiet } from "../utils/palette.ts";
 
 export function registerAddCommand(program: Command): void {
@@ -16,24 +16,14 @@ export function registerAddCommand(program: Command): void {
 			const mulchDir = getMulchDir();
 
 			if (!existsSync(mulchDir)) {
-				if (jsonMode) {
-					outputJsonError("add", "No .mulch/ directory found. Run `mulch init` first.");
-				} else {
-					console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-				}
-				process.exitCode = 1;
+				reportCommandError("add", jsonMode, "No .mulch/ directory found. Run `mulch init` first.");
 				return;
 			}
 
 			const config = await readConfig();
 
 			if (domain in config.domains) {
-				if (jsonMode) {
-					outputJsonError("add", `Domain "${domain}" already exists.`);
-				} else {
-					console.error(chalk.red(`Error: Domain "${domain}" already exists.`));
-				}
-				process.exitCode = 1;
+				reportCommandError("add", jsonMode, `Domain "${domain}" already exists.`);
 				return;
 			}
 

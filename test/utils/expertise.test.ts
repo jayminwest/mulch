@@ -2,9 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BUILTIN_DEFS, buildBuiltinRegistry } from "../../src/registry/builtins.ts";
+import { BUILTIN_DEFS } from "../../src/registry/builtins.ts";
 import { buildCustomTypeDefinition } from "../../src/registry/custom.ts";
-import { resetRegistry, setRegistry, TypeRegistry } from "../../src/registry/type-registry.ts";
+import {
+	buildBuiltinRegistry,
+	resetRegistry,
+	setRegistry,
+	TypeRegistry,
+} from "../../src/registry/type-registry.ts";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import {
 	appendRecord,

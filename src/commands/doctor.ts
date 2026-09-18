@@ -23,6 +23,7 @@ import {
 	applyAliases,
 	createExpertiseFile,
 	findDuplicate,
+	isRecordStale,
 	readExpertiseFile,
 	writeExpertiseFile,
 } from "../utils/expertise.ts";
@@ -30,7 +31,6 @@ import { outputJson } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, icons, isQuiet } from "../utils/palette.ts";
 import { compareSemver, getCurrentVersion, getLatestVersion } from "../utils/version.ts";
-import { isStale } from "./prune.ts";
 
 interface DoctorCheck {
 	name: string;
@@ -71,8 +71,14 @@ async function checkConfig(cwd?: string): Promise<DoctorCheck> {
 	}
 }
 
-async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
-	const details: string[] = [];
+interface DomainLine {
+	domain: string;
+	lineNo: number;
+	line: string;
+}
+
+/** Yield every non-empty line of every domain file; unreadable files are skipped. */
+async function* walkDomainLines(config: MulchConfig, cwd?: string): AsyncGenerator<DomainLine> {
 	for (const domain of Object.keys(config.domains)) {
 		const filePath = getExpertisePath(domain, cwd);
 		let content: string;
@@ -85,11 +91,34 @@ async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<D
 		for (let i = 0; i < lines.length; i++) {
 			const line = (lines[i] ?? "").trim();
 			if (line.length === 0) continue;
-			try {
-				JSON.parse(line);
-			} catch {
-				details.push(`${domain}:${i + 1} - Invalid JSON`);
-			}
+			yield { domain, lineNo: i + 1, line };
+		}
+	}
+}
+
+/** Like walkDomainLines, but parsed; invalid JSON is skipped (jsonl-integrity reports it). */
+async function* walkDomainRecords(
+	config: MulchConfig,
+	cwd?: string,
+): AsyncGenerator<{ domain: string; lineNo: number; parsed: unknown }> {
+	for await (const { domain, lineNo, line } of walkDomainLines(config, cwd)) {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch {
+			continue;
+		}
+		yield { domain, lineNo, parsed };
+	}
+}
+
+async function checkJsonlIntegrity(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
+	const details: string[] = [];
+	for await (const { domain, lineNo, line } of walkDomainLines(config, cwd)) {
+		try {
+			JSON.parse(line);
+		} catch {
+			details.push(`${domain}:${lineNo} - Invalid JSON`);
 		}
 	}
 	if (details.length > 0) {
@@ -115,42 +144,24 @@ async function checkSchemaValidation(config: MulchConfig, cwd?: string): Promise
 	const validate = registry.validator;
 	const details: string[] = [];
 
-	for (const domain of Object.keys(config.domains)) {
-		const filePath = getExpertisePath(domain, cwd);
-		let content: string;
-		try {
-			content = await readFile(filePath, "utf-8");
-		} catch {
-			continue;
+	for await (const { domain, lineNo, parsed } of walkDomainRecords(config, cwd)) {
+		// Skip records of unregistered types — checkUnknownTypes flags those
+		// with a clearer message. Otherwise Ajv reports a noisy "no oneOf
+		// matched" for the same record. Apply aliases before Ajv so a
+		// record with a legacy field name (post-rename) validates cleanly.
+		if (parsed && typeof parsed === "object" && "type" in parsed) {
+			const t = (parsed as { type: unknown }).type;
+			if (typeof t === "string") {
+				const def = registry.get(t);
+				if (!def) continue;
+				if (def.aliases) applyAliases(parsed as Record<string, unknown>, def.aliases);
+			}
 		}
-		const lines = content.split("\n");
-		for (let i = 0; i < lines.length; i++) {
-			const line = (lines[i] ?? "").trim();
-			if (line.length === 0) continue;
-			let parsed: unknown;
-			try {
-				parsed = JSON.parse(line);
-			} catch {
-				continue; // Already caught by integrity check
-			}
-			// Skip records of unregistered types — checkUnknownTypes flags those
-			// with a clearer message. Otherwise Ajv reports a noisy "no oneOf
-			// matched" for the same record. Apply aliases before Ajv so a
-			// record with a legacy field name (post-rename) validates cleanly.
-			if (parsed && typeof parsed === "object" && "type" in parsed) {
-				const t = (parsed as { type: unknown }).type;
-				if (typeof t === "string") {
-					const def = registry.get(t);
-					if (!def) continue;
-					if (def.aliases) applyAliases(parsed as Record<string, unknown>, def.aliases);
-				}
-			}
-			if (!validate(parsed)) {
-				const errors = (validate.errors ?? [])
-					.map((e) => `${e.instancePath} ${e.message}`)
-					.join("; ");
-				details.push(`${domain}:${i + 1} - ${errors}`);
-			}
+		if (!validate(parsed)) {
+			const errors = (validate.errors ?? [])
+				.map((e) => `${e.instancePath} ${e.message}`)
+				.join("; ");
+			details.push(`${domain}:${lineNo} - ${errors}`);
 		}
 	}
 	if (details.length > 0) {
@@ -181,7 +192,7 @@ async function checkStaleRecords(config: MulchConfig, cwd?: string): Promise<Doc
 		const filePath = getExpertisePath(domain, cwd);
 		const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
 		for (const record of records) {
-			if (isStale(record, now, shelfLife)) {
+			if (isRecordStale(record, now, shelfLife)) {
 				staleCount++;
 				details.push(`${domain}: stale ${record.type} (${record.classification})`);
 			}
@@ -251,31 +262,13 @@ async function checkUnknownTypes(config: MulchConfig, cwd?: string): Promise<Doc
 	const registry = getRegistry();
 	const details: string[] = [];
 
-	for (const domain of Object.keys(config.domains)) {
-		const filePath = getExpertisePath(domain, cwd);
-		let content: string;
-		try {
-			content = await readFile(filePath, "utf-8");
-		} catch {
-			continue;
-		}
-		const lines = content.split("\n");
-		for (let i = 0; i < lines.length; i++) {
-			const line = (lines[i] ?? "").trim();
-			if (line.length === 0) continue;
-			let parsed: unknown;
-			try {
-				parsed = JSON.parse(line);
-			} catch {
-				continue; // covered by jsonl-integrity check
-			}
-			if (parsed && typeof parsed === "object" && "type" in parsed) {
-				const t = (parsed as { type: unknown }).type;
-				if (typeof t === "string" && !registry.get(t)) {
-					const id = (parsed as { id?: unknown }).id;
-					const idPart = typeof id === "string" ? ` [${id}]` : "";
-					details.push(`${domain}:${i + 1}${idPart} - unknown type "${t}"`);
-				}
+	for await (const { domain, lineNo, parsed } of walkDomainRecords(config, cwd)) {
+		if (parsed && typeof parsed === "object" && "type" in parsed) {
+			const t = (parsed as { type: unknown }).type;
+			if (typeof t === "string" && !registry.get(t)) {
+				const id = (parsed as { id?: unknown }).id;
+				const idPart = typeof id === "string" ? ` [${id}]` : "";
+				details.push(`${domain}:${lineNo}${idPart} - unknown type "${t}"`);
 			}
 		}
 	}
@@ -383,34 +376,16 @@ async function checkDuplicates(config: MulchConfig, cwd?: string): Promise<Docto
 async function checkLegacyOutcome(config: MulchConfig, cwd?: string): Promise<DoctorCheck> {
 	const details: string[] = [];
 
-	for (const domain of Object.keys(config.domains)) {
-		const filePath = getExpertisePath(domain, cwd);
-		let content: string;
-		try {
-			content = await readFile(filePath, "utf-8");
-		} catch {
-			continue;
-		}
-		const lines = content.split("\n");
-		for (let i = 0; i < lines.length; i++) {
-			const line = (lines[i] ?? "").trim();
-			if (line.length === 0) continue;
-			let parsed: unknown;
-			try {
-				parsed = JSON.parse(line);
-			} catch {
-				continue;
-			}
-			if (
-				parsed !== null &&
-				typeof parsed === "object" &&
-				"outcome" in parsed &&
-				!("outcomes" in parsed)
-			) {
-				details.push(
-					`${domain}:${i + 1} - legacy "outcome" field (singular); should be "outcomes[]"`,
-				);
-			}
+	for await (const { domain, lineNo, parsed } of walkDomainRecords(config, cwd)) {
+		if (
+			parsed !== null &&
+			typeof parsed === "object" &&
+			"outcome" in parsed &&
+			!("outcomes" in parsed)
+		) {
+			details.push(
+				`${domain}:${lineNo} - legacy "outcome" field (singular); should be "outcomes[]"`,
+			);
 		}
 	}
 
@@ -860,7 +835,7 @@ async function applyFixes(
 					const filePath = getExpertisePath(domain, cwd);
 					await withFileLock(filePath, async () => {
 						const records = await readExpertiseFile(filePath, { allowUnknownTypes: true });
-						const kept = records.filter((r) => !isStale(r, now, shelfLife));
+						const kept = records.filter((r) => !isRecordStale(r, now, shelfLife));
 						const pruned = records.length - kept.length;
 						if (pruned > 0) {
 							await writeExpertiseFile(filePath, kept);

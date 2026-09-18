@@ -203,16 +203,15 @@ export async function queryDomain(
 }
 
 /**
- * Edit an existing record by ID in the given domain.
- * Only provided fields in updates are modified; all other fields are preserved.
+ * Locate a record by ID under the domain's file lock, hand a copy to `mutate`,
+ * and write the returned record back in place.
  */
-export async function editRecord(
+async function updateRecordById(
 	domain: string,
 	id: string,
-	updates: RecordUpdates,
-	options: EditOptions = {},
+	cwd: string | undefined,
+	mutate: (record: ExpertiseRecord) => Promise<ExpertiseRecord>,
 ): Promise<ExpertiseRecord> {
-	const { cwd } = options;
 	const config = await readConfig(cwd);
 
 	if (!(domain in config.domains)) {
@@ -236,8 +235,26 @@ export async function editRecord(
 		if (!original) {
 			throw new Error(`Record at index ${targetIndex} not found`);
 		}
-		const record: ExpertiseRecord = { ...original };
+		const record = await mutate({ ...original });
 
+		records[targetIndex] = record;
+		await writeExpertiseFile(filePath, records);
+
+		return record;
+	});
+}
+
+/**
+ * Edit an existing record by ID in the given domain.
+ * Only provided fields in updates are modified; all other fields are preserved.
+ */
+export async function editRecord(
+	domain: string,
+	id: string,
+	updates: RecordUpdates,
+	options: EditOptions = {},
+): Promise<ExpertiseRecord> {
+	return updateRecordById(domain, id, options.cwd, async (record) => {
 		// Apply common updates
 		if (updates.classification !== undefined) {
 			record.classification = updates.classification;
@@ -310,9 +327,6 @@ export async function editRecord(
 				break;
 		}
 
-		records[targetIndex] = record;
-		await writeExpertiseFile(filePath, records);
-
 		return record;
 	});
 }
@@ -328,41 +342,14 @@ export async function appendOutcome(
 	outcome: Outcome,
 	options: OutcomeOptions = {},
 ): Promise<AppendOutcomeResult> {
-	const { cwd } = options;
-	const config = await readConfig(cwd);
-
-	if (!(domain in config.domains)) {
-		throw new Error(
-			`Domain "${domain}" not found in config. Available domains: ${Object.keys(config.domains).join(", ") || "(none)"}`,
-		);
-	}
-
-	const filePath = getExpertisePath(domain, cwd);
-
-	return withFileLock(filePath, async () => {
-		const records = await readExpertiseFile(filePath);
-		const resolved = resolveRecordId(records, id);
-
-		if (!resolved.ok) {
-			throw new Error(resolved.error);
-		}
-
-		const targetIndex = resolved.index;
-		const original = records[targetIndex];
-		if (!original) {
-			throw new Error(`Record at index ${targetIndex} not found`);
-		}
-		const record: ExpertiseRecord = { ...original };
-
-		const o: Outcome = {
-			...outcome,
-			recorded_at: outcome.recorded_at ?? new Date().toISOString(),
-		};
-
+	const o: Outcome = {
+		...outcome,
+		recorded_at: outcome.recorded_at ?? new Date().toISOString(),
+	};
+	const record = await updateRecordById(domain, id, options.cwd, async (record) => {
 		record.outcomes = [...(record.outcomes ?? []), o];
-		records[targetIndex] = record;
-		await writeExpertiseFile(filePath, records);
-
-		return { record, outcome: o, total_outcomes: record.outcomes.length };
+		return record;
 	});
+
+	return { record, outcome: o, total_outcomes: record.outcomes?.length ?? 0 };
 }

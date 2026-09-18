@@ -1,13 +1,13 @@
 import chalk from "chalk";
 import { type Command, Option } from "commander";
 import { getRegistry } from "../registry/type-registry.ts";
-import type { Classification, ExpertiseRecord, Outcome } from "../schemas/record.ts";
+import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
-import { parseStrictNonNegativeNumber } from "../utils/numeric-flags.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
+import { addCustomTypeFieldOptions, parseOutcomeFlags } from "../utils/record-flags.ts";
 
 // snake_case field name → camelCase Commander option key.
 function fieldToOptionKey(field: string): string {
@@ -48,17 +48,7 @@ export function registerEditCommand(program: Command): void {
 		.option("--outcome-test-results <text>", "set outcome test results summary")
 		.option("--outcome-agent <agent>", "set outcome agent name");
 
-	// Dynamic flags for custom-type fields not already declared by built-ins.
-	const declaredOptionNames = new Set(cmd.options.map((o) => o.name()).concat(["files"]));
-	for (const def of registry.enabled()) {
-		if (def.kind === "builtin") continue;
-		for (const field of [...def.required, ...def.optional]) {
-			const flagName = field.replace(/_/g, "-");
-			if (declaredOptionNames.has(flagName)) continue;
-			declaredOptionNames.add(flagName);
-			cmd.option(`--${flagName} <${field}>`, `update ${def.name} field: ${field}`);
-		}
-	}
+	addCustomTypeFieldOptions(cmd, registry, (type, field) => `update ${type} field: ${field}`);
 
 	cmd.action(async (domain: string, id: string, options: Record<string, unknown>) => {
 		const jsonMode = program.opts().json === true;
@@ -87,12 +77,7 @@ export function registerEditCommand(program: Command): void {
 
 				const resolved = resolveRecordId(records, id);
 				if (!resolved.ok) {
-					if (jsonMode) {
-						outputJsonError("edit", resolved.error);
-					} else {
-						console.error(chalk.red(`Error: ${resolved.error}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("edit", jsonMode, resolved.error);
 					return;
 				}
 				const targetIndex = resolved.index;
@@ -121,31 +106,13 @@ export function registerEditCommand(program: Command): void {
 						.map((id: string) => id.trim())
 						.filter(Boolean);
 				}
-				if (options.outcomeStatus) {
-					const o: Outcome = {
-						status: options.outcomeStatus as "success" | "failure" | "partial",
-					};
-					if (options.outcomeDuration !== undefined) {
-						const parsed = parseStrictNonNegativeNumber(options.outcomeDuration as string);
-						if (parsed === null) {
-							const msg = `--outcome-duration must be a non-negative number (got "${options.outcomeDuration as string}").`;
-							if (jsonMode) {
-								outputJsonError("edit", msg);
-							} else {
-								console.error(chalk.red(`Error: ${msg}`));
-							}
-							process.exitCode = 1;
-							return;
-						}
-						o.duration = parsed;
-					}
-					if (options.outcomeTestResults) {
-						o.test_results = options.outcomeTestResults as string;
-					}
-					if (options.outcomeAgent) {
-						o.agent = options.outcomeAgent as string;
-					}
-					record.outcomes = [...(record.outcomes ?? []), o];
+				const parsedOutcome = parseOutcomeFlags(options);
+				if (parsedOutcome.error) {
+					reportCommandError("edit", jsonMode, parsedOutcome.error);
+					return;
+				}
+				if (parsedOutcome.outcome) {
+					record.outcomes = [...(record.outcomes ?? []), parsedOutcome.outcome];
 				}
 
 				const def = registry.get(record.type);
@@ -207,20 +174,7 @@ export function registerEditCommand(program: Command): void {
 				}
 			});
 		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-				if (jsonMode) {
-					outputJsonError("edit", "No .mulch/ directory found. Run `mulch init` first.");
-				} else {
-					console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-				}
-			} else {
-				if (jsonMode) {
-					outputJsonError("edit", err instanceof Error ? err.message : String(err));
-				} else {
-					console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-				}
-			}
-			process.exitCode = 1;
+			reportCommandError("edit", jsonMode, err);
 		}
 	});
 }

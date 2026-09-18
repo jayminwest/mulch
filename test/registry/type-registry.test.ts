@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { BUILTIN_DEFS, buildBuiltinRegistry } from "../../src/registry/builtins.ts";
+import { BUILTIN_DEFS } from "../../src/registry/builtins.ts";
 import { compileSummaryTemplate } from "../../src/registry/template.ts";
 import {
+	buildBuiltinRegistry,
 	getRegistry,
 	resetRegistry,
 	setRegistry,

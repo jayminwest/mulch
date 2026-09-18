@@ -89,11 +89,11 @@ describe("doctor health checks", () => {
 		expect(records).toHaveLength(1);
 
 		// Import isStale to verify
-		const { isStale } = await import("../../src/commands/prune.js");
+		const { isRecordStale } = await import("../../src/utils/expertise.ts");
 		const shelfLife = DEFAULT_CONFIG.classification_defaults.shelf_life;
 		const r0 = records[0];
 		if (!r0) throw new Error("expected record");
-		expect(isStale(r0, new Date(), shelfLife)).toBe(true);
+		expect(isRecordStale(r0, new Date(), shelfLife)).toBe(true);
 	});
 
 	it("detects orphaned domain files", async () => {
@@ -140,7 +140,7 @@ describe("doctor health checks", () => {
 	});
 
 	it("foundational records are never stale", async () => {
-		const { isStale } = await import("../../src/commands/prune.js");
+		const { isRecordStale } = await import("../../src/utils/expertise.ts");
 		const record: ExpertiseRecord = {
 			type: "convention",
 			content: "Permanent rule",
@@ -148,7 +148,7 @@ describe("doctor health checks", () => {
 			recorded_at: daysAgo(365),
 		};
 		const shelfLife = DEFAULT_CONFIG.classification_defaults.shelf_life;
-		expect(isStale(record, new Date(), shelfLife)).toBe(false);
+		expect(isRecordStale(record, new Date(), shelfLife)).toBe(false);
 	});
 
 	it("detects legacy outcome field on disk", async () => {

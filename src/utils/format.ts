@@ -11,6 +11,19 @@ import { formatLinks, formatTimeAgo, xmlAttrEscape, xmlEscape } from "./format-h
 
 export { formatTimeAgo };
 
+// Markdown table of the flags each built-in record type requires; shared by
+// the full and manifest prime layouts.
+const REQUIRED_FLAGS_TABLE: readonly string[] = [
+	"| Type | Required flags |",
+	"|------|----------------|",
+	'| `convention` | `"<content>"` (positional) |',
+	'| `pattern` | `--name "..." --description "..."` |',
+	'| `failure` | `--description "..." --resolution "..."` |',
+	'| `decision` | `--title "..." --rationale "..."` |',
+	'| `reference` | `--name "..." --description "..."` |',
+	'| `guide` | `--name "..." --description "..."` |',
+];
+
 export function getRecordSummary(record: ExpertiseRecord): string {
 	const def = getRegistry().get(record.type);
 	if (!def) {
@@ -72,14 +85,7 @@ export function formatPrimeOutputCompact(domainSections: string[]): string {
 	lines.push("");
 	lines.push("**Record types and required flags:**");
 	lines.push("");
-	lines.push("| Type | Required flags |");
-	lines.push("|------|----------------|");
-	lines.push('| `convention` | `"<content>"` (positional) |');
-	lines.push('| `pattern` | `--name "..." --description "..."` |');
-	lines.push('| `failure` | `--description "..." --resolution "..."` |');
-	lines.push('| `decision` | `--title "..." --rationale "..."` |');
-	lines.push('| `reference` | `--name "..." --description "..."` |');
-	lines.push('| `guide` | `--name "..." --description "..."` |');
+	lines.push(...REQUIRED_FLAGS_TABLE);
 
 	return lines.join("\n");
 }
@@ -188,14 +194,7 @@ export function formatPrimeOutput(domainSections: string[]): string {
 	lines.push("");
 	lines.push("**Required fields by type:**");
 	lines.push("");
-	lines.push("| Type | Required flags |");
-	lines.push("|------|----------------|");
-	lines.push('| `convention` | `"<content>"` (positional) |');
-	lines.push('| `pattern` | `--name "..." --description "..."` |');
-	lines.push('| `failure` | `--description "..." --resolution "..."` |');
-	lines.push('| `decision` | `--title "..." --rationale "..."` |');
-	lines.push('| `reference` | `--name "..." --description "..."` |');
-	lines.push('| `guide` | `--name "..." --description "..."` |');
+	lines.push(...REQUIRED_FLAGS_TABLE);
 	lines.push("");
 	lines.push(
 		"**Link evidence** to records. The current commit and changed files auto-populate from git; link trackers or related records explicitly:",
@@ -344,6 +343,16 @@ export function formatPrimeOutputXml(domainSections: string[]): string {
 // expose a formatPlain hook. Iteration order comes from registry.enabled() so
 // Phase 2 custom types can be plugged in by extending this switch (or by
 // adding formatPlain to TypeDefinition).
+function plainNamedLine(record: ExpertiseRecord): string {
+	const r = record as ExpertiseRecord & { name: string; description: string; files?: string[] };
+	const id = r.id ? `[${r.id}] ` : "";
+	let line = `  - ${id}${r.name}: ${r.description}`;
+	if (r.files && r.files.length > 0) {
+		line += ` (${r.files.join(", ")})`;
+	}
+	return line + formatLinks(r);
+}
+
 function plainSection(
 	def: { name: string; sectionTitle: string },
 	records: ExpertiseRecord[],
@@ -359,20 +368,8 @@ function plainSection(
 			out.push("");
 			return out;
 		}
-		case "pattern": {
-			out.push("Patterns:");
-			for (const r of records as Array<ExpertiseRecord & { type: "pattern" }>) {
-				const id = r.id ? `[${r.id}] ` : "";
-				let line = `  - ${id}${r.name}: ${r.description}`;
-				if (r.files && r.files.length > 0) {
-					line += ` (${r.files.join(", ")})`;
-				}
-				line += formatLinks(r);
-				out.push(line);
-			}
-			out.push("");
-			return out;
-		}
+		case "pattern":
+			return ["Patterns:", ...records.map(plainNamedLine), ""];
 		case "failure": {
 			out.push("Known Failures:");
 			for (const r of records as Array<ExpertiseRecord & { type: "failure" }>) {
@@ -392,29 +389,10 @@ function plainSection(
 			out.push("");
 			return out;
 		}
-		case "reference": {
-			out.push("References:");
-			for (const r of records as Array<ExpertiseRecord & { type: "reference" }>) {
-				const id = r.id ? `[${r.id}] ` : "";
-				let line = `  - ${id}${r.name}: ${r.description}`;
-				if (r.files && r.files.length > 0) {
-					line += ` (${r.files.join(", ")})`;
-				}
-				line += formatLinks(r);
-				out.push(line);
-			}
-			out.push("");
-			return out;
-		}
-		case "guide": {
-			out.push("Guides:");
-			for (const r of records as Array<ExpertiseRecord & { type: "guide" }>) {
-				const id = r.id ? `[${r.id}] ` : "";
-				out.push(`  - ${id}${r.name}: ${r.description}${formatLinks(r)}`);
-			}
-			out.push("");
-			return out;
-		}
+		case "reference":
+			return ["References:", ...records.map(plainNamedLine), ""];
+		case "guide":
+			return ["Guides:", ...records.map(plainNamedLine), ""];
 		default:
 			return out;
 	}

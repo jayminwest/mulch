@@ -5,7 +5,7 @@ import type { ExpertiseRecord } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { filterByType, readExpertiseFile } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { parseStrictNonNegativeNumber, parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { accent } from "../utils/palette.ts";
 import { computeConfirmationScore, type ScoredRecord } from "../utils/scoring.ts";
@@ -45,24 +45,14 @@ export function registerRankCommand(program: Command): void {
 					const limit = parseStrictPositiveInt(options.limit);
 					if (limit === null) {
 						const msg = `--limit must be a positive integer (got "${options.limit}").`;
-						if (jsonMode) {
-							outputJsonError("rank", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("rank", jsonMode, msg);
 						return;
 					}
 
 					const minScore = parseStrictNonNegativeNumber(options.minScore);
 					if (minScore === null) {
 						const msg = `--min-score must be a non-negative number (got "${options.minScore}").`;
-						if (jsonMode) {
-							outputJsonError("rank", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("rank", jsonMode, msg);
 						return;
 					}
 
@@ -144,22 +134,7 @@ export function registerRankCommand(program: Command): void {
 						console.log(`  ${id}${score}${domainCol}${type}${summary}`);
 					}
 				} catch (err) {
-					if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-						const msg = "No .mulch/ directory found. Run `ml init` first.";
-						if (jsonMode) {
-							outputJsonError("rank", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-					} else {
-						const msg = err instanceof Error ? err.message : String(err);
-						if (jsonMode) {
-							outputJsonError("rank", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-					}
-					process.exitCode = 1;
+					reportCommandError("rank", jsonMode, err);
 				}
 			},
 		);

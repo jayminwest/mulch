@@ -127,17 +127,7 @@ async function runConfigSet(rawPath: string, rawValue: string): Promise<void> {
 	await withFileLock(configPath, async () => {
 		const cfg = (await readConfig()) as unknown as Record<string, unknown>;
 		setAtPath(cfg, segments, parsedValue);
-
-		const ajv = new Ajv({ allErrors: true, strict: false });
-		const validate = ajv.compile(configSchema);
-		if (!validate(cfg)) {
-			const errs = validate.errors ?? [];
-			const lines = errs.map(formatAjvError);
-			throw new Error(`Invalid config after set:\n${lines.join("\n")}`);
-		}
-
-		const dumped = yaml.dump(cfg, { lineWidth: -1 });
-		await writeFileAtomic(configPath, dumped);
+		await validateAndWriteConfig(configPath, cfg, "set");
 	});
 }
 
@@ -165,18 +155,26 @@ async function runConfigUnset(rawPath: string): Promise<void> {
 			// Idempotent: the knob wasn't set, nothing to write.
 			return;
 		}
-
-		const ajv = new Ajv({ allErrors: true, strict: false });
-		const validate = ajv.compile(configSchema);
-		if (!validate(cfg)) {
-			const errs = validate.errors ?? [];
-			const lines = errs.map(formatAjvError);
-			throw new Error(`Invalid config after unset:\n${lines.join("\n")}`);
-		}
-
-		const dumped = yaml.dump(cfg, { lineWidth: -1 });
-		await writeFileAtomic(configPath, dumped);
+		await validateAndWriteConfig(configPath, cfg, "unset");
 	});
+}
+
+/** Validate the mutated config against the schema, then write it atomically. */
+async function validateAndWriteConfig(
+	configPath: string,
+	cfg: Record<string, unknown>,
+	action: "set" | "unset",
+): Promise<void> {
+	const ajv = new Ajv({ allErrors: true, strict: false });
+	const validate = ajv.compile(configSchema);
+	if (!validate(cfg)) {
+		const errs = validate.errors ?? [];
+		const lines = errs.map(formatAjvError);
+		throw new Error(`Invalid config after ${action}:\n${lines.join("\n")}`);
+	}
+
+	const dumped = yaml.dump(cfg, { lineWidth: -1 });
+	await writeFileAtomic(configPath, dumped);
 }
 
 function validatePathInSchema(segments: string[]): void {
@@ -292,22 +290,7 @@ function lookupSchemaMeta(
 		.split("/")
 		.slice(1)
 		.filter((s) => s.length > 0);
-	let cur: unknown = configSchema;
-	for (const seg of segs) {
-		if (!cur || typeof cur !== "object") return undefined;
-		const node = cur as Record<string, unknown>;
-		const props = node.properties as Record<string, unknown> | undefined;
-		if (props && Object.hasOwn(props, seg)) {
-			cur = props[seg];
-			continue;
-		}
-		const additional = node.additionalProperties;
-		if (additional && typeof additional === "object") {
-			cur = additional;
-			continue;
-		}
-		return undefined;
-	}
+	const cur = descendSchema(segs);
 	if (!cur || typeof cur !== "object") return undefined;
 	const node = cur as Record<string, unknown>;
 	return {
@@ -349,6 +332,13 @@ function walkConfig(value: unknown, segments: string[]): unknown {
 // no matching `properties` entry exists, supporting paths like
 // `domains.<name>.allowed_types`.
 function walkSchemaDefault(segments: string[]): unknown {
+	return collectSchemaDefaults(descendSchema(segments));
+}
+
+// Follow `segments` down the config JSON Schema through `properties`, falling
+// back to an object-valued `additionalProperties` (open maps such as
+// `domains.<name>`). Returns undefined when the path leaves the schema.
+function descendSchema(segments: string[]): unknown {
 	let cur: unknown = configSchema;
 	for (const seg of segments) {
 		if (!cur || typeof cur !== "object") return undefined;
@@ -365,7 +355,7 @@ function walkSchemaDefault(segments: string[]): unknown {
 		}
 		return undefined;
 	}
-	return collectSchemaDefaults(cur);
+	return cur;
 }
 
 function collectSchemaDefaults(node: unknown): unknown {

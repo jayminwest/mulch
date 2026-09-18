@@ -3,7 +3,7 @@ import { type Command, Option } from "commander";
 import type { ExpertiseRecord, Outcome } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId, writeExpertiseFile } from "../utils/expertise.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { parseStrictNonNegativeNumber } from "../utils/numeric-flags.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
@@ -49,12 +49,7 @@ export function registerOutcomeCommand(program: Command): void {
 					const records = await readExpertiseFile(filePath);
 					const resolved = resolveRecordId(records, id);
 					if (!resolved.ok) {
-						if (jsonMode) {
-							outputJsonError("outcome", resolved.error);
-						} else {
-							console.error(chalk.red(`Error: ${resolved.error}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("outcome", jsonMode, resolved.error);
 						return;
 					}
 					const record = resolved.record;
@@ -103,12 +98,7 @@ export function registerOutcomeCommand(program: Command): void {
 					const records = await readExpertiseFile(filePath);
 					const resolved = resolveRecordId(records, id);
 					if (!resolved.ok) {
-						if (jsonMode) {
-							outputJsonError("outcome", resolved.error);
-						} else {
-							console.error(chalk.red(`Error: ${resolved.error}`));
-						}
-						process.exitCode = 1;
+						reportCommandError("outcome", jsonMode, resolved.error);
 						return;
 					}
 
@@ -125,12 +115,7 @@ export function registerOutcomeCommand(program: Command): void {
 						const parsed = parseStrictNonNegativeNumber(options.duration as string);
 						if (parsed === null) {
 							const msg = `--duration must be a non-negative number (got "${options.duration as string}").`;
-							if (jsonMode) {
-								outputJsonError("outcome", msg);
-							} else {
-								console.error(chalk.red(`Error: ${msg}`));
-							}
-							process.exitCode = 1;
+							reportCommandError("outcome", jsonMode, msg);
 							return;
 						}
 						o.duration = parsed;

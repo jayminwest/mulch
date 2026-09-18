@@ -84,19 +84,21 @@ function matchAll(re: RegExp, text: string, group = 1): string[] {
 	return [...out].sort();
 }
 
-export const seedsResolver: Resolver = (cwd) => {
-	type SeedsIssue = { id?: unknown; status?: unknown };
-	const issues = readJsonl<SeedsIssue>(join(cwd, ".seeds", "issues.jsonl"));
-	const inProgress: string[] = [];
+/** Sorted, de-duplicated IDs of `in_progress` issues in a tracker's issues.jsonl. */
+function inProgressIssueIds(cwd: string, trackerDir: string): string[] {
+	type Issue = { id?: unknown; status?: unknown };
+	const issues = readJsonl<Issue>(join(cwd, trackerDir, "issues.jsonl"));
+	const inProgress = new Set<string>();
 	for (const i of issues) {
-		if (i.status === "in_progress" && typeof i.id === "string") inProgress.push(i.id);
+		if (i.status === "in_progress" && typeof i.id === "string") inProgress.add(i.id);
 	}
+	return [...inProgress].sort();
+}
+
+export const seedsResolver: Resolver = (cwd) => {
+	const inProgress = inProgressIssueIds(cwd, ".seeds");
 	if (inProgress.length > 0) {
-		return {
-			tracker: "seeds",
-			matches: [...new Set(inProgress)].sort(),
-			source: "in_progress",
-		};
+		return { tracker: "seeds", matches: inProgress, source: "in_progress" };
 	}
 	const branch = getCurrentBranch(cwd);
 	const branchMatches = matchAll(SEEDS_ID_RE, branch);
@@ -139,18 +141,9 @@ export const linearResolver: Resolver = (cwd) => {
 };
 
 export const beadResolver: Resolver = (cwd) => {
-	type BeadIssue = { id?: unknown; status?: unknown };
-	const issues = readJsonl<BeadIssue>(join(cwd, ".beads", "issues.jsonl"));
-	const inProgress: string[] = [];
-	for (const i of issues) {
-		if (i.status === "in_progress" && typeof i.id === "string") inProgress.push(i.id);
-	}
+	const inProgress = inProgressIssueIds(cwd, ".beads");
 	if (inProgress.length > 0) {
-		return {
-			tracker: "bead",
-			matches: [...new Set(inProgress)].sort(),
-			source: "in_progress",
-		};
+		return { tracker: "bead", matches: inProgress, source: "in_progress" };
 	}
 	const branch = getCurrentBranch(cwd);
 	const branchMatches = matchAll(BEAD_ID_RE, branch).map((s) => s.toLowerCase());

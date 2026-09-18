@@ -1,6 +1,6 @@
 import Ajv, { type ValidateFunction } from "ajv";
 import type { ExpertiseRecord } from "../schemas/record.ts";
-import { buildBuiltinRegistry } from "./builtins.ts";
+import { BUILTIN_DEFS, SHARED_DEFINITIONS } from "./builtins.ts";
 
 export interface TypeDefinition {
 	name: string;
@@ -90,6 +90,10 @@ function compileValidator(
 	};
 	const ajv = new Ajv();
 	return ajv.compile(schema);
+}
+
+export function buildBuiltinRegistry(): TypeRegistry {
+	return new TypeRegistry([...BUILTIN_DEFS], SHARED_DEFINITIONS);
 }
 
 let _registry: TypeRegistry | null = null;

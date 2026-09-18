@@ -1,6 +1,6 @@
 import type { MulchConfig } from "../schemas/config.ts";
 import { readConfig } from "../utils/config.ts";
-import { BUILTIN_DEFS, buildBuiltinRegistry } from "./builtins.ts";
+import { BUILTIN_DEFS, SHARED_DEFINITIONS } from "./builtins.ts";
 import { buildCustomTypeDefinitions } from "./custom.ts";
 import {
 	setRegistry,
@@ -8,8 +8,6 @@ import {
 	TypeRegistry as TypeRegistryCtor,
 } from "./type-registry.ts";
 
-// Hoist SHARED_DEFINITIONS through buildBuiltinRegistry to keep one source of
-// truth. We construct a temporary builtin registry just to read its definitions.
 function buildRegistryWithCustomTypes(config: MulchConfig | null): TypeRegistry {
 	const disabled = config?.disabled_types ?? [];
 	if (config?.custom_types && disabled.length > 0) {
@@ -35,8 +33,7 @@ function buildRegistryWithCustomTypes(config: MulchConfig | null): TypeRegistry 
 		}
 	}
 
-	const builtinRegistry = buildBuiltinRegistry();
-	return new TypeRegistryCtor(allDefs, builtinRegistry.definitions, disabled);
+	return new TypeRegistryCtor(allDefs, SHARED_DEFINITIONS, disabled);
 }
 
 // Called once at CLI startup. Falls back to built-ins-only if no config exists

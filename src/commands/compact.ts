@@ -1,4 +1,3 @@
-import { createInterface } from "node:readline";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
@@ -13,10 +12,11 @@ import {
 } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
 import { runHooks } from "../utils/hooks.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { parseStrictPositiveInt } from "../utils/numeric-flags.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
+import { confirmAction } from "../utils/prompt.ts";
 
 // Payload sent to `pre-compact` hooks. A hook may print `{ replacement: <full
 // record body> }` on stdout to override the mechanical merge; if absent or
@@ -114,20 +114,6 @@ function resolveRecordIds(records: ExpertiseRecord[], identifiers: string[]): nu
 	return indices;
 }
 
-async function confirmAction(prompt: string): Promise<boolean> {
-	const rl = createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
-
-	return new Promise((resolve) => {
-		rl.question(`${prompt} (y/N): `, (answer) => {
-			rl.close();
-			resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
-		});
-	});
-}
-
 export function registerCompactCommand(program: Command): void {
 	program
 		.command("compact")
@@ -158,23 +144,13 @@ export function registerCompactCommand(program: Command): void {
 			} else if (options.apply) {
 				if (!domain) {
 					const msg = "Domain is required for --apply.";
-					if (jsonMode) {
-						outputJsonError("compact", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("compact", jsonMode, msg);
 					return;
 				}
 				await handleApply(domain, options, jsonMode);
 			} else {
 				const msg = "Specify --analyze, --auto, or --apply.";
-				if (jsonMode) {
-					outputJsonError("compact", msg);
-				} else {
-					console.error(chalk.red(`Error: ${msg}`));
-				}
-				process.exitCode = 1;
+				reportCommandError("compact", jsonMode, msg);
 			}
 		});
 }
@@ -191,12 +167,7 @@ async function handleAnalyze(jsonMode: boolean, domain?: string): Promise<void> 
 	// Validate domain if specified
 	if (domain && !(domain in config.domains)) {
 		const msg = `Domain "${domain}" not found in config.`;
-		if (jsonMode) {
-			outputJsonError("compact", msg);
-		} else {
-			console.error(chalk.red(`Error: ${msg}`));
-		}
-		process.exitCode = 1;
+		reportCommandError("compact", jsonMode, msg);
 		return;
 	}
 
@@ -262,6 +233,50 @@ async function handleAnalyze(jsonMode: boolean, domain?: string): Promise<void> 
 	console.log(chalk.dim("  mulch compact --auto [--dry-run]"));
 }
 
+// Type-specific fields a manual --replace record must carry, in flag order.
+// Convention is handled separately (accepts --content or --description).
+const REPLACEMENT_FIELDS: Readonly<Record<string, readonly string[]>> = {
+	pattern: ["name", "description"],
+	failure: ["description", "resolution"],
+	decision: ["title", "rationale"],
+	reference: ["name", "description"],
+	guide: ["name", "description"],
+};
+
+type DomainCandidate = { domain: string; candidate: CompactCandidate };
+
+function printCandidateSummary(
+	heading: string,
+	verb: "will be" | "would be",
+	toProcess: DomainCandidate[],
+	all: DomainCandidate[],
+): void {
+	const totalRecords = toProcess.reduce((n, { candidate }) => n + candidate.records.length, 0);
+	console.log(chalk.bold(`\n${heading}:\n`));
+	console.log(`  ${toProcess.length} groups ${verb} compacted`);
+	console.log(`  ${totalRecords} records → ${toProcess.length} records\n`);
+
+	for (const { domain, candidate } of toProcess) {
+		console.log(
+			`${chalk.cyan(`${domain}/${candidate.type}`)} (${candidate.records.length} records)`,
+		);
+		for (const r of candidate.records.slice(0, 3)) {
+			console.log(`  ${r.id ? accent(r.id) : chalk.dim("(no id)")}: ${r.summary}`);
+		}
+		if (candidate.records.length > 3) {
+			console.log(chalk.dim(`  ... and ${candidate.records.length - 3} more`));
+		}
+		console.log();
+	}
+
+	if (all.length > toProcess.length) {
+		const skipped = all.length - toProcess.length;
+		console.log(
+			chalk.yellow(`Note: ${skipped} additional groups skipped due to --max-records limit\n`),
+		);
+	}
+}
+
 async function handleAuto(
 	options: Record<string, unknown>,
 	jsonMode: boolean,
@@ -278,12 +293,7 @@ async function handleAuto(
 	const minGroupSize = minGroupRaw === undefined ? 5 : parseStrictPositiveInt(minGroupRaw);
 	if (minGroupSize === null) {
 		const msg = `--min-group must be a positive integer (got "${minGroupRaw}").`;
-		if (jsonMode) {
-			outputJsonError("compact", msg);
-		} else {
-			console.error(chalk.red(`Error: ${msg}`));
-		}
-		process.exitCode = 1;
+		reportCommandError("compact", jsonMode, msg);
 		return;
 	}
 
@@ -291,12 +301,7 @@ async function handleAuto(
 	const maxRecords = maxRecordsRaw === undefined ? 50 : parseStrictPositiveInt(maxRecordsRaw);
 	if (maxRecords === null) {
 		const msg = `--max-records must be a positive integer (got "${maxRecordsRaw}").`;
-		if (jsonMode) {
-			outputJsonError("compact", msg);
-		} else {
-			console.error(chalk.red(`Error: ${msg}`));
-		}
-		process.exitCode = 1;
+		reportCommandError("compact", jsonMode, msg);
 		return;
 	}
 
@@ -306,12 +311,7 @@ async function handleAuto(
 	// Validate domain if specified
 	if (domain && !(domain in config.domains)) {
 		const msg = `Domain "${domain}" not found in config.`;
-		if (jsonMode) {
-			outputJsonError("compact", msg);
-		} else {
-			console.error(chalk.red(`Error: ${msg}`));
-		}
-		process.exitCode = 1;
+		reportCommandError("compact", jsonMode, msg);
 		return;
 	}
 
@@ -361,29 +361,7 @@ async function handleAuto(
 
 	// Show summary
 	if (!jsonMode && !dryRun) {
-		console.log(chalk.bold("\nCompaction summary:\n"));
-		console.log(`  ${candidatesToProcess.length} groups will be compacted`);
-		console.log(`  ${totalRecordsToCompact} records → ${candidatesToProcess.length} records\n`);
-
-		for (const { domain, candidate } of candidatesToProcess) {
-			console.log(
-				`${chalk.cyan(`${domain}/${candidate.type}`)} (${candidate.records.length} records)`,
-			);
-			for (const r of candidate.records.slice(0, 3)) {
-				console.log(`  ${r.id ? accent(r.id) : chalk.dim("(no id)")}: ${r.summary}`);
-			}
-			if (candidate.records.length > 3) {
-				console.log(chalk.dim(`  ... and ${candidate.records.length - 3} more`));
-			}
-			console.log();
-		}
-
-		if (allCandidates.length > candidatesToProcess.length) {
-			const skipped = allCandidates.length - candidatesToProcess.length;
-			console.log(
-				chalk.yellow(`Note: ${skipped} additional groups skipped due to --max-records limit\n`),
-			);
-		}
+		printCandidateSummary("Compaction summary", "will be", candidatesToProcess, allCandidates);
 	}
 
 	// Dry-run mode: show detailed preview of what would be done
@@ -402,29 +380,7 @@ async function handleAuto(
 				})),
 			});
 		} else {
-			console.log(chalk.bold("\nDry-run preview:\n"));
-			console.log(`  ${candidatesToProcess.length} groups would be compacted`);
-			console.log(`  ${totalRecordsToCompact} records → ${candidatesToProcess.length} records\n`);
-
-			for (const { domain, candidate } of candidatesToProcess) {
-				console.log(
-					`${chalk.cyan(`${domain}/${candidate.type}`)} (${candidate.records.length} records)`,
-				);
-				for (const r of candidate.records.slice(0, 3)) {
-					console.log(`  ${r.id ? accent(r.id) : chalk.dim("(no id)")}: ${r.summary}`);
-				}
-				if (candidate.records.length > 3) {
-					console.log(chalk.dim(`  ... and ${candidate.records.length - 3} more`));
-				}
-				console.log();
-			}
-
-			if (allCandidates.length > candidatesToProcess.length) {
-				const skipped = allCandidates.length - candidatesToProcess.length;
-				console.log(
-					chalk.yellow(`Note: ${skipped} additional groups skipped due to --max-records limit\n`),
-				);
-			}
+			printCandidateSummary("Dry-run preview", "would be", candidatesToProcess, allCandidates);
 
 			if (!isQuiet())
 				console.log(
@@ -706,25 +662,10 @@ function compactKeepLatest(records: ExpertiseRecord[], def: TypeDefinition): Exp
 }
 
 function compactMergeOutcomes(records: ExpertiseRecord[], def: TypeDefinition): ExpertiseRecord {
-	const base = commonMergeBase(records, def);
-	// Combine outcomes from every input record.
+	// Latest record is the canonical shape; outcomes from every input record are combined.
+	const merged = compactKeepLatest(records, def) as unknown as Record<string, unknown>;
 	const allOutcomes = records.flatMap((r) => r.outcomes ?? []);
-
-	// Take the latest record as the canonical shape, then merge outcomes.
-	const sorted = [...records].sort(
-		(a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime(),
-	);
-	const latest = sorted[0];
-	if (!latest) throw new Error("Cannot compact empty record list");
-	const merged: Record<string, unknown> = { ...(latest as unknown as Record<string, unknown>) };
-	merged.classification = "foundational";
-	merged.recorded_at = new Date().toISOString();
-	merged.supersedes = base.supersedes;
-	if (base.tags) merged.tags = base.tags;
-	else delete merged.tags;
-	if (def.extractsFiles && base.files) merged[def.filesField] = base.files;
 	if (allOutcomes.length > 0) merged.outcomes = allOutcomes;
-	delete merged.id;
 	return merged as unknown as ExpertiseRecord;
 }
 
@@ -737,23 +678,13 @@ async function handleApply(
 
 	if (!(domain in config.domains)) {
 		const msg = `Domain "${domain}" not found in config.`;
-		if (jsonMode) {
-			outputJsonError("compact", msg);
-		} else {
-			console.error(chalk.red(`Error: ${msg}`));
-		}
-		process.exitCode = 1;
+		reportCommandError("compact", jsonMode, msg);
 		return;
 	}
 
 	if (typeof options.records !== "string") {
 		const msg = "--records is required for --apply.";
-		if (jsonMode) {
-			outputJsonError("compact", msg);
-		} else {
-			console.error(chalk.red(`Error: ${msg}`));
-		}
-		process.exitCode = 1;
+		reportCommandError("compact", jsonMode, msg);
 		return;
 	}
 
@@ -774,23 +705,13 @@ async function handleApply(
 			indicesToRemove = resolveRecordIds(records, identifiers);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			if (jsonMode) {
-				outputJsonError("compact", msg);
-			} else {
-				console.error(chalk.red(`Error: ${msg}`));
-			}
-			process.exitCode = 1;
+			reportCommandError("compact", jsonMode, msg);
 			return;
 		}
 
 		if (indicesToRemove.length < 2) {
 			const msg = "Compaction requires at least 2 records.";
-			if (jsonMode) {
-				outputJsonError("compact", msg);
-			} else {
-				console.error(chalk.red(`Error: ${msg}`));
-			}
-			process.exitCode = 1;
+			reportCommandError("compact", jsonMode, msg);
 			return;
 		}
 
@@ -816,12 +737,7 @@ async function handleApply(
 		});
 		if (hookRes.blocked) {
 			const msg = hookRes.blockReason ?? "pre-compact hook blocked the compaction";
-			if (jsonMode) {
-				outputJsonError("compact", msg);
-			} else {
-				console.error(chalk.red(`Error: ${msg}`));
-			}
-			process.exitCode = 1;
+			reportCommandError("compact", jsonMode, msg);
 			return;
 		}
 		for (const w of hookRes.warnings) {
@@ -841,12 +757,7 @@ async function handleApply(
 					.map((e) => `${e.instancePath} ${e.message}`)
 					.join("; ");
 				const msg = `pre-compact hook produced an invalid record: ${errs}`;
-				if (jsonMode) {
-					outputJsonError("compact", msg);
-				} else {
-					console.error(chalk.red(`Error: ${msg}`));
-				}
-				process.exitCode = 1;
+				reportCommandError("compact", jsonMode, msg);
 				return;
 			}
 			candidate.id = generateRecordId(candidate);
@@ -854,148 +765,40 @@ async function handleApply(
 		}
 
 		if (!replacement) {
-			switch (recordType) {
-				case "convention": {
-					const content =
-						(options.content as string | undefined) ?? (options.description as string | undefined);
-					if (!content) {
-						const msg = "Replacement convention requires --content or --description.";
-						if (jsonMode) {
-							outputJsonError("compact", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					replacement = {
-						type: "convention",
-						content,
-						classification: "foundational",
-						recorded_at: recordedAt,
-					};
-					break;
-				}
-				case "pattern": {
-					const name = options.name as string | undefined;
-					const description = options.description as string | undefined;
-					if (!name || !description) {
-						const msg = "Replacement pattern requires --name and --description.";
-						if (jsonMode) {
-							outputJsonError("compact", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					replacement = {
-						type: "pattern",
-						name,
-						description,
-						classification: "foundational",
-						recorded_at: recordedAt,
-					};
-					break;
-				}
-				case "failure": {
-					const description = options.description as string | undefined;
-					const resolution = options.resolution as string | undefined;
-					if (!description || !resolution) {
-						const msg = "Replacement failure requires --description and --resolution.";
-						if (jsonMode) {
-							outputJsonError("compact", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					replacement = {
-						type: "failure",
-						description,
-						resolution,
-						classification: "foundational",
-						recorded_at: recordedAt,
-					};
-					break;
-				}
-				case "decision": {
-					const title = options.title as string | undefined;
-					const rationale = options.rationale as string | undefined;
-					if (!title || !rationale) {
-						const msg = "Replacement decision requires --title and --rationale.";
-						if (jsonMode) {
-							outputJsonError("compact", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					replacement = {
-						type: "decision",
-						title,
-						rationale,
-						classification: "foundational",
-						recorded_at: recordedAt,
-					};
-					break;
-				}
-				case "reference": {
-					const name = options.name as string | undefined;
-					const description = options.description as string | undefined;
-					if (!name || !description) {
-						const msg = "Replacement reference requires --name and --description.";
-						if (jsonMode) {
-							outputJsonError("compact", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					replacement = {
-						type: "reference",
-						name,
-						description,
-						classification: "foundational",
-						recorded_at: recordedAt,
-					};
-					break;
-				}
-				case "guide": {
-					const name = options.name as string | undefined;
-					const description = options.description as string | undefined;
-					if (!name || !description) {
-						const msg = "Replacement guide requires --name and --description.";
-						if (jsonMode) {
-							outputJsonError("compact", msg);
-						} else {
-							console.error(chalk.red(`Error: ${msg}`));
-						}
-						process.exitCode = 1;
-						return;
-					}
-					replacement = {
-						type: "guide",
-						name,
-						description,
-						classification: "foundational",
-						recorded_at: recordedAt,
-					};
-					break;
-				}
-				default: {
-					const msg = `Unknown record type "${recordType}".`;
-					if (jsonMode) {
-						outputJsonError("compact", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+			if (recordType === "convention") {
+				const content =
+					(options.content as string | undefined) ?? (options.description as string | undefined);
+				if (!content) {
+					const msg = "Replacement convention requires --content or --description.";
+					reportCommandError("compact", jsonMode, msg);
 					return;
 				}
+				replacement = {
+					type: "convention",
+					content,
+					classification: "foundational",
+					recorded_at: recordedAt,
+				};
+			} else {
+				const fields = REPLACEMENT_FIELDS[recordType];
+				if (!fields) {
+					const msg = `Unknown record type "${recordType}".`;
+					reportCommandError("compact", jsonMode, msg);
+					return;
+				}
+				const values = fields.map((f) => options[f] as string | undefined);
+				if (values.some((v) => !v)) {
+					const flags = fields.map((f) => `--${f}`).join(" and ");
+					const msg = `Replacement ${recordType} requires ${flags}.`;
+					reportCommandError("compact", jsonMode, msg);
+					return;
+				}
+				replacement = {
+					type: recordType,
+					...Object.fromEntries(fields.map((f, i) => [f, values[i]])),
+					classification: "foundational",
+					recorded_at: recordedAt,
+				} as unknown as ExpertiseRecord;
 			}
 
 			// Add supersedes links to the compacted-from records
@@ -1009,12 +812,7 @@ async function handleApply(
 			if (!validate(replacement)) {
 				const errors = (validate.errors ?? []).map((err) => `${err.instancePath} ${err.message}`);
 				const msg = `Replacement record failed validation: ${errors.join("; ")}`;
-				if (jsonMode) {
-					outputJsonError("compact", msg);
-				} else {
-					console.error(chalk.red(`Error: ${msg}`));
-				}
-				process.exitCode = 1;
+				reportCommandError("compact", jsonMode, msg);
 				return;
 			}
 		}

@@ -1,5 +1,5 @@
-import chalk from "chalk";
 import { type Command, Option } from "commander";
+import type { ExpertiseRecord } from "../schemas/record.ts";
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import {
 	filterByClassification,
@@ -15,8 +15,32 @@ import {
 	formatDomainExpertiseXml,
 	type PrimeFormat,
 } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { type ScoredRecord, sortByConfirmationScore } from "../utils/scoring.ts";
+
+function applyQueryFilters(
+	records: ExpertiseRecord[],
+	options: Record<string, unknown>,
+): ExpertiseRecord[] {
+	if (options.type) {
+		records = filterByType(records, options.type as string);
+	}
+	if (options.classification) {
+		records = filterByClassification(records, options.classification as string);
+	}
+	if (options.file) {
+		records = filterByFile(records, options.file as string);
+	}
+	if (options.outcomeStatus) {
+		records = records.filter((r) =>
+			r.outcomes?.some((o) => o.status === (options.outcomeStatus as string)),
+		);
+	}
+	if (options.sortByScore) {
+		records = sortByConfirmationScore(records as ScoredRecord[]);
+	}
+	return records;
+}
 
 export function registerQueryCommand(program: Command): void {
 	program
@@ -86,14 +110,11 @@ export function registerQueryCommand(program: Command): void {
 					}
 					domainsToQuery.push(domain);
 				} else {
-					if (jsonMode) {
-						outputJsonError("query", "Please specify a domain or use --all to query all domains.");
-					} else {
-						console.error(
-							chalk.red("Error: Please specify a domain or use --all to query all domains."),
-						);
-					}
-					process.exitCode = 1;
+					reportCommandError(
+						"query",
+						jsonMode,
+						"Please specify a domain or use --all to query all domains.",
+					);
 					return;
 				}
 
@@ -101,24 +122,7 @@ export function registerQueryCommand(program: Command): void {
 					const result: Array<{ domain: string; records: unknown[] }> = [];
 					for (const d of domainsToQuery) {
 						const filePath = getExpertisePath(d);
-						let records = await readExpertiseFile(filePath);
-						if (options.type) {
-							records = filterByType(records, options.type as string);
-						}
-						if (options.classification) {
-							records = filterByClassification(records, options.classification as string);
-						}
-						if (options.file) {
-							records = filterByFile(records, options.file as string);
-						}
-						if (options.outcomeStatus) {
-							records = records.filter((r) =>
-								r.outcomes?.some((o) => o.status === (options.outcomeStatus as string)),
-							);
-						}
-						if (options.sortByScore) {
-							records = sortByConfirmationScore(records as ScoredRecord[]);
-						}
+						const records = applyQueryFilters(await readExpertiseFile(filePath), options);
 						result.push({ domain: d, records });
 					}
 					outputJson({ success: true, command: "query", domains: result });
@@ -132,24 +136,7 @@ export function registerQueryCommand(program: Command): void {
 						const ids: string[] = [];
 						for (const d of domainsToQuery) {
 							const filePath = getExpertisePath(d);
-							let records = await readExpertiseFile(filePath);
-							if (options.type) {
-								records = filterByType(records, options.type as string);
-							}
-							if (options.classification) {
-								records = filterByClassification(records, options.classification as string);
-							}
-							if (options.file) {
-								records = filterByFile(records, options.file as string);
-							}
-							if (options.outcomeStatus) {
-								records = records.filter((r) =>
-									r.outcomes?.some((o) => o.status === (options.outcomeStatus as string)),
-								);
-							}
-							if (options.sortByScore) {
-								records = sortByConfirmationScore(records as ScoredRecord[]);
-							}
+							const records = applyQueryFilters(await readExpertiseFile(filePath), options);
 							for (const r of records) {
 								if (r.id) ids.push(r.id);
 							}
@@ -161,25 +148,8 @@ export function registerQueryCommand(program: Command): void {
 						const sections: string[] = [];
 						for (const d of domainsToQuery) {
 							const filePath = getExpertisePath(d);
-							let records = await readExpertiseFile(filePath);
+							const records = applyQueryFilters(await readExpertiseFile(filePath), options);
 							const lastUpdated = await getFileModTime(filePath);
-							if (options.type) {
-								records = filterByType(records, options.type as string);
-							}
-							if (options.classification) {
-								records = filterByClassification(records, options.classification as string);
-							}
-							if (options.file) {
-								records = filterByFile(records, options.file as string);
-							}
-							if (options.outcomeStatus) {
-								records = records.filter((r) =>
-									r.outcomes?.some((o) => o.status === (options.outcomeStatus as string)),
-								);
-							}
-							if (options.sortByScore) {
-								records = sortByConfirmationScore(records as ScoredRecord[]);
-							}
 							switch (fmt) {
 								case "compact":
 									sections.push(formatDomainExpertiseCompact(d, records, lastUpdated));
@@ -199,20 +169,7 @@ export function registerQueryCommand(program: Command): void {
 					}
 				}
 			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-					if (jsonMode) {
-						outputJsonError("query", "No .mulch/ directory found. Run `ml init` first.");
-					} else {
-						console.error(chalk.red("Error: No .mulch/ directory found. Run `ml init` first."));
-					}
-				} else {
-					if (jsonMode) {
-						outputJsonError("query", err instanceof Error ? err.message : String(err));
-					} else {
-						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-					}
-				}
-				process.exitCode = 1;
+				reportCommandError("query", jsonMode, err);
 			}
 		});
 }

@@ -16,14 +16,14 @@ import {
 	truncate,
 	xmlEscape,
 } from "../utils/format-helpers.ts";
-import { type SharedDefinitions, type TypeDefinition, TypeRegistry } from "./type-registry.ts";
+import type { SharedDefinitions, TypeDefinition } from "./type-registry.ts";
 
 const linkArray = {
 	type: "array",
 	items: { type: "string", pattern: "^([a-z0-9-]+:)?mx-[0-9a-f]{4,8}$" },
 } as const;
 
-const SHARED_DEFINITIONS: SharedDefinitions = {
+export const SHARED_DEFINITIONS: SharedDefinitions = {
 	classification: {
 		type: "string",
 		enum: ["foundational", "tactical", "observational"],
@@ -74,6 +74,37 @@ const baseSchemaProps = {
 	// (they live under .mulch/archive/) and live records may not carry it.
 	status: { type: "string", enum: ["draft", "active", "deprecated"] },
 } as const;
+
+// pattern / reference / guide share one "name + description (+ optional files)"
+// rendering shape; only their compact line differs.
+type NamedRecord = ExpertiseRecord & { name: string; description: string; files?: string[] };
+
+function namedMarkdown(title: string): TypeDefinition["formatMarkdown"] {
+	return (records, full) => {
+		if (records.length === 0) return "";
+		const lines = [`### ${title}`];
+		for (const rec of records as NamedRecord[]) {
+			let line = `- ${idTag(rec)}**${rec.name}**: ${rec.description}`;
+			if (rec.files && rec.files.length > 0) {
+				line += ` (${rec.files.join(", ")})`;
+			}
+			line += formatRecordMeta(rec, full);
+			lines.push(line);
+		}
+		return lines.join("\n");
+	};
+}
+
+function namedXml(record: ExpertiseRecord): string[] {
+	const r = record as NamedRecord;
+	const lines: string[] = [];
+	lines.push(`    <name>${xmlEscape(r.name)}</name>`);
+	lines.push(`    <description>${xmlEscape(r.description)}</description>`);
+	if (r.files && r.files.length > 0) {
+		lines.push(`    <files>${r.files.map(xmlEscape).join(", ")}</files>`);
+	}
+	return lines;
+}
 
 // --- convention ---
 
@@ -146,19 +177,7 @@ const patternDef: TypeDefinition = {
 		required: ["type", "name", "description", "classification", "recorded_at"],
 		additionalProperties: false,
 	},
-	formatMarkdown: (records, full) => {
-		if (records.length === 0) return "";
-		const lines = ["### Patterns"];
-		for (const rec of records as PatternRecord[]) {
-			let line = `- ${idTag(rec)}**${rec.name}**: ${rec.description}`;
-			if (rec.files && rec.files.length > 0) {
-				line += ` (${rec.files.join(", ")})`;
-			}
-			line += formatRecordMeta(rec, full);
-			lines.push(line);
-		}
-		return lines.join("\n");
-	},
+	formatMarkdown: namedMarkdown("Patterns"),
 	formatCompactLine: (record) => {
 		const r = record as PatternRecord;
 		const links = formatLinks(r);
@@ -167,16 +186,7 @@ const patternDef: TypeDefinition = {
 		const files = r.files && r.files.length > 0 ? ` (${r.files.join(", ")})` : "";
 		return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${meta}${outcome}${links}`;
 	},
-	formatXml: (record) => {
-		const r = record as PatternRecord;
-		const lines: string[] = [];
-		lines.push(`    <name>${xmlEscape(r.name)}</name>`);
-		lines.push(`    <description>${xmlEscape(r.description)}</description>`);
-		if (r.files && r.files.length > 0) {
-			lines.push(`    <files>${r.files.map(xmlEscape).join(", ")}</files>`);
-		}
-		return lines;
-	},
+	formatXml: namedXml,
 };
 
 // --- failure ---
@@ -305,19 +315,7 @@ const referenceDef: TypeDefinition = {
 		required: ["type", "name", "description", "classification", "recorded_at"],
 		additionalProperties: false,
 	},
-	formatMarkdown: (records, full) => {
-		if (records.length === 0) return "";
-		const lines = ["### References"];
-		for (const rec of records as ReferenceRecord[]) {
-			let line = `- ${idTag(rec)}**${rec.name}**: ${rec.description}`;
-			if (rec.files && rec.files.length > 0) {
-				line += ` (${rec.files.join(", ")})`;
-			}
-			line += formatRecordMeta(rec, full);
-			lines.push(line);
-		}
-		return lines.join("\n");
-	},
+	formatMarkdown: namedMarkdown("References"),
 	formatCompactLine: (record) => {
 		const r = record as ReferenceRecord;
 		const links = formatLinks(r);
@@ -327,16 +325,7 @@ const referenceDef: TypeDefinition = {
 			r.files && r.files.length > 0 ? `: ${r.files.join(", ")}` : `: ${truncate(r.description)}`;
 		return `- [reference] ${r.name}${refFiles}${meta}${outcome}${links}`;
 	},
-	formatXml: (record) => {
-		const r = record as ReferenceRecord;
-		const lines: string[] = [];
-		lines.push(`    <name>${xmlEscape(r.name)}</name>`);
-		lines.push(`    <description>${xmlEscape(r.description)}</description>`);
-		if (r.files && r.files.length > 0) {
-			lines.push(`    <files>${r.files.map(xmlEscape).join(", ")}</files>`);
-		}
-		return lines;
-	},
+	formatXml: namedXml,
 };
 
 // --- guide ---
@@ -364,16 +353,7 @@ const guideDef: TypeDefinition = {
 		required: ["type", "name", "description", "classification", "recorded_at"],
 		additionalProperties: false,
 	},
-	formatMarkdown: (records, full) => {
-		if (records.length === 0) return "";
-		const lines = ["### Guides"];
-		for (const rec of records as GuideRecord[]) {
-			lines.push(
-				`- ${idTag(rec)}**${rec.name}**: ${rec.description}${formatRecordMeta(rec, full)}`,
-			);
-		}
-		return lines.join("\n");
-	},
+	formatMarkdown: namedMarkdown("Guides"),
 	formatCompactLine: (record) => {
 		const r = record as GuideRecord;
 		const links = formatLinks(r);
@@ -381,13 +361,7 @@ const guideDef: TypeDefinition = {
 		const outcome = formatOutcome(r.outcomes);
 		return `- [guide] ${r.name}: ${truncate(r.description)}${meta}${outcome}${links}`;
 	},
-	formatXml: (record) => {
-		const r = record as GuideRecord;
-		return [
-			`    <name>${xmlEscape(r.name)}</name>`,
-			`    <description>${xmlEscape(r.description)}</description>`,
-		];
-	},
+	formatXml: namedXml,
 };
 
 // Section enumeration order for markdown rendering. Matches the historical
@@ -400,10 +374,6 @@ export const BUILTIN_DEFS: readonly TypeDefinition[] = [
 	referenceDef,
 	guideDef,
 ] as const;
-
-export function buildBuiltinRegistry(): TypeRegistry {
-	return new TypeRegistry([...BUILTIN_DEFS], SHARED_DEFINITIONS);
-}
 
 // Re-export helper for downstream cast-assertion sites:
 export type AnyRecord = ExpertiseRecord;

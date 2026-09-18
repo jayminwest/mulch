@@ -1,21 +1,11 @@
-import { createInterface } from "node:readline";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { getExpertisePath, readConfig, removeDomain } from "../utils/config.ts";
 import { readExpertiseFile } from "../utils/expertise.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
-
-async function confirmAction(prompt: string): Promise<boolean> {
-	const rl = createInterface({ input: process.stdin, output: process.stdout });
-	return new Promise((resolve) => {
-		rl.question(`${prompt} (y/N): `, (answer) => {
-			rl.close();
-			resolve(answer.toLowerCase() === "y" || answer.toLowerCase() === "yes");
-		});
-	});
-}
+import { confirmAction } from "../utils/prompt.ts";
 
 export function registerDeleteDomainCommand(program: Command): void {
 	program
@@ -102,20 +92,7 @@ export function registerDeleteDomainCommand(program: Command): void {
 					}
 				}
 			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-					if (jsonMode) {
-						outputJsonError("delete-domain", "No .mulch/ directory found. Run `mulch init` first.");
-					} else {
-						console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-					}
-				} else {
-					if (jsonMode) {
-						outputJsonError("delete-domain", err instanceof Error ? err.message : String(err));
-					} else {
-						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-					}
-				}
-				process.exitCode = 1;
+				reportCommandError("delete-domain", jsonMode, err);
 			}
 		});
 }

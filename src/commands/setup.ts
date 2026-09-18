@@ -6,7 +6,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { getMulchDir, readConfig } from "../utils/config.ts";
 import { getSessionEndReminder } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import {
 	hasMarkerSection,
 	MARKER_END,
@@ -648,12 +648,11 @@ export function registerSetupCommand(program: Command): void {
 				// Verify .mulch/ exists
 				const mulchDir = getMulchDir();
 				if (!existsSync(mulchDir)) {
-					if (jsonMode) {
-						outputJsonError("setup", "No .mulch/ directory found. Run `mulch init` first.");
-					} else {
-						console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-					}
-					process.exitCode = 1;
+					reportCommandError(
+						"setup",
+						jsonMode,
+						"No .mulch/ directory found. Run `mulch init` first.",
+					);
 					return;
 				}
 
@@ -717,23 +716,13 @@ export function registerSetupCommand(program: Command): void {
 					resolved = await resolveRecipe(provider, cwd, BUILTIN_RECIPES);
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : String(err);
-					if (jsonMode) {
-						outputJsonError("setup", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("setup", jsonMode, msg);
 					return;
 				}
 
 				if (!resolved) {
 					const hint = `Unknown provider "${provider}". Run \`ml setup --list\` to see discovered providers, or add a recipe at .mulch/recipes/${provider}.{ts,sh} or install ${NPM_RECIPE_PREFIX}${provider}.`;
-					if (jsonMode) {
-						outputJsonError("setup", hint);
-					} else {
-						console.error(chalk.red(`Error: ${hint}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("setup", jsonMode, hint);
 					return;
 				}
 

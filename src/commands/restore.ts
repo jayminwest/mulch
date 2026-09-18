@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import type { Command } from "commander";
 import type { ExpertiseRecord } from "../schemas/record.ts";
 import {
@@ -12,7 +11,7 @@ import {
 import { getExpertisePath, readConfig } from "../utils/config.ts";
 import { readExpertiseFile, resolveRecordId } from "../utils/expertise.ts";
 import { getRecordSummary } from "../utils/format.ts";
-import { outputJson, outputJsonError } from "../utils/json-output.ts";
+import { outputJson, reportCommandError } from "../utils/json-output.ts";
 import { accent, brand, isQuiet } from "../utils/palette.ts";
 
 export function registerRestoreCommand(program: Command): void {
@@ -42,24 +41,14 @@ export function registerRestoreCommand(program: Command): void {
 
 				if (matches.length === 0) {
 					const msg = `Archived record "${id}" not found in any domain. Run \`ml search --archived <query>\` to browse archives.`;
-					if (jsonMode) {
-						outputJsonError("restore", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("restore", jsonMode, msg);
 					return;
 				}
 
 				if (matches.length > 1) {
 					const where = matches.map((m) => `${m.domain} (${m.record.id})`).join(", ");
 					const msg = `Identifier "${id}" matches archived records in multiple domains: ${where}. Use a longer prefix.`;
-					if (jsonMode) {
-						outputJsonError("restore", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("restore", jsonMode, msg);
 					return;
 				}
 
@@ -69,12 +58,7 @@ export function registerRestoreCommand(program: Command): void {
 				const recordId = record.id;
 				if (!recordId) {
 					const msg = `Archived record has no id; cannot restore safely.`;
-					if (jsonMode) {
-						outputJsonError("restore", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("restore", jsonMode, msg);
 					return;
 				}
 
@@ -87,24 +71,14 @@ export function registerRestoreCommand(program: Command): void {
 				const livePreConflict = liveExisting.find((r) => r.id === recordId);
 				if (livePreConflict) {
 					const msg = `Live record "${recordId}" already exists in domain "${domain}" (classification: ${livePreConflict.classification}). Delete or rename the live record before restoring, or run \`ml search --archived ${recordId}\` to inspect the archived copy.`;
-					if (jsonMode) {
-						outputJsonError("restore", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("restore", jsonMode, msg);
 					return;
 				}
 
 				const removed = await removeFromArchive(domain, recordId);
 				if (!removed) {
 					const msg = `Archived record "${recordId}" disappeared between read and write (concurrent restore?).`;
-					if (jsonMode) {
-						outputJsonError("restore", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("restore", jsonMode, msg);
 					return;
 				}
 
@@ -121,12 +95,7 @@ export function registerRestoreCommand(program: Command): void {
 					// so the round-trip is invisible to anyone reading the archive.
 					await archiveRecords(domain, [stripArchiveFields(removed)], new Date(), originalReason);
 					const msg = `Live record "${recordId}" appeared in domain "${domain}" while restore was in flight (classification: ${restoreRes.conflict.classification}). Re-archived; nothing changed.`;
-					if (jsonMode) {
-						outputJsonError("restore", msg);
-					} else {
-						console.error(chalk.red(`Error: ${msg}`));
-					}
-					process.exitCode = 1;
+					reportCommandError("restore", jsonMode, msg);
 					return;
 				}
 
@@ -147,20 +116,7 @@ export function registerRestoreCommand(program: Command): void {
 					);
 				}
 			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-					if (jsonMode) {
-						outputJsonError("restore", "No .mulch/ directory found. Run `mulch init` first.");
-					} else {
-						console.error(chalk.red("Error: No .mulch/ directory found. Run `mulch init` first."));
-					}
-				} else {
-					if (jsonMode) {
-						outputJsonError("restore", err instanceof Error ? err.message : String(err));
-					} else {
-						console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
-					}
-				}
-				process.exitCode = 1;
+				reportCommandError("restore", jsonMode, err);
 			}
 		});
 }
