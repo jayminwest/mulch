@@ -39,8 +39,10 @@ For monolith projects where dumping every record wastes context, set
 quick reference + domain index. Agents then scope-load with \`ml prime <domain>\` or
 \`ml prime --files <path>\`.
 
-**Before completing your task**, record insights worth preserving — conventions discovered,
-patterns applied, failures encountered, or decisions made:
+**Record only what a future agent would get wrong without it.** Prefer \`failure\` records
+(symptom -> root cause -> preventive check); anchor conventions and patterns with \`--files\` or
+\`--dir-anchor\`. \`ml record\` blocks exact duplicates and flags near-duplicates of existing
+records (suggesting \`--supersedes <id>\`; \`--force\` records anyway):
 \`\`\`bash
 ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
 \`\`\`

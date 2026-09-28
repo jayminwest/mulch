@@ -1137,7 +1137,7 @@ describe("processStdinRecords", () => {
 		).rejects.toThrow("Failed to parse JSON from stdin");
 	});
 
-	it("forces duplicate creation with force flag", async () => {
+	it("force flag does not re-create an exact duplicate convention", async () => {
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -1159,11 +1159,11 @@ describe("processStdinRecords", () => {
 			tmpDir,
 		); // force=true
 
-		expect(result.created).toBe(1);
-		expect(result.skipped).toBe(0);
+		expect(result.created).toBe(0);
+		expect(result.skipped).toBe(1);
 
 		const records = await readExpertiseFile(filePath);
-		expect(records).toHaveLength(2);
+		expect(records).toHaveLength(1);
 	});
 
 	it("dry-run shows what would be created without writing", async () => {
@@ -1696,7 +1696,7 @@ describe("batch mode (--batch)", () => {
 		expect(savedRecords[0]?.type).toBe("pattern");
 	});
 
-	it("batch mode forces duplicate creation with force flag", async () => {
+	it("batch mode force flag does not re-create an exact duplicate convention", async () => {
 		const filePath = getExpertisePath("testing", tmpDir);
 		await createExpertiseFile(filePath);
 
@@ -1721,11 +1721,11 @@ describe("batch mode (--batch)", () => {
 			tmpDir,
 		); // force=true
 
-		expect(result.created).toBe(1);
-		expect(result.skipped).toBe(0);
+		expect(result.created).toBe(0);
+		expect(result.skipped).toBe(1);
 
 		const records = await readExpertiseFile(filePath);
-		expect(records).toHaveLength(2);
+		expect(records).toHaveLength(1);
 	});
 });
 

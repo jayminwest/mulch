@@ -77,6 +77,13 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #     required: [decision_status, deciders]   # added on top of decision's [title, rationale]
 #     summary: "{decision_status}: {title}"   # tokens must be declared fields (parent's included)
 #
+# quality:
+#   # Write-time gate on ml record: near-duplicates, conventions/patterns with
+#   # no file/dir anchor or evidence, conventions that restate code.
+#   # warn (default) prints and writes; error blocks unless --force; off skips.
+#   # Exact duplicates are always blocked.
+#   level: warn
+#
 # hooks:
 #   # Lifecycle hook scripts. Each event maps to an ordered list of shell
 #   # commands. Mulch invokes each with the relevant payload as JSON on stdin.
