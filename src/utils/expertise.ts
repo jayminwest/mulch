@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { appendFile, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { getRegistry, type TypeDefinition } from "../registry/type-registry.ts";
 import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
-import { DEFAULT_BM25_PARAMS, searchBM25 } from "./bm25.ts";
+import { DEFAULT_BM25_PARAMS, extractRecordText, searchBM25 } from "./bm25.ts";
 import { isAllowUnknownTypes } from "./runtime-flags.ts";
 import { applyConfirmationBoost } from "./scoring.ts";
 
@@ -191,6 +191,43 @@ export function filterByFile(records: ExpertiseRecord[], file: string): Expertis
 	});
 }
 
+/**
+ * Canonical form for dedup comparisons: lowercase, punctuation and whitespace
+ * runs collapsed to a single space. "Use X." and "use  x" compare equal, so
+ * trivially reworded copies can't slip past exact-match dedup.
+ */
+export function normalizeText(text: string): string {
+	return text
+		.toLowerCase()
+		.replace(/[^\p{L}\p{N}]+/gu, " ")
+		.trim();
+}
+
+/**
+ * The prose a record carries (type-specific text fields, no tags or file
+ * lists). Custom types fall back to every string field the type declares.
+ */
+export function recordBodyText(record: ExpertiseRecord): string {
+	const { fieldTexts } = extractRecordText(record);
+	const parts = Object.entries(fieldTexts)
+		.filter(([field]) => field !== "tags" && field !== "files")
+		.map(([, text]) => text);
+	if (parts.length > 0) return parts.join(" ");
+	const def = getRegistry().get(record.type);
+	if (!def) return "";
+	const raw = record as unknown as Record<string, unknown>;
+	return [...def.required, ...def.optional]
+		.map((field) => raw[field])
+		.filter((v): v is string => typeof v === "string")
+		.join(" ");
+}
+
+function dedupValue(record: ExpertiseRecord, dedupKey: string): string | undefined {
+	if (dedupKey === "content_hash") return normalizeText(recordBodyText(record));
+	const value = (record as unknown as Record<string, unknown>)[dedupKey];
+	return typeof value === "string" ? normalizeText(value) : undefined;
+}
+
 export function findDuplicate(
 	existing: ExpertiseRecord[],
 	newRecord: ExpertiseRecord,
@@ -198,16 +235,11 @@ export function findDuplicate(
 	const registry = getRegistry();
 	const def = registry.get(newRecord.type);
 	if (!def) return null;
-	const dedupKey = def.dedupKey;
-	if (dedupKey === "content_hash") {
-		// Phase 2: content-hash dedup for custom types. No built-in uses this.
-		return null;
-	}
-	const newValue = (newRecord as unknown as Record<string, unknown>)[dedupKey];
+	const newValue = dedupValue(newRecord, def.dedupKey);
+	if (!newValue) return null;
 	for (const [i, record] of existing.entries()) {
 		if (record.type !== newRecord.type) continue;
-		const value = (record as unknown as Record<string, unknown>)[dedupKey];
-		if (value === newValue) {
+		if (dedupValue(record, def.dedupKey) === newValue) {
 			return { index: i, record };
 		}
 	}

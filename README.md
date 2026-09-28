@@ -297,6 +297,21 @@ ml sync                                # gatekeeps commits — ignores the flag
 
 `ml sync` re-loads the registry from disk before validating, so once config is reconciled, sync passes without a restart. `ml doctor` lists registered types (built-in vs custom, per-type counts) and surfaces unknown-type records as a failing check.
 
+### Write-Time Quality Gate
+
+`ml record` checks each new record against the domain before writing. The checks are deterministic (no LLM, no embeddings):
+
+- **Exact duplicates** are blocked. Comparison ignores case, punctuation, and whitespace. `--force` does not bypass this; confirm the existing record with `ml outcome` instead.
+- **Near-duplicates** (BM25 shortlist, then token overlap; the bar is lower when both records share a file or dir anchor) are blocked with the similar record printed. Pass `--supersedes <id>` to replace it, `ml edit` it, or pass `--force` to record anyway.
+- **Quality warnings**: a convention or pattern with no file/dir anchor or evidence (the auto-populated commit does not count), and a convention with no rule words (the `ml audit` code-restatement heuristic).
+
+```yaml
+quality:
+  level: warn   # warn (default) prints and writes; error blocks unless --force; off skips near-dup + warnings
+```
+
+`--batch` / `--stdin` apply exact-duplicate blocking only.
+
 ## Example Output
 
 ```

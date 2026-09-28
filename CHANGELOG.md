@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Write-time quality gate on `ml record`** (mulch-a378): near-duplicate detection (BM25 shortlist + token-set Jaccard, lower bar when file/dir anchors overlap) blocks records that restate an existing one and prints it with `--supersedes <id>` / `ml edit` / `ml outcome` / `--force` suggestions. Soft checks warn on conventions/patterns with no file/dir anchor or evidence (an auto-populated commit does not count) and on conventions that read like code restatement (the `ml audit` rule-signal heuristic). New `quality.level` config knob: `warn` (default), `error` (block unless `--force`), `off`.
+
 ### Changed
+
+- **Exact duplicates are hard-blocked** (mulch-a378): dedup now compares normalized text (case, punctuation, whitespace folded), so trivially reworded copies no longer slip through, and `content_hash` custom types dedup on their normalized body instead of never matching. `ml record` exits 1 on an exact duplicate of a convention/failure (previously a successful "skipped"), and `--force` no longer re-creates one in any record path; named types still upsert.
+- **Session-close and onboard prose** (mulch-a378): the default session-close footer and the onboard snippet now say "record only what a future agent would get wrong without it", steer toward `failure` records (symptom -> root cause -> preventive check) and `ml outcome` confirmations, and drop the 🚨 banner from every preset. The package description is now plain: "Git-native expertise records for AI agents".
 
 - **`ml --version --json` now emits 2-space-indented JSON** (closes mulch-6d8a): the early-exit `--version --json` path in `src/cli.ts` previously emitted a single-line `JSON.stringify(...)` payload while every other `--json`-mode response in mulch is 2-space-indented via `outputJson`. The output is now formatted with `JSON.stringify(..., null, 2)` so machine consumers see one consistent JSON shape across the CLI. Fields (`name`, `version`, `runtime`, `platform`) and values are unchanged; consumers that `JSON.parse` the output are unaffected.
 - **`ml upgrade --json` key canonicalized to `up_to_date`** (closes mulch-4ca6): the `upgrade` JSON output previously emitted `upToDate` (camelCase) while `ml onboard --json` emitted the same concept as the snake_case action value `up_to_date`. The `upgrade` payload now uses `up_to_date` to match the rest of mulch's snake_case JSON convention (e.g. `not_installed`, `default_mode`, `extracts_files`). Consumers that read `parsed.upToDate` must switch to `parsed.up_to_date`; the boolean semantics are unchanged.

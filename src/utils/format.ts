@@ -462,10 +462,10 @@ export function formatJsonOutput(domains: JsonDomain[]): string {
 
 // Close-session footer prose. Audit (V1_PLAN §3) found 70-80% of conventions
 // were ritual restatements driven by the prior "you MUST run this checklist"
-// prose; the v0.10.0 reframe to "if you discovered ..." suppresses filler
-// without losing the memory-anchor function of the 🚨 marker (V1_PLAN §5.2
-// keeps it on the prime footer for agents whose context has filled with file
-// edits since session start). Single helper feeds the prime footer
+// prose. The 2026-09 eval still found 64% of conventions restating code, so
+// the conditional preset now sets a hard bar ("record only what a future
+// agent would get wrong without it") and steers toward failure records and
+// confirmations instead of new filler. Single helper feeds the prime footer
 // (markdown/compact/xml/plain) and the onboard/cursor/codex snippets
 // ("embedded"). Style preset and custom override come from `prime.session_close`
 // in mulch.config.yaml.
@@ -497,63 +497,68 @@ function renderConditionalSessionClose(format: SessionCloseFormat): string {
 		case "xml":
 			return [
 				"<session_close>",
-				"  <instruction>If you discovered insights worth preserving — a new convention, a pattern that worked, a decision made, a failure encountered — record them before closing this session.</instruction>",
+				"  <instruction>Record only what a future agent would get wrong without it. Prefer a failure record: symptom, root cause, preventive check. Do not restate code, CLAUDE.md, or existing records.</instruction>",
 				"  <commands>",
 				"    <command>ml learn — see what files changed</command>",
 				"    <command>ml record &lt;domain&gt; --type &lt;type&gt; --description &quot;...&quot;</command>",
+				"    <command>ml outcome &lt;domain&gt; &lt;id&gt; --status success — confirm a record that helped</command>",
 				"    <command>ml sync — validate, stage, commit</command>",
 				"  </commands>",
-				"  <note>Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.</note>",
+				"  <note>Skip if nothing qualifies. Filler records are noise every future session pays to read.</note>",
 				"</session_close>",
 			].join("\n");
 		case "plain":
 			return [
-				"=== \u{1F6A8} SESSION CLOSE \u{1F6A8} ===",
+				"=== SESSION CLOSE ===",
 				"",
-				"If you discovered insights worth preserving — a new convention, a pattern that worked,",
-				"a decision made, a failure encountered — record them before closing this session:",
+				"Record only what a future agent would get wrong without it. Prefer a failure record:",
+				"symptom -> root cause -> preventive check. Do not restate code, CLAUDE.md, or existing records.",
 				"",
-				"  ml learn                              (see what files changed)",
-				"  ml record <domain> --type <type> ...  (record the insight)",
-				"  ml sync                               (validate, stage, commit)",
+				"  ml learn                                        (see what files changed)",
+				"  ml record <domain> --type <type> ...            (record the insight)",
+				"  ml outcome <domain> <id> --status success       (confirm a record that helped)",
+				"  ml sync                                         (validate, stage, commit)",
 				"",
-				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
+				"Skip if nothing qualifies. Filler records are noise every future session pays to read.",
 			].join("\n");
 		case "embedded":
 			return [
 				"### Before You Finish",
 				"",
-				"If you discovered conventions, patterns, decisions, or failures worth preserving during",
-				"this session, record them before closing:",
+				"Record only what a future agent would get wrong without it. Prefer a `failure` record",
+				"(symptom -> root cause -> preventive check). Do not restate code, CLAUDE.md, or existing",
+				"records; if an existing record helped, confirm it instead:",
 				"",
 				"```bash",
 				"ml learn                                                                    # see what files changed",
 				'ml record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."',
+				"ml outcome <domain> <id> --status success                                   # confirm a record that helped",
 				"ml sync                                                                     # validate, stage, commit",
 				"```",
 				"",
-				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
+				"Skip if nothing qualifies. Filler records are noise every future session pays to read.",
 			].join("\n");
 		default:
 			return [
-				"# \u{1F6A8} SESSION CLOSE \u{1F6A8}",
+				"# SESSION CLOSE",
 				"",
-				"**If you discovered insights worth preserving** — a new convention, a pattern that worked, a decision made, a failure encountered — record them before closing this session:",
+				"**Record only what a future agent would get wrong without it.** Prefer a `failure` record (symptom -> root cause -> preventive check). Do not restate code, CLAUDE.md, or existing records; if an existing record helped, confirm it instead:",
 				"",
 				"```bash",
-				"ml learn                              # see what files changed",
-				"ml record <domain> --type <type> ...  # record the insight",
-				"ml sync                               # validate, stage, commit",
+				"ml learn                                   # see what files changed",
+				"ml record <domain> --type <type> ...       # record the insight",
+				"ml outcome <domain> <id> --status success  # confirm a record that helped",
+				"ml sync                                    # validate, stage, commit",
 				"```",
 				"",
-				"Skip if no insight surfaced. Unrecorded learnings are lost; ritual filler records are also noise.",
+				"Skip if nothing qualifies. Filler records are noise every future session pays to read.",
 			].join("\n");
 	}
 }
 
 // One-line nudge for projects that want presence-only signaling — surfaces
 // the three-step workflow without the type glossary, anti-filler guardrails,
-// or memory-anchor marker. Embedded form drops "Before You Finish" framing
+// or banner. Embedded form drops "Before You Finish" framing
 // because it lives at the top of CLAUDE.md, not at end-of-session.
 function renderMinimalSessionClose(format: SessionCloseFormat): string {
 	switch (format) {
@@ -607,7 +612,7 @@ function renderDirectiveSessionClose(format: SessionCloseFormat): string {
 			].join("\n");
 		case "plain":
 			return [
-				"=== \u{1F6A8} SESSION CLOSE \u{1F6A8} ===",
+				"=== SESSION CLOSE ===",
 				"",
 				"Record insights before exiting:",
 				"",
@@ -659,7 +664,7 @@ function renderDirectiveSessionClose(format: SessionCloseFormat): string {
 			].join("\n");
 		default:
 			return [
-				"# \u{1F6A8} SESSION CLOSE \u{1F6A8}",
+				"# SESSION CLOSE",
 				"",
 				"**Record insights before exiting:**",
 				"",

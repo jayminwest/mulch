@@ -27,6 +27,12 @@ import { outputJson, outputJsonError, reportCommandError } from "../utils/json-o
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
 import { addCustomTypeFieldOptions, parseOutcomeFlags } from "../utils/record-flags.ts";
+import {
+	checkRecordQuality,
+	DEFAULT_QUALITY_LEVEL,
+	findNearDuplicates,
+	type NearDuplicate,
+} from "../utils/record-quality.ts";
 import { isAllowDomainMismatch } from "../utils/runtime-flags.ts";
 
 function buildTypeRequirements(): Record<string, string> {
@@ -175,6 +181,30 @@ function buildRetryCommand(
 		parts.push(`${flag} ${JSON.stringify(placeholder)}`);
 	}
 	return parts.join(" ");
+}
+
+function recordSummary(record: ExpertiseRecord): string {
+	const raw = record as unknown as Record<string, unknown>;
+	const text = [raw.name, raw.title, raw.content, raw.description].find(
+		(v): v is string => typeof v === "string" && v.length > 0,
+	);
+	const oneLine = (text ?? "").replace(/\s+/g, " ");
+	return oneLine.length > 100 ? `${oneLine.slice(0, 97)}...` : oneLine;
+}
+
+function formatNearDuplicates(domain: string, nearDups: NearDuplicate[]): string {
+	const lines = [`similar record(s) already exist in ${domain}:`];
+	for (const { record, similarity, sharedAnchors } of nearDups) {
+		const shared = sharedAnchors.length > 0 ? `, shares ${sharedAnchors.join(", ")}` : "";
+		lines.push(
+			`  ${record.id ?? "?"} [${record.type}] ${recordSummary(record)} (${Math.round(similarity * 100)}% similar${shared})`,
+		);
+	}
+	const id = nearDups[0]?.record.id ?? "<id>";
+	lines.push(
+		`Replace it: add --supersedes ${id}. Update it: ml edit ${domain} ${id}. Confirm it helped: ml outcome ${domain} ${id} --status success. Record anyway: add --force.`,
+	);
+	return lines.join("\n");
 }
 
 /**
@@ -373,7 +403,9 @@ export async function processStdinRecords(
 		for (const record of recordsToWrite) {
 			const dup = findDuplicate(currentRecords, record);
 
-			if (dup && !force) {
+			// --force only re-creates named records; an exact duplicate of an
+			// anonymous record (same normalized text) is never written twice.
+			if (dup && !(force && isNamedRecord(record))) {
 				if (isNamedRecord(record)) {
 					updated++;
 				} else {
@@ -392,7 +424,7 @@ export async function processStdinRecords(
 			for (const record of recordsToWrite) {
 				const dup = findDuplicate(currentRecords, record);
 
-				if (dup && !force) {
+				if (dup && !(force && isNamedRecord(record))) {
 					if (isNamedRecord(record)) {
 						// Upsert: replace in place, merging outcomes from existing
 						const existingRecord = currentRecords[dup.index];
@@ -684,11 +716,13 @@ Batch recording examples:
 			}
 
 			// Auto-populate evidence.commit from git HEAD if not explicitly provided
+			let commitIsAuto = false;
 			if (!options.evidenceCommit) {
 				const autoCommit = getCurrentCommit();
 				if (autoCommit) {
 					evidence = evidence ?? {};
 					evidence.commit = autoCommit;
+					commitIsAuto = true;
 				}
 			}
 
@@ -903,6 +937,41 @@ Batch recording examples:
 
 			const filePath = getExpertisePath(domain);
 			const dryRun = options.dryRun === true;
+			const force = options.force === true;
+
+			// Write-time quality gate. Exact duplicates of anonymous records are
+			// blocked outright (--force can't bypass: the copy would add nothing).
+			// Near-duplicates and soft quality issues follow quality.level.
+			const qualityLevel = config.quality?.level ?? DEFAULT_QUALITY_LEVEL;
+			const qualityWarnings: string[] = [];
+			const existingForGate = await readExpertiseFile(filePath);
+			const exactDup = findDuplicate(existingForGate, record);
+			if (exactDup && !isNamedType(def)) {
+				const id = exactDup.record.id ?? `#${exactDup.index + 1}`;
+				reportCommandError(
+					"record",
+					jsonMode,
+					`duplicate ${recordType} already exists in ${domain} (${id}); not recorded. If it helped, confirm it instead: ml outcome ${domain} ${id} --status success`,
+				);
+				return;
+			}
+			if (!exactDup && qualityLevel !== "off") {
+				const nearDups = findNearDuplicates(existingForGate, record);
+				if (nearDups.length > 0 && !force) {
+					reportCommandError("record", jsonMode, formatNearDuplicates(domain, nearDups));
+					return;
+				}
+				const issues = checkRecordQuality(record, { autoCommit: commitIsAuto });
+				if (issues.length > 0 && qualityLevel === "error" && !force) {
+					reportCommandError(
+						"record",
+						jsonMode,
+						`record failed quality checks (quality.level: error): ${issues.join(" ")} Pass --force to record anyway.`,
+					);
+					return;
+				}
+				qualityWarnings.push(...issues.map((issue) => `quality: ${issue}`));
+			}
 
 			// Fire pre-record hook outside the file lock. Skipped in dry-run since
 			// dry-run shouldn't trigger external side effects (slack, scanners, etc).
@@ -935,14 +1004,10 @@ Batch recording examples:
 			}
 
 			if (dryRun) {
-				// Dry-run: check for duplicates without writing
-				const existing = await readExpertiseFile(filePath);
-				const dup = findDuplicate(existing, record);
-
-				let action = "created";
-				if (dup && !options.force) {
-					action = isNamedType(def) ? "updated" : "skipped";
-				}
+				// Dry-run: anonymous exact duplicates were rejected by the gate
+				// above, so a remaining match is a named-record upsert.
+				const action = exactDup && !force ? "updated" : "created";
+				const dryRunWarnings = [...(disabledWarning ? [disabledWarning] : []), ...qualityWarnings];
 
 				if (jsonMode) {
 					outputJson({
@@ -953,7 +1018,7 @@ Batch recording examples:
 						domain,
 						type: recordType,
 						record,
-						...(disabledWarning ? { warnings: [disabledWarning] } : {}),
+						...(dryRunWarnings.length > 0 ? { warnings: dryRunWarnings } : {}),
 					});
 				} else {
 					if (action === "created") {
@@ -961,20 +1026,14 @@ Batch recording examples:
 							console.log(
 								`${brand("✓")} ${brand(`Dry-run: Would create ${recordType} in ${domain}`)}`,
 							);
-					} else if (action === "updated") {
+					} else {
 						if (!isQuiet())
 							console.log(
 								`${brand("✓")} ${brand(`Dry-run: Would update existing ${recordType} in ${domain}`)}`,
 							);
-					} else {
-						if (!isQuiet())
-							console.log(
-								chalk.yellow(
-									`Dry-run: Duplicate ${recordType} already exists in ${domain}. Would skip.`,
-								),
-							);
 					}
 					if (!isQuiet()) console.log(chalk.dim("  Run without --dry-run to apply changes."));
+					for (const w of qualityWarnings) console.error(chalk.yellow(`Warning: ${w}`));
 				}
 			} else {
 				// Normal mode: write with file locking, then fire post-record outside
@@ -989,7 +1048,7 @@ Batch recording examples:
 					const existing = await readExpertiseFile(filePath);
 					const dup = findDuplicate(existing, record);
 
-					if (dup && !options.force) {
+					if (dup && !(force && isNamedType(def))) {
 						if (isNamedType(def)) {
 							const existingRecord = existing[dup.index];
 							if (!existingRecord) return null;
@@ -1025,6 +1084,7 @@ Batch recording examples:
 
 				const collectedWarnings = [
 					...(disabledWarning ? [disabledWarning] : []),
+					...qualityWarnings,
 					...preRecordWarnings,
 					...postWarnings,
 				];
@@ -1079,7 +1139,7 @@ Batch recording examples:
 						if (!isQuiet())
 							console.log(`${brand("✓")} ${brand(`Recorded ${recordType} in ${domain}`)}`);
 					}
-					for (const w of [...preRecordWarnings, ...postWarnings]) {
+					for (const w of [...qualityWarnings, ...preRecordWarnings, ...postWarnings]) {
 						console.error(chalk.yellow(`Warning: ${w}`));
 					}
 				}

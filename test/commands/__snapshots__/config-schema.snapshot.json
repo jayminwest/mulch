@@ -489,6 +489,23 @@
       },
       "additionalProperties": false
     },
+    "quality": {
+      "type": "object",
+      "title": "Record quality gate",
+      "description": "Write-time checks on `ml record`: near-duplicates, conventions/patterns with no anchor or evidence, conventions that restate code. `level`: `warn` (default) prints and writes, `error` blocks unless --force, `off` skips. Exact duplicates are always blocked.",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "warn",
+            "error",
+            "off"
+          ],
+          "default": "warn"
+        }
+      },
+      "additionalProperties": false
+    },
     "disabled_types": {
       "type": "array",
       "title": "Disabled types",

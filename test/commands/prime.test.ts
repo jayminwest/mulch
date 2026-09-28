@@ -1678,14 +1678,14 @@ describe("prime command", () => {
 			expect(reminder).toContain("ml record");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
-			expect(reminder).toContain("If you discovered");
+			expect(reminder).toContain("Record only what a future agent would get wrong without it");
 		});
 
-		it("markdown reminder uses markdown formatting and preserves 🚨", () => {
+		it("markdown reminder uses markdown formatting without emoji", () => {
 			const reminder = getSessionEndReminder("markdown");
 			expect(reminder).toContain("# ");
-			expect(reminder).toContain("\u{1F6A8}");
-			expect(reminder).toContain("**If you discovered");
+			expect(reminder).not.toContain("\u{1F6A8}");
+			expect(reminder).toContain("**Record only what a future agent would get wrong without it");
 			expect(reminder).toContain("ml record <domain>");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
@@ -1699,13 +1699,13 @@ describe("prime command", () => {
 			expect(reminder).toContain("ml record");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
-			expect(reminder).toContain("If you discovered");
+			expect(reminder).toContain("Record only what a future agent would get wrong without it");
 		});
 
-		it("plain reminder uses plain text formatting and preserves 🚨", () => {
+		it("plain reminder uses plain text formatting without emoji", () => {
 			const reminder = getSessionEndReminder("plain");
 			expect(reminder).toContain("SESSION CLOSE");
-			expect(reminder).toContain("\u{1F6A8}");
+			expect(reminder).not.toContain("\u{1F6A8}");
 			expect(reminder).not.toContain("**");
 			expect(reminder).not.toContain("##");
 			// No XML tags (but <domain> and <type> placeholders are fine)
@@ -1713,13 +1713,13 @@ describe("prime command", () => {
 			expect(reminder).toContain("ml record");
 			expect(reminder).toContain("ml sync");
 			expect(reminder).toContain("ml learn");
-			expect(reminder).toContain("If you discovered");
+			expect(reminder).toContain("Record only what a future agent would get wrong without it");
 		});
 
 		it("embedded reminder produces a markdown snippet for CLAUDE.md / AGENTS.md", () => {
 			const reminder = getSessionEndReminder("embedded");
 			expect(reminder).toContain("### Before You Finish");
-			expect(reminder).toContain("If you discovered");
+			expect(reminder).toContain("Record only what a future agent would get wrong without it");
 			expect(reminder).toContain("ml learn");
 			expect(reminder).toContain("ml record");
 			expect(reminder).toContain("ml sync");
@@ -1767,7 +1767,7 @@ describe("prime command", () => {
 		describe("style presets", () => {
 			it("defaults to the conditional preset when no config is passed", () => {
 				const reminder = getSessionEndReminder("markdown");
-				expect(reminder).toContain("If you discovered");
+				expect(reminder).toContain("Record only what a future agent would get wrong without it");
 			});
 
 			it("explicit conditional style matches the default", () => {
@@ -1826,12 +1826,21 @@ describe("prime command", () => {
 				}
 			});
 
-			it("directive markdown/plain keep the 🚨 anchor; embedded drops it", () => {
-				expect(getSessionEndReminder("markdown", { style: "directive" })).toContain("\u{1F6A8}");
-				expect(getSessionEndReminder("plain", { style: "directive" })).toContain("\u{1F6A8}");
-				expect(getSessionEndReminder("embedded", { style: "directive" })).not.toContain(
-					"\u{1F6A8}",
-				);
+			it("no preset or format emits the 🚨 emoji", () => {
+				for (const style of ["conditional", "directive", "minimal"] as const) {
+					for (const format of ["markdown", "xml", "plain", "embedded"] as const) {
+						expect(getSessionEndReminder(format, { style })).not.toContain("\u{1F6A8}");
+					}
+				}
+			});
+
+			it("conditional preset steers toward failure records and confirmations", () => {
+				for (const format of ["markdown", "xml", "plain", "embedded"] as const) {
+					const reminder = getSessionEndReminder(format);
+					expect(reminder).toContain("failure");
+					expect(reminder).toContain("root cause");
+					expect(reminder).toContain("ml outcome");
+				}
 			});
 
 			it("custom override wins over style and returns the verbatim string", () => {
@@ -1847,7 +1856,7 @@ describe("prime command", () => {
 
 			it("empty custom override falls through to the preset", () => {
 				const reminder = getSessionEndReminder("markdown", { custom: "" });
-				expect(reminder).toContain("If you discovered");
+				expect(reminder).toContain("Record only what a future agent would get wrong without it");
 			});
 		});
 	});
@@ -2832,7 +2841,7 @@ describe("prime command", () => {
 				expect(output).toContain("use TypeScript");
 				expect(output).toContain("this PR adds X");
 				// And NOT the conditional default's lead-in:
-				expect(output).not.toContain("If you discovered insights worth preserving");
+				expect(output).not.toContain("Record only what a future agent would get wrong without it");
 			} finally {
 				logSpy.mockRestore();
 			}

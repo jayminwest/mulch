@@ -179,6 +179,16 @@ export function validateAnchorValidityConfig(cfg: AnchorValidityConfig): string[
 	return errors;
 }
 
+// Write-time quality gate for `ml record` (near-duplicates, ungrounded
+// conventions/patterns, code-restatement conventions). `warn` prints and
+// writes; `error` blocks unless --force; `off` skips the checks. Exact
+// duplicates are blocked regardless of level.
+export type QualityLevel = "warn" | "error" | "off";
+
+export interface QualityConfig {
+	level?: QualityLevel;
+}
+
 export interface MulchConfig {
 	version: string;
 	domains: Record<string, DomainConfig>;
@@ -215,6 +225,8 @@ export interface MulchConfig {
 	decay?: DecayConfig;
 	// `ml audit` thresholds and ignore-list. See AuditConfig.
 	audit?: AuditConfig;
+	// `ml record` write-time quality gate. See QualityConfig.
+	quality?: QualityConfig;
 	// Names of registered types (built-in or custom) that emit a deprecation
 	// warning on write. Reads still succeed; the type stays in CLI choices.
 	disabled_types?: string[];
