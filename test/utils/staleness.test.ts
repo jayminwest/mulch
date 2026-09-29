@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { ExpertiseRecord } from "../../src/schemas/record.ts";
 import { applyBudget } from "../../src/utils/budget.ts";
 import { formatIndexLine } from "../../src/utils/format.ts";
-import { findStaleRecords, STALE_CHURN_COMMITS } from "../../src/utils/staleness.ts";
+import { findStaleRecords, primeStaleIds, STALE_CHURN_COMMITS } from "../../src/utils/staleness.ts";
 
 const SHELF_LIFE = { tactical: 14, observational: 30 };
 const DAY_MS = 86_400_000;
@@ -186,5 +186,22 @@ describe("stale demotion + marker (mulch-094a)", () => {
 		const r = convention({ id: "mx-0110" });
 		expect(formatIndexLine(r, true)).toEndWith(" (stale?)");
 		expect(formatIndexLine(r)).not.toContain("stale?");
+	});
+
+	it("primeStaleIds keeps anchor/git reasons and drops shelf_life-only records", () => {
+		const ids = primeStaleIds(
+			new Map([
+				["mx-a", [{ kind: "shelf_life", detail: "old" }]],
+				["mx-b", [{ kind: "anchors_missing", detail: "gone" }]],
+				[
+					"mx-c",
+					[
+						{ kind: "shelf_life", detail: "old" },
+						{ kind: "anchors_changed", detail: "churn" },
+					],
+				],
+			]),
+		);
+		expect([...ids].sort()).toEqual(["mx-b", "mx-c"]);
 	});
 });

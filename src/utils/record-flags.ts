@@ -54,3 +54,58 @@ export function parseOutcomeFlags(options: Record<string, unknown>): {
 	}
 	return { outcome };
 }
+
+function unset(v: unknown): boolean {
+	return v === undefined || v === "";
+}
+
+/** kebab-case name from the first few words of `text` (pattern/reference/guide). */
+export function deriveName(text: string): string {
+	const words = text
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim()
+		.split(" ")
+		.filter(Boolean);
+	return words.slice(0, 6).join("-").slice(0, 60).replace(/-+$/, "") || "record";
+}
+
+/** First sentence of `text`, capped at 80 chars (decision titles). */
+export function deriveTitle(text: string): string {
+	const first = (text.trim().split(/(?<=[.!?])\s/)[0] ?? "").trim();
+	return first.length > 80 ? `${first.slice(0, 77).trimEnd()}...` : first;
+}
+
+/**
+ * `ml record` accepts `--description` (or positional [content]) as the primary
+ * text for every built-in type (mulch-7164). Type-specific required-flag errors
+ * pushed agents to hand-edit the JSONL, so missing fields are filled instead:
+ *   convention                  content  <- description
+ *   pattern / reference / guide name     <- derived from description
+ *   decision                    title    <- first sentence; rationale <- description
+ * Explicit flags always win. failure still needs --resolution (not derivable).
+ */
+export function applyDescriptionDefaults(
+	def: { name: string; kind: string },
+	content: string | undefined,
+	options: Record<string, unknown>,
+): Record<string, unknown> {
+	if (def.kind !== "builtin") return options;
+	const text = [options.description, content].find(
+		(v): v is string => typeof v === "string" && v.trim() !== "",
+	);
+	if (text === undefined) return options;
+	const out = { ...options };
+	const fill = (key: string, value: string): void => {
+		if (unset(out[key])) out[key] = value;
+	};
+	if (def.name === "convention" && content === undefined) fill("content", text);
+	if (def.name === "pattern" || def.name === "reference" || def.name === "guide") {
+		fill("name", deriveName(text));
+	}
+	if (def.name === "decision") {
+		fill("title", deriveTitle(text));
+		fill("rationale", text);
+	}
+	return out;
+}
