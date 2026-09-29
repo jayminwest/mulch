@@ -968,7 +968,7 @@ describe("prime command", () => {
 	});
 
 	describe("compact mode", () => {
-		it("outputs one-liner per record with type tags", async () => {
+		it("outputs one index line per record: id, type tag, text, anchors", async () => {
 			await writeConfig({ ...DEFAULT_CONFIG, domains: { database: {} } }, tmpDir);
 			const filePath = getExpertisePath("database", tmpDir);
 			await createExpertiseFile(filePath);
@@ -1022,16 +1022,18 @@ describe("prime command", () => {
 			const section = formatDomainExpertiseCompact("database", records, lastUpdated);
 
 			expect(section).toContain("## database (6 records");
-			expect(section).toContain("- [convention] Use WAL mode for SQLite");
+			expect(section).toMatch(/^- mx-[0-9a-f]+ \[convention\] Use WAL mode for SQLite$/m);
 			expect(section).toContain(
-				"- [pattern] fts5-external-content: External content FTS5 with triggers (src/db/fts.ts)",
+				"[pattern] fts5-external-content: External content FTS5 with triggers (src/db/fts.ts)",
 			);
+			// Index lines carry the description only; the body is behind `ml show`.
+			expect(section).toContain("[failure] FTS5 queries crash without escaping");
+			expect(section).not.toContain("escapeFts5Term");
+			expect(section).toContain("[decision] SQLite over PostgreSQL: Simpler deployment");
 			expect(section).toContain(
-				"- [failure] FTS5 queries crash without escaping → Use escapeFts5Term()",
+				"[reference] schema-file: Database schema definition (src/db/schema.sql)",
 			);
-			expect(section).toContain("- [decision] SQLite over PostgreSQL: Simpler deployment");
-			expect(section).toContain("- [reference] schema-file: src/db/schema.sql");
-			expect(section).toContain("- [guide] add-migration: NNN_description.sql naming convention");
+			expect(section).toContain("[guide] add-migration: NNN_description.sql naming convention");
 			// No section headers like ### Conventions
 			expect(section).not.toContain("###");
 		});
@@ -1053,7 +1055,7 @@ describe("prime command", () => {
 			const lastUpdated = await getFileModTime(filePath);
 			const section = formatDomainExpertiseCompact("testing", records, lastUpdated);
 
-			expect(section).toContain("- [reference] api-docs: External API documentation");
+			expect(section).toContain("[reference] api-docs: External API documentation");
 		});
 
 		it("compact wrapper omits verbose recording instructions", () => {
@@ -1066,17 +1068,12 @@ describe("prime command", () => {
 		it("compact wrapper includes quick reference section", () => {
 			const output = formatPrimeOutputCompact([]);
 			expect(output).toContain("## Quick Reference");
+			expect(output).toContain("ml show <id>");
 			expect(output).toContain('ml search "query"');
 			expect(output).toContain("ml prime --files");
-			expect(output).toContain("ml prime --context");
+			expect(output).toContain("ml prime --full");
 			expect(output).toContain("ml record <domain>");
-			expect(output).toContain("--evidence-commit");
-			expect(output).toContain("--evidence-bead");
-			expect(output).toContain("--evidence-seeds");
-			expect(output).toContain("--evidence-gh");
-			expect(output).toContain("--evidence-linear");
 			expect(output).toContain("--relates-to");
-			expect(output).toContain("ml doctor");
 		});
 
 		it("compact with multiple domains", async () => {
@@ -1113,8 +1110,8 @@ describe("prime command", () => {
 
 			expect(output).toContain("## db (1 records");
 			expect(output).toContain("## api (1 records");
-			expect(output).toContain("- [convention] Use WAL mode");
-			expect(output).toContain("- [decision] REST over GraphQL: Simpler tooling");
+			expect(output).toContain("[convention] Use WAL mode");
+			expect(output).toContain("[decision] REST over GraphQL: Simpler tooling");
 		});
 	});
 
@@ -1592,7 +1589,7 @@ describe("prime command", () => {
 			expect(output).toContain("supersedes: mx-bbb222");
 		});
 
-		it("shows links in compact format", async () => {
+		it("compact index omits links (ml show carries them)", async () => {
 			await writeConfig({ ...DEFAULT_CONFIG, domains: { testing: {} } }, tmpDir);
 			const filePath = getExpertisePath("testing", tmpDir);
 			await createExpertiseFile(filePath);
@@ -1608,7 +1605,8 @@ describe("prime command", () => {
 			const records = await readExpertiseFile(filePath);
 			const lastUpdated = await getFileModTime(filePath);
 			const output = formatDomainExpertiseCompact("testing", records, lastUpdated);
-			expect(output).toContain("[relates to: mx-abc123]");
+			expect(output).toContain("[decision] Use Vitest: Better ESM support");
+			expect(output).not.toContain("mx-abc123");
 		});
 
 		it("shows links in XML format", async () => {
@@ -1985,7 +1983,7 @@ describe("prime command", () => {
 
 				// Confirm the budget pipeline (the original crash site) survives.
 				const domains: DomainRecords[] = [{ domain: "backend", records: [record] }];
-				const result = applyBudget(domains, 10000, estimateRecordText);
+				const result = applyBudget(domains, 10000, (r) => estimateRecordText(r));
 				expect(result.droppedCount).toBe(0);
 				expect(result.kept).toHaveLength(1);
 			} finally {
@@ -2068,7 +2066,7 @@ describe("prime command", () => {
 			expect(result.droppedCount).toBe(1);
 		});
 
-		it("applyBudget prioritizes by type order: convention > decision > pattern > guide > failure > reference", () => {
+		it("applyBudget keeps failures first", () => {
 			const types: ExpertiseRecord["type"][] = [
 				"reference",
 				"failure",
@@ -2085,13 +2083,12 @@ describe("prime command", () => {
 			const result = applyBudget(domains, 100000, simpleEstimate);
 			expect(result.droppedCount).toBe(0);
 
-			// Budget that fits exactly one convention-sized record
-			const convRecord = records.find((r) => r.type === "convention");
-			if (!convRecord) throw new Error("Expected convention record");
-			const convCost = estimateTokens(simpleEstimate(convRecord));
-			const tinyResult = applyBudget(domains, convCost + 1, simpleEstimate);
-			expect(tinyResult.kept.length).toBeGreaterThan(0);
-			expect(tinyResult.kept[0]?.records[0]?.type).toBe("convention");
+			// Budget that fits exactly the failure record
+			const failRecord = records.find((r) => r.type === "failure");
+			if (!failRecord) throw new Error("Expected failure record");
+			const failCost = estimateTokens(simpleEstimate(failRecord));
+			const tinyResult = applyBudget(domains, failCost, simpleEstimate);
+			expect(tinyResult.kept[0]?.records.map((r) => r.type)).toEqual(["failure"]);
 		});
 
 		it("applyBudget prioritizes foundational over tactical over observational", () => {
@@ -2464,16 +2461,10 @@ describe("prime command", () => {
 	});
 
 	describe("prime output enrichment", () => {
-		it("compact quick reference includes type→required-fields table", () => {
+		it("compact index leaves the required-flags table to --full", () => {
 			const output = formatPrimeOutputCompact([]);
-			expect(output).toContain("**Record types and required flags:**");
-			expect(output).toContain("| Type | Required flags |");
-			expect(output).toContain("| `convention`");
-			expect(output).toContain("| `pattern`");
-			expect(output).toContain("| `failure`");
-			expect(output).toContain("| `decision`");
-			expect(output).toContain("| `reference`");
-			expect(output).toContain("| `guide`");
+			expect(output).not.toContain("| Type | Required flags |");
+			expect(formatPrimeOutput([])).toContain("| Type | Required flags |");
 		});
 
 		it("compact quick reference frames --files as per-edit priming", () => {
@@ -3281,10 +3272,11 @@ describe("prime command", () => {
 				{ domain: "cli", records: await readExpertiseFile(cliPath) },
 				{ domain: "testing", records: await readExpertiseFile(testingPath) },
 			];
-			const { kept } = applyBudget(allDomainRecords, DEFAULT_BUDGET, (r) => estimateRecordText(r));
+			const estimate = (r: ExpertiseRecord) => estimateRecordText(r);
+			const { kept } = applyBudget(allDomainRecords, DEFAULT_BUDGET, estimate);
 			const expectedTokens = kept
 				.flatMap((d) => d.records)
-				.reduce((s, r) => s + estimateTokens(estimateRecordText(r)), 0);
+				.reduce((s, r) => s + estimateTokens(estimate(r)), 0);
 
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
 			try {
@@ -3491,7 +3483,7 @@ describe("prime command", () => {
 		});
 	});
 
-	describe("auto-flip to manifest (v0.10 slice 1)", () => {
+	describe("default mode (auto-flip to manifest retired in mulch-bffe)", () => {
 		let originalCwd: string;
 
 		beforeEach(() => {
@@ -3545,35 +3537,23 @@ describe("prime command", () => {
 			}
 		});
 
-		it("flips to manifest above 100 records (with <=5 domains)", async () => {
-			await seedDomains(4, 26);
+		it("large corpora stay in the budget-capped index (auto-flip retired)", async () => {
+			await seedDomains(7, 30);
 			process.chdir(tmpDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
 			try {
 				const program = makeProgram();
-				await program.parseAsync(["node", "mulch", "prime"]);
+				await program.parseAsync(["node", "mulch", "prime", "--budget", "200"]);
 				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
-				expect(output).toContain("Project Expertise Manifest");
+				expect(output).not.toContain("Project Expertise Manifest");
+				expect(output).toContain("# Project Expertise (via Mulch)");
+				expect(output).toMatch(/\.\.\. and \d+ more records/);
 			} finally {
 				logSpy.mockRestore();
 			}
 		});
 
-		it("flips to manifest above 5 domains (with <=100 records)", async () => {
-			await seedDomains(6, 2);
-			process.chdir(tmpDir);
-			const logSpy = spyOn(console, "log").mockImplementation(() => {});
-			try {
-				const program = makeProgram();
-				await program.parseAsync(["node", "mulch", "prime"]);
-				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
-				expect(output).toContain("Project Expertise Manifest");
-			} finally {
-				logSpy.mockRestore();
-			}
-		});
-
-		it("--full opts out of auto-flip even when over threshold", async () => {
+		it("--full emits records on a large corpus", async () => {
 			await seedDomains(7, 20);
 			process.chdir(tmpDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
@@ -3588,7 +3568,7 @@ describe("prime command", () => {
 			}
 		});
 
-		it("explicit prime.default_mode=full in config opts out of auto-flip", async () => {
+		it("explicit prime.default_mode=full in config emits records", async () => {
 			await seedDomains(7, 20);
 			const config = await readConfig(tmpDir);
 			await writeConfig({ ...config, prime: { default_mode: "full" } }, tmpDir);
@@ -3620,7 +3600,7 @@ describe("prime command", () => {
 			}
 		});
 
-		it("--dry-run opts out of auto-flip even when over threshold", async () => {
+		it("--dry-run previews records on a large corpus", async () => {
 			await seedDomains(6, 20);
 			process.chdir(tmpDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
@@ -3636,7 +3616,7 @@ describe("prime command", () => {
 			}
 		});
 
-		it("scoping (positional domain) suppresses auto-flip", async () => {
+		it("scoping (positional domain) emits records", async () => {
 			await seedDomains(6, 20);
 			process.chdir(tmpDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
@@ -4136,7 +4116,7 @@ describe("prime command", () => {
 			});
 		}
 
-		it("compact format appends a 'why surfaced' suffix per record", async () => {
+		it("compact index lines stay terse: no 'why surfaced' suffix", async () => {
 			await seedSurfaceFixture();
 			// Stage a file change so the file-anchored pattern matches and the
 			// tracker resolver picks up the in-progress seed. Auto-context-scope
@@ -4156,12 +4136,12 @@ describe("prime command", () => {
 				const program = makeProgram();
 				await program.parseAsync(["node", "mulch", "prime", "--compact"]);
 				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
-				// Every surfaced record carries a why suffix on its compact line.
-				expect(output).toMatch(/file-anchored.* — why: file match \(src\/cli\.ts\)/);
-				expect(output).toMatch(/tracker-anchored.* — why: in-progress seeds:mulch-1234/);
-				expect(output).toMatch(/Star-confirmed convention.* — why: ★1 confirmations/);
-				expect(output).toMatch(/Recently recorded convention.* — why: recorded today/);
-				expect(output).toMatch(/Universal convention.* — why: applies broadly/);
+				// The index is one short line per record; why-surfaced suffixes
+				// belong to --full / xml / plain.
+				expect(output).toMatch(/file-anchored.*\(src\/cli\.ts\)/);
+				expect(output).toContain("tracker-anchored");
+				expect(output).toMatch(/Star-confirmed convention.* ★1$/m);
+				expect(output).not.toContain("why: ");
 			} finally {
 				logSpy.mockRestore();
 				errSpy.mockRestore();
@@ -4209,7 +4189,7 @@ describe("prime command", () => {
 			}
 		});
 
-		it("file-match suffix uses the --files arg as the surfacing context", async () => {
+		it("--files index surfaces the anchored record with its anchor", async () => {
 			await seedSurfaceFixture();
 			process.chdir(gitDir);
 			const logSpy = spyOn(console, "log").mockImplementation(() => {});
@@ -4218,7 +4198,7 @@ describe("prime command", () => {
 				const program = makeProgram();
 				await program.parseAsync(["node", "mulch", "prime", "--compact", "--files", "src/cli.ts"]);
 				const output = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
-				expect(output).toMatch(/file-anchored.* — why: file match \(src\/cli\.ts\)/);
+				expect(output).toMatch(/file-anchored.*\(src\/cli\.ts\)/);
 			} finally {
 				logSpy.mockRestore();
 				errSpy.mockRestore();

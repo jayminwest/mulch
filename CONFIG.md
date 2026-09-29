@@ -474,14 +474,14 @@ prime:
     observational: 10
 ```
 
-**`full`** emits every record across every domain. Good for small repos.
+**`full`** (the default) emits the record index: one line per record, failures first, capped by `--budget` (default 4000 tokens). `ml show <id>` prints a full record.
 
 **`manifest`** emits a domain index and per-domain record counts plus a quick reference of common commands. Agents then scope-load with `ml prime <domain>` or `ml prime --files <path>`. On a 12k-token expertise store, manifest mode typically drops session-priming output to under 1k tokens.
 
 Override per invocation:
 
 - `ml prime --manifest` — manifest mode regardless of config.
-- `ml prime --full` — full mode regardless of config.
+- `ml prime --full` — full record bodies regardless of config.
 - `ml prime --files src/foo.ts` — load only records relevant to the listed paths, with per-file framing, classification age, and confirmation scores.
 
 ### Session-close footer (`prime.session_close`)

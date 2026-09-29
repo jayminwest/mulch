@@ -1,13 +1,5 @@
 import type { CustomTypeConfig } from "../schemas/config.ts";
-import {
-	compactMeta,
-	formatLinks,
-	formatOutcome,
-	formatRecordMeta,
-	idTag,
-	truncate,
-	xmlEscape,
-} from "../utils/format-helpers.ts";
+import { formatRecordMeta, idTag, xmlEscape } from "../utils/format-helpers.ts";
 import { BUILTIN_DEFS } from "./builtins.ts";
 import { compileSummaryTemplate, extractTemplateTokens } from "./template.ts";
 import type { TypeDefinition } from "./type-registry.ts";
@@ -385,20 +377,6 @@ export function buildCustomTypeDefinition(name: string, cfg: CustomTypeConfig): 
 				lines.push(line);
 			}
 			return lines.join("\n");
-		},
-		formatCompactLine: (record) => {
-			const r = record as unknown as Record<string, unknown>;
-			const links = formatLinks(record);
-			const meta = compactMeta(record);
-			const outcome = formatOutcome(record.outcomes);
-			let filesPart = "";
-			if (extractsFiles) {
-				const files = r[filesField];
-				if (Array.isArray(files) && files.length > 0) {
-					filesPart = ` (${(files as string[]).join(", ")})`;
-				}
-			}
-			return `- [${name}] ${truncate(summaryFn(record))}${filesPart}${meta}${outcome}${links}`;
 		},
 		formatXml: (record) => {
 			const r = record as unknown as Record<string, unknown>;

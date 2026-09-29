@@ -124,24 +124,29 @@ export function filterByContext(
 	records: ExpertiseRecord[],
 	changedFiles: string[],
 ): ExpertiseRecord[] {
-	return records.filter((r) => {
-		const hasFiles = "files" in r && Array.isArray(r.files) && r.files.length > 0;
-		const hasDirAnchors = Array.isArray(r.dir_anchors) && r.dir_anchors.length > 0;
+	// No anchors at all → always relevant (conventions, decisions, failures,
+	// guides; or named records with no scoping declared).
+	return records.filter((r) => !hasFileAnchors(r) || matchesFileAnchors(r, changedFiles));
+}
 
-		// No anchors at all → always relevant (conventions, decisions, failures,
-		// guides; or named records with no scoping declared).
-		if (!hasFiles && !hasDirAnchors) return true;
+/** True when the record declares any `files[]` or `dir_anchors[]` anchor. */
+export function hasFileAnchors(r: ExpertiseRecord): boolean {
+	const hasFiles = "files" in r && Array.isArray(r.files) && r.files.length > 0;
+	return hasFiles || (Array.isArray(r.dir_anchors) && r.dir_anchors.length > 0);
+}
 
-		if (hasFiles && r.files !== undefined && r.files.some((f) => fileMatchesAny(f, changedFiles))) {
-			return true;
-		}
-		if (hasDirAnchors && r.dir_anchors !== undefined) {
-			for (const dir of r.dir_anchors) {
-				if (changedFiles.some((cf) => fileLivesUnderDir(cf, dir))) return true;
-			}
-		}
-		return false;
-	});
+/**
+ * True when one of the record's `files[]` / `dir_anchors[]` anchors matches
+ * the given paths. Unanchored records never match — callers decide whether
+ * "no anchors" means universal (filterByContext) or merely unmatched.
+ */
+export function matchesFileAnchors(r: ExpertiseRecord, changedFiles: string[]): boolean {
+	const files = "files" in r && Array.isArray(r.files) ? r.files : [];
+	if (files.some((f) => fileMatchesAny(f, changedFiles))) return true;
+	for (const dir of r.dir_anchors ?? []) {
+		if (changedFiles.some((cf) => fileLivesUnderDir(cf, dir))) return true;
+	}
+	return false;
 }
 
 export type ActiveTrackers = Partial<Record<TrackerName, string>>;
@@ -169,8 +174,6 @@ export function filterByActiveContext(
 ): ExpertiseRecord[] {
 	const { changedFiles, trackers } = ctx;
 	return records.filter((r) => {
-		const hasFiles = "files" in r && Array.isArray(r.files) && r.files.length > 0;
-		const hasDirAnchors = Array.isArray(r.dir_anchors) && r.dir_anchors.length > 0;
 		const ev = r.evidence;
 		const seedsMatch = !!(ev?.seeds && trackers.seeds && ev.seeds === trackers.seeds);
 		const ghMatch = !!(ev?.gh && trackers.gh && ev.gh === trackers.gh);
@@ -178,16 +181,6 @@ export function filterByActiveContext(
 		const beadMatch = !!(ev?.bead && trackers.bead && ev.bead === trackers.bead);
 		if (seedsMatch || ghMatch || linearMatch || beadMatch) return true;
 
-		if (!hasFiles && !hasDirAnchors) return true;
-
-		if (hasFiles && r.files !== undefined && r.files.some((f) => fileMatchesAny(f, changedFiles))) {
-			return true;
-		}
-		if (hasDirAnchors && r.dir_anchors !== undefined) {
-			for (const dir of r.dir_anchors) {
-				if (changedFiles.some((cf) => fileLivesUnderDir(cf, dir))) return true;
-			}
-		}
-		return false;
+		return !hasFileAnchors(r) || matchesFileAnchors(r, changedFiles);
 	});
 }

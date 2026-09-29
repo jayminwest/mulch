@@ -27,10 +27,9 @@ const INIT_CONFIG_OPTIONAL_KNOBS = `
 #
 # prime:
 #   # Pin \`ml prime\`'s unscoped output shape. When unset (recommended), prime
-#   # auto-flips to manifest above 100 records or 5 domains and renders full
-#   # records otherwise. Set explicitly to override both directions:
-#   #   - full     → always emit full records (skip the auto-flip)
-#   #   - manifest → always emit the domain index
+#   # emits a budget-capped record index (one line per record, failures first).
+#   #   - full     → the record index (same as unset)
+#   #   - manifest → a per-domain count table instead of records
 #   # --full / --manifest / scoping flags always override this on a per-call basis.
 #   default_mode: full        # one of: full, manifest
 #   # Trust-tier ranking weights for full-mode output. Sort score per record =
@@ -119,7 +118,8 @@ This directory is managed by [mulch](https://github.com/jayminwest/mulch) — a 
 - \`ml record\`    — Record an expertise record
 - \`ml edit\`      — Edit an existing record
 - \`ml query\`     — Query expertise records
-- \`ml prime [domain]\` — Output a priming prompt (optionally scoped to one domain)
+- \`ml prime [domain]\` — Output a record index for priming (optionally scoped to one domain)
+- \`ml show <id>\`  — Show a full record
 - \`ml search\`   — Search records across domains
 - \`ml status\`    — Show domain statistics
 - \`ml validate\`  — Validate all records against the schema
@@ -136,11 +136,10 @@ Optional knobs in \`mulch.config.yaml\`:
 
 \`\`\`yaml
 prime:
-  default_mode: manifest   # or "full". Omit to let \`ml prime\` auto-flip:
-                           # full output until the corpus exceeds 100 records
-                           # or 5 domains, then manifest. Set explicitly to pin
-                           # one mode. Scoping flags (\`--files\`, \`<domain>\`)
-                           # always force full.
+  default_mode: manifest   # or "full" (the default): a budget-capped record
+                           # index, failures first. "manifest" lists per-domain
+                           # counts instead. Scoping flags (\`--files\`,
+                           # \`<domain>\`) always emit records.
 
 search:
   boost_factor: 0.1        # multiplier on BM25 scores for confirmed records.
