@@ -30,14 +30,9 @@ This project uses [Mulch](https://github.com/jayminwest/mulch) v${pkgVersion} fo
 ml prime
 \`\`\`
 
-Injects project-specific conventions, patterns, decisions, failures, references, and guides into
-your context. Run \`ml prime --files src/foo.ts\` before editing a file to load only records
-relevant to that path (per-file framing, classification age, and confirmation scores included).
-
-For monolith projects where dumping every record wastes context, set
-\`prime.default_mode: manifest\` in \`.mulch/mulch.config.yaml\` (or pass \`--manifest\`) to emit a
-quick reference + domain index. Agents then scope-load with \`ml prime <domain>\` or
-\`ml prime --files <path>\`.
+Prints a budget-capped index of project expertise: one line per record (id, type, summary,
+anchors), failures first. Run \`ml show <id>\` for a full record and \`ml prime --files src/foo.ts\`
+before editing a file to load only records relevant to that path.
 
 **Record only what a future agent would get wrong without it.** Prefer \`failure\` records
 (symptom -> root cause -> preventive check); anchor conventions and patterns with \`--files\` or

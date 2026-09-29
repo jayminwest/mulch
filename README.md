@@ -45,14 +45,16 @@ ml record database --type failure \
   --description "VACUUM inside a transaction causes silent corruption" \
   --resolution "Always run VACUUM outside transaction boundaries"
 ml query database                                  # See accumulated expertise
-ml prime                                           # Get full context for agent injection
-ml prime database                                  # Get context for one domain only
+ml prime                                           # Record index for agent injection (one line per record)
+ml show mx-abc123                                  # Full body of one record from the index
+ml prime database                                  # Index for one domain only
 ml prime --files src/foo.ts                        # Prime only records relevant to specific files
-ml prime --manifest                                # Domain index for monoliths (scope-load on demand)
-ml prime --full --all                              # Skip auto-context-scope and emit every record
+ml prime --files src/foo.ts --budget 500 --records-only  # Editor-hook shape: record lines only
+ml prime --manifest                                # Per-domain counts instead of records
+ml prime --full --all                              # Full record bodies, skip auto-context-scope
 ```
 
-For large monoliths where dumping every record wastes context, set `prime.default_mode: manifest` in `.mulch/mulch.config.yaml` — `ml prime` then emits a quick reference + domain index, and agents scope-load with `ml prime <domain>` or `ml prime --files <path>`.
+`ml prime` emits an index by default: one line per record (id, type, summary truncated to ~100 chars, file/dir anchors, ★ confirmations), grouped by domain, failures first, then by confirmations and recency. The `--budget <tokens>` cap (default 4000, estimated as chars/4) drops the lowest-ranked lines first; with `--files` / `--context`, failures anchored to those paths are always kept and other anchored records rank ahead of unanchored ones. Records named in a live record's `supersedes` are hidden (`ml show <id>` still reaches them). `--full` restores full record bodies; `--records-only` drops the project contract, quick reference, and session-close footer for hook injection. `prime.default_mode: manifest` in `.mulch/mulch.config.yaml` still switches the unscoped default to a per-domain count table.
 
 In full mode, `ml prime` auto-context-scopes to the agent's working set by default: `git status` for changed/untracked files, plus the active-work resolver chain (current branch, in-progress seeds, current GH PR, branch-parsed linear/bead IDs) matched against each record's `evidence.{seeds,gh,linear,bead}`. Universal records (no `files` / `dir_anchors` / tracker-anchored evidence) are always emitted. The stderr line `prime: scoped to N of M records based on …; run with --all for the full corpus` reports the scoping ratio so the agent sees what got dropped. Pass `--all` to opt out and emit the full corpus; pass an explicit `--files`, positional domain, `--domain`, or `--context` to scope on different signals. Auto-scope is skipped under `--json` (machine consumers expect deterministic output) and outside a git repo.
 
@@ -70,7 +72,8 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml delete-domain <domain>` | Remove a domain from config and delete its expertise JSONL file (`--yes`, `--dry-run`) |
 | `ml move <domain> <id> <target>` | Transfer a record to another domain, preserving ID and cross-references (`--force`, `--dry-run`) |
 | `ml query [domain]` | Query expertise (`--all`, `--classification`, `--file`, `--outcome-status`, `--sort-by-score`, `--format` filters) |
-| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--all`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`, `--dry-run`) |
+| `ml prime [domains...]` | Output AI-optimized expertise context (`--manifest`, `--full`, `--all`, `--budget`, `--no-limit`, `--context`, `--files`, `--exclude-domain`, `--export`, `--dry-run`, `--records-only`) |
+| `ml show <ids...>` | Print full record bodies by ID across all domains (`--json`) |
 | `ml search [query]` | Search records across domains with BM25 ranking (`--domain`, `--type`, `--tag`, `--classification`, `--file`, `--sort-by-score`, `--no-boost`, `--format`) |
 | `ml rank [domain]` | Rank records by confirmation-frequency score, highest first (`--type`, `--limit`, `--min-score`, `--json`) — pure score ranking with no text query, useful for context-constrained consumers |
 | `ml compact [domain]` | Analyze compaction candidates or apply a compaction (`--analyze`, `--auto`, `--apply`, `--dry-run`, `--min-group`, `--max-records`) |
@@ -94,7 +97,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 
 ### Global Output Format
 
-All record-rendering commands (`ml prime`, `ml query`, `ml search`) accept a global `--format <markdown|compact|xml|plain>` flag that selects the output formatter. `xml` is Claude-optimized; `plain` is the spawn-injection contract — clean structured prose (per-domain sections, bulleted records, no decorative title, no Session Close trailer) suitable for concatenation into another tool's system prompt; `compact` emits one-liner records (default for `ml prime`); `markdown` emits the full, sectioned layout. Per-command `--format` flags (e.g. `ml query --format ids`) take precedence over the global flag.
+All record-rendering commands (`ml prime`, `ml query`, `ml search`) accept a global `--format <markdown|compact|xml|plain>` flag that selects the output formatter. `xml` is Claude-optimized; `plain` is the spawn-injection contract — clean structured prose (per-domain sections, bulleted records, no decorative title, no Session Close trailer) suitable for concatenation into another tool's system prompt; `compact` emits the one-line-per-record index (default for `ml prime`); `markdown` emits the full, sectioned layout. Per-command `--format` flags (e.g. `ml query --format ids`) take precedence over the global flag.
 
 ```bash
 ml --format xml prime testing      # XML expertise tree (Claude-friendly)

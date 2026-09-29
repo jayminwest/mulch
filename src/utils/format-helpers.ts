@@ -1,5 +1,4 @@
-import type { ConventionRecord, ExpertiseRecord, Outcome } from "../schemas/record.ts";
-import { computeConfirmationScore } from "./scoring.ts";
+import type { ConventionRecord, ExpertiseRecord } from "../schemas/record.ts";
 
 export function formatTimeAgo(date: Date): string {
 	const now = new Date();
@@ -22,18 +21,6 @@ export function formatEvidence(evidence: ConventionRecord["evidence"]): string {
 	if (evidence.issue) parts.push(`issue: ${evidence.issue}`);
 	if (evidence.file) parts.push(`file: ${evidence.file}`);
 	return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
-}
-
-export function formatOutcome(outcomes: Outcome[] | undefined): string {
-	if (!outcomes || outcomes.length === 0) return "";
-	const latest = outcomes.at(-1);
-	if (!latest) return "";
-	const statusSymbol = latest.status === "success" ? "✓" : latest.status === "partial" ? "~" : "✗";
-	const parts: string[] = [statusSymbol];
-	if (latest.duration !== undefined) parts.push(`${latest.duration}ms`);
-	if (latest.agent) parts.push(`@${latest.agent}`);
-	if (outcomes.length > 1) parts.push(`(${outcomes.length}x)`);
-	return ` [${parts.join(" ")}]`;
 }
 
 export function formatLinks(r: ExpertiseRecord): string {
@@ -67,24 +54,6 @@ export function truncate(text: string, maxLen = 100): string {
 		return text.slice(0, sentenceEnd + 1);
 	}
 	return `${text.slice(0, maxLen)}...`;
-}
-
-function formatClassificationAge(r: ExpertiseRecord): string {
-	const c = r.classification;
-	if (c === "foundational") return c;
-	const age = formatTimeAgo(new Date(r.recorded_at));
-	return `${c} ${age}`;
-}
-
-export function compactMeta(r: ExpertiseRecord): string {
-	const parts: string[] = [];
-	if (r.id) parts.push(r.id);
-	parts.push(formatClassificationAge(r));
-	const score = computeConfirmationScore(r);
-	if (score > 0) {
-		parts.push(Number.isInteger(score) ? `★${score}` : `★${score.toFixed(1)}`);
-	}
-	return ` (${parts.join(", ")})`;
 }
 
 export function xmlEscape(str: string): string {

@@ -117,6 +117,24 @@ describe("prime-ranking", () => {
 			expect(out.map((r) => r.id)).toEqual(["star", "fnd", "tac", "obs"]);
 		});
 
+		it("puts failures ahead of higher-trust records", () => {
+			const starred = makeConvention({
+				classification: "foundational",
+				id: "star",
+				outcomes: [ok()],
+			});
+			const failure = {
+				type: "failure",
+				description: "d",
+				resolution: "r",
+				classification: "observational",
+				recorded_at: "2024-01-01T00:00:00Z",
+				id: "fail",
+			} as ExpertiseRecord;
+			const out = sortByTrust([starred, failure], w);
+			expect(out.map((r) => r.id)).toEqual(["fail", "star"]);
+		});
+
 		it("preserves insertion order across ties (stable sort)", () => {
 			const a = makeConvention({ classification: "tactical", id: "a" });
 			const b = makeConvention({ classification: "tactical", id: "b" });

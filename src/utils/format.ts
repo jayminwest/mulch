@@ -8,6 +8,7 @@ import type {
 import { DEFAULT_SESSION_CLOSE_STYLE, HOOK_EVENTS } from "../schemas/config.ts";
 import type { BuiltinRecordType, ExpertiseRecord } from "../schemas/record.ts";
 import { formatLinks, formatTimeAgo, xmlAttrEscape, xmlEscape } from "./format-helpers.ts";
+import { computeConfirmationScore } from "./scoring.ts";
 
 export { formatTimeAgo };
 
@@ -32,26 +33,54 @@ export function getRecordSummary(record: ExpertiseRecord): string {
 	return def.summary(record);
 }
 
+// Index-mode line cap: one line per record, bodies live behind `ml show <id>`.
+const INDEX_TEXT_MAX = 100;
+const INDEX_ANCHORS_MAX = 3;
+
+// Human-readable text for an index line: the record's headline field joined
+// with its body field when both exist (pattern "name: description", decision
+// "title: rationale"), else whichever one the type carries. Custom types that
+// use none of these fall back to the registry summary.
+function indexText(r: ExpertiseRecord): string {
+	const fields = r as unknown as Record<string, unknown>;
+	const str = (k: string): string | undefined =>
+		typeof fields[k] === "string" && fields[k] !== "" ? (fields[k] as string) : undefined;
+	const head = str("content") ?? str("name") ?? str("title");
+	const body = str("description") ?? str("rationale");
+	const text = head && body ? `${head}: ${body}` : (head ?? body ?? getRecordSummary(r));
+	const flat = text.replace(/\s+/g, " ").trim();
+	return flat.length > INDEX_TEXT_MAX ? `${flat.slice(0, INDEX_TEXT_MAX)}...` : flat;
+}
+
+/**
+ * One index line per record: id, type, truncated text, anchors, ★ score.
+ * Also used as the token-cost estimate for index-mode budgeting.
+ */
+export function formatIndexLine(r: ExpertiseRecord): string {
+	const id = r.id ? `${r.id} ` : "";
+	const def = getRegistry().get(r.type);
+	const filesValue = (r as unknown as Record<string, unknown>)[def?.filesField ?? "files"];
+	const files = Array.isArray(filesValue) ? (filesValue as string[]) : [];
+	const anchors = [...files, ...(r.dir_anchors ?? [])];
+	let anchorStr = "";
+	if (anchors.length > 0) {
+		const shown = anchors.slice(0, INDEX_ANCHORS_MAX);
+		const more = anchors.length - shown.length;
+		anchorStr = ` (${shown.join(", ")}${more > 0 ? `, +${more}` : ""})`;
+	}
+	const score = computeConfirmationScore(r);
+	const stars = score > 0 ? ` ★${Number.isInteger(score) ? score : score.toFixed(1)}` : "";
+	return `- ${id}[${r.type}] ${indexText(r)}${anchorStr}${stars}`;
+}
+
 export function formatDomainExpertiseCompact(
 	domain: string,
 	records: ExpertiseRecord[],
 	lastUpdated: Date | null,
-	annotations?: Map<string, string>,
 ): string {
-	const registry = getRegistry();
 	const updatedStr = lastUpdated ? `, updated ${formatTimeAgo(lastUpdated)}` : "";
-	const lines: string[] = [];
-
-	lines.push(`## ${domain} (${records.length} records${updatedStr})`);
-	for (const r of records) {
-		const def = registry.get(r.type);
-		if (!def) continue;
-		let line = def.formatCompactLine(r);
-		const why = annotations && r.id ? annotations.get(r.id) : undefined;
-		if (why) line += ` — ${why}`;
-		lines.push(line);
-	}
-
+	const lines: string[] = [`## ${domain} (${records.length} records${updatedStr})`];
+	for (const r of records) lines.push(formatIndexLine(r));
 	return lines.join("\n");
 }
 
@@ -66,26 +95,25 @@ export function formatPrimeOutputCompact(domainSections: string[]): string {
 			"No expertise recorded yet. Use `ml add <domain>` to create a domain, then `ml record` to add records.",
 		);
 	} else {
+		lines.push(
+			"Index: one line per record, failures first. `ml show <id>` prints the full record.",
+		);
+		lines.push("");
 		lines.push(domainSections.join("\n\n"));
 	}
 
 	lines.push("");
 	lines.push("## Quick Reference");
 	lines.push("");
+	lines.push("- `ml show <id>` — full record body");
 	lines.push('- `ml search "query"` — find relevant records before implementing');
 	lines.push(
 		"- `ml prime --files src/foo.ts` — prime **before** editing a file, not just at session start",
 	);
-	lines.push("- `ml prime --context` — load records for git-changed files");
-	lines.push('- `ml record <domain> --type <type> --description "..."`');
+	lines.push("- `ml prime --full` — full record bodies instead of the index");
 	lines.push(
-		"  - Evidence: commit + files auto-populate from git. Trackers: `--evidence-seeds` / `--evidence-gh` / `--evidence-linear` / `--evidence-bead`. Override commit: `--evidence-commit <sha>`. Link records: `--relates-to <mx-id>`",
+		'- `ml record <domain> --type <type> --description "..."` — evidence auto-populates from git; link with `--relates-to <mx-id>`',
 	);
-	lines.push("- `ml doctor` — check record health");
-	lines.push("");
-	lines.push("**Record types and required flags:**");
-	lines.push("");
-	lines.push(...REQUIRED_FLAGS_TABLE);
 
 	return lines.join("\n");
 }
@@ -1200,18 +1228,4 @@ export function formatProjectContract(config: MulchConfig, format: PrimeFormat):
 		default:
 			return formatProjectContractMarkdown(contract);
 	}
-}
-
-// Auto-flip thresholds for the `ml prime` default mode. When the project has
-// not declared `prime.default_mode` and the invocation isn't scoped, prime
-// flips to manifest output above either threshold so unscoped output doesn't
-// blow the context window. Strict greater-than: 100 records is full, 101 is
-// manifest; 5 domains is full, 6 is manifest.
-export const AUTO_MANIFEST_RECORD_THRESHOLD = 100;
-export const AUTO_MANIFEST_DOMAIN_THRESHOLD = 5;
-
-export function shouldAutoFlipToManifest(totalRecords: number, totalDomains: number): boolean {
-	return (
-		totalRecords > AUTO_MANIFEST_RECORD_THRESHOLD || totalDomains > AUTO_MANIFEST_DOMAIN_THRESHOLD
-	);
 }

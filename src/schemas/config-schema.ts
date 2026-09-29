@@ -345,7 +345,7 @@ export const configSchema = {
 					type: "string",
 					title: "Default prime mode",
 					description:
-						"`full` dumps every record; `manifest` emits a quick reference + domain index for monolith projects where dumping every record wastes context.",
+						"`full` (the default) emits the budget-capped record index, failures first; `manifest` emits a quick reference + per-domain counts instead of records.",
 					enum: ["manifest", "full"],
 					default: "full",
 				},

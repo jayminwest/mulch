@@ -7,15 +7,7 @@ import type {
 	PatternRecord,
 	ReferenceRecord,
 } from "../schemas/record.ts";
-import {
-	compactMeta,
-	formatLinks,
-	formatOutcome,
-	formatRecordMeta,
-	idTag,
-	truncate,
-	xmlEscape,
-} from "../utils/format-helpers.ts";
+import { formatRecordMeta, idTag, truncate, xmlEscape } from "../utils/format-helpers.ts";
 import type { SharedDefinitions, TypeDefinition } from "./type-registry.ts";
 
 const linkArray = {
@@ -138,13 +130,6 @@ const conventionDef: TypeDefinition = {
 		}
 		return lines.join("\n");
 	},
-	formatCompactLine: (record) => {
-		const r = record as ConventionRecord;
-		const links = formatLinks(r);
-		const meta = compactMeta(r);
-		const outcome = formatOutcome(r.outcomes);
-		return `- [convention] ${truncate(r.content)}${meta}${outcome}${links}`;
-	},
 	formatXml: (record) => {
 		const r = record as ConventionRecord;
 		return [`    ${xmlEscape(r.content)}`];
@@ -178,14 +163,6 @@ const patternDef: TypeDefinition = {
 		additionalProperties: false,
 	},
 	formatMarkdown: namedMarkdown("Patterns"),
-	formatCompactLine: (record) => {
-		const r = record as PatternRecord;
-		const links = formatLinks(r);
-		const meta = compactMeta(r);
-		const outcome = formatOutcome(r.outcomes);
-		const files = r.files && r.files.length > 0 ? ` (${r.files.join(", ")})` : "";
-		return `- [pattern] ${r.name}: ${truncate(r.description)}${files}${meta}${outcome}${links}`;
-	},
 	formatXml: namedXml,
 };
 
@@ -222,13 +199,6 @@ const failureDef: TypeDefinition = {
 			lines.push(`  → ${rec.resolution}`);
 		}
 		return lines.join("\n");
-	},
-	formatCompactLine: (record) => {
-		const r = record as FailureRecord;
-		const links = formatLinks(r);
-		const meta = compactMeta(r);
-		const outcome = formatOutcome(r.outcomes);
-		return `- [failure] ${truncate(r.description)} → ${truncate(r.resolution)}${meta}${outcome}${links}`;
 	},
 	formatXml: (record) => {
 		const r = record as FailureRecord;
@@ -273,13 +243,6 @@ const decisionDef: TypeDefinition = {
 		}
 		return lines.join("\n");
 	},
-	formatCompactLine: (record) => {
-		const r = record as DecisionRecord;
-		const links = formatLinks(r);
-		const meta = compactMeta(r);
-		const outcome = formatOutcome(r.outcomes);
-		return `- [decision] ${r.title}: ${truncate(r.rationale)}${meta}${outcome}${links}`;
-	},
 	formatXml: (record) => {
 		const r = record as DecisionRecord;
 		return [
@@ -316,15 +279,6 @@ const referenceDef: TypeDefinition = {
 		additionalProperties: false,
 	},
 	formatMarkdown: namedMarkdown("References"),
-	formatCompactLine: (record) => {
-		const r = record as ReferenceRecord;
-		const links = formatLinks(r);
-		const meta = compactMeta(r);
-		const outcome = formatOutcome(r.outcomes);
-		const refFiles =
-			r.files && r.files.length > 0 ? `: ${r.files.join(", ")}` : `: ${truncate(r.description)}`;
-		return `- [reference] ${r.name}${refFiles}${meta}${outcome}${links}`;
-	},
 	formatXml: namedXml,
 };
 
@@ -354,13 +308,6 @@ const guideDef: TypeDefinition = {
 		additionalProperties: false,
 	},
 	formatMarkdown: namedMarkdown("Guides"),
-	formatCompactLine: (record) => {
-		const r = record as GuideRecord;
-		const links = formatLinks(r);
-		const meta = compactMeta(r);
-		const outcome = formatOutcome(r.outcomes);
-		return `- [guide] ${r.name}: ${truncate(r.description)}${meta}${outcome}${links}`;
-	},
 	formatXml: namedXml,
 };
 

@@ -146,7 +146,7 @@ function findSupersessionCycleIds(graph: ReadonlyMap<string, Set<string>>): Set<
  * and any record that participates in a multi-record cycle (e.g. A↔B) is
  * excluded so cycle members aren't both demoted/archived together.
  */
-function collectSupersededIds(liveByDomain: ReadonlyArray<{ records: ExpertiseRecord[] }>): {
+export function collectSupersededIds(liveByDomain: ReadonlyArray<{ records: ExpertiseRecord[] }>): {
 	supersededIds: Set<string>;
 	cycleIds: Set<string>;
 } {

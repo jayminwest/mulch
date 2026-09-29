@@ -20,6 +20,7 @@ import {
 	formatDomainExpertiseCompact,
 	formatDomainExpertisePlain,
 	formatDomainExpertiseXml,
+	formatIndexLine,
 	formatJsonOutput,
 	formatPrimeManifest,
 	formatPrimeOutput,
@@ -28,7 +29,6 @@ import {
 	formatPrimeOutputXml,
 	formatProjectContract,
 	getSessionEndReminder,
-	shouldAutoFlipToManifest,
 } from "../utils/format.ts";
 import {
 	type ActiveContext,
@@ -38,6 +38,7 @@ import {
 	getActiveFiles,
 	getChangedFiles,
 	isGitRepo,
+	matchesFileAnchors,
 } from "../utils/git.ts";
 import { runHooks } from "../utils/hooks.ts";
 import { outputJsonError, reportCommandError } from "../utils/json-output.ts";
@@ -48,6 +49,7 @@ import {
 	resolveTierWeights,
 	sortByTrust,
 } from "../utils/prime-ranking.ts";
+import { collectSupersededIds } from "./prune.ts";
 
 interface PrimeOptions {
 	full?: boolean;
@@ -64,6 +66,7 @@ interface PrimeOptions {
 	// `noLimit=true`. Field name follows Commander's parsed-attribute convention.
 	limit?: boolean;
 	dryRun?: boolean;
+	recordsOnly?: boolean;
 }
 
 interface DryRunRecordSummary {
@@ -91,14 +94,13 @@ function resolvePrimeFormat(
 }
 
 /**
- * Produce a rough text representation of a record for token estimation.
- * Delegates to the type registry so custom types and unknown-but-tolerated
+ * Produce a rough text representation of a record for token estimation: the
+ * index line it prints in the default (compact) format. Unknown-but-tolerated
  * types (via --allow-unknown-types) get a non-undefined estimate.
  */
 export function estimateRecordText(record: ExpertiseRecord): string {
-	const def = getRegistry().get(record.type);
-	if (!def) return `[${record.type}]`;
-	return def.formatCompactLine(record);
+	if (!getRegistry().get(record.type)) return `[${record.type}]`;
+	return formatIndexLine(record);
 }
 
 export function registerPrimeCommand(program: Command): void {
@@ -106,8 +108,8 @@ export function registerPrimeCommand(program: Command): void {
 		.command("prime")
 		.description("Generate a priming prompt from expertise records")
 		.argument("[domains...]", "optional domain(s) to scope output to")
-		.option("--compact", "alias for --format compact")
-		.option("--full", "alias for --format markdown (full record details)")
+		.option("--compact", "alias for --format compact (the default: one-line index per record)")
+		.option("--full", "alias for --format markdown (full record bodies instead of the index)")
 		.option("--manifest", "emit a domain index instead of full records (for monolith projects)")
 		.option("--domain <domains...>", "domain(s) to include")
 		.option("--exclude-domain <domains...>", "domain(s) to exclude")
@@ -120,6 +122,10 @@ export function registerPrimeCommand(program: Command): void {
 		.option("--export <path>", "export output to a file")
 		.option("--budget <tokens>", `token budget for output (default: ${DEFAULT_BUDGET})`)
 		.option("--no-limit", "disable token budget limit")
+		.option(
+			"--records-only",
+			"emit only the record lines (no contract, quick reference, or session-close footer); for editor hooks",
+		)
 		.option(
 			"--dry-run",
 			"emit JSON summary of records that would be primed (id, type, domain, tokens) without rendering content; respects --budget and skips pre-prime hooks",
@@ -161,11 +167,10 @@ export function registerPrimeCommand(program: Command): void {
 					return;
 				}
 
-				// Mode resolution: explicit flags / config win. When neither is set,
-				// auto-flip to manifest above the size threshold (slice 1 of the
-				// v0.10 prime overhaul — the prior `consider --manifest` warning is
-				// gone because the default *is* the right thing). --dry-run targets
-				// record-level preview, so it opts out of auto-flip.
+				// Mode resolution: explicit flags / config win. Otherwise the default
+				// is the budget-capped record index (mulch-bffe), which replaced the
+				// v0.10 size-based auto-flip to manifest: every repo gets the same
+				// shape, and the budget keeps large corpora small.
 				const configMode = config.prime?.default_mode;
 				const explicitMode: "manifest" | "full" | undefined = options.manifest
 					? "manifest"
@@ -256,10 +261,7 @@ export function registerPrimeCommand(program: Command): void {
 				}
 
 				// Load records once, unfiltered. Both branches (manifest and full)
-				// need either counts or the records themselves; one read keeps the
-				// auto-flip decision and the format pipeline aligned on the same
-				// dataset. Auto-flip threshold uses unfiltered counts so a scoped
-				// session in a 200-record corpus still flips to manifest by default.
+				// need either counts or the records themselves.
 				interface LoadedDomain {
 					domain: string;
 					records: ExpertiseRecord[];
@@ -273,22 +275,21 @@ export function registerPrimeCommand(program: Command): void {
 					loaded.push({ domain, records, lastUpdated });
 				}
 
-				// Decide effective mode. Explicit flag / config always wins. With
-				// no explicit signal and no scoping, auto-flip to manifest above
-				// the size threshold (>100 records or >5 domains). --dry-run opts
-				// out — it previews records, which manifest mode wouldn't show.
-				let useManifest: boolean;
-				if (isScoped) {
-					useManifest = false;
-				} else if (explicitMode === "manifest") {
-					useManifest = true;
-				} else if (explicitMode === "full") {
-					useManifest = false;
-				} else if (options.dryRun) {
-					useManifest = false;
-				} else {
-					const totalRecords = loaded.reduce((s, l) => s + l.records.length, 0);
-					useManifest = shouldAutoFlipToManifest(totalRecords, loaded.length);
+				// Decide effective mode. Manifest only when asked for (flag or
+				// config); scoping, --dry-run, and --records-only need records.
+				const useManifest =
+					explicitMode === "manifest" && !isScoped && !options.dryRun && !options.recordsOnly;
+
+				// Superseded records are hidden: a live record's `supersedes` list
+				// names what it replaced, and `ml show <id>` still reaches the old one.
+				const { supersededIds } = collectSupersededIds(loaded);
+				if (supersededIds.size > 0) {
+					for (let i = 0; i < loaded.length; i++) {
+						const entry = loaded[i];
+						if (!entry) continue;
+						const live = entry.records.filter((r) => !(r.id && supersededIds.has(r.id)));
+						loaded[i] = { ...entry, records: live };
+					}
 				}
 
 				// Slice-2 auto-context-scope: in full mode, narrow records to the
@@ -368,7 +369,9 @@ export function registerPrimeCommand(program: Command): void {
 				// manifest and full modes. Skipped for JSON (consumers parse config
 				// separately) and dry-run (output is a JSON record summary).
 				const contractBlock =
-					jsonMode || options.dryRun ? null : formatProjectContract(config, format);
+					jsonMode || options.dryRun || options.recordsOnly
+						? null
+						: formatProjectContract(config, format);
 
 				let output: string;
 
@@ -420,6 +423,14 @@ export function registerPrimeCommand(program: Command): void {
 							? { changedFiles: filesToFilter, trackers: {} }
 							: activeContext;
 
+					// Budget ranking: with explicit file scope, failures anchored to
+					// those paths are always kept and other anchored records rank
+					// ahead of unanchored ones.
+					const scopeFiles = filesToFilter;
+					const isAnchored = scopeFiles
+						? (r: ExpertiseRecord) => matchesFileAnchors(r, scopeFiles)
+						: undefined;
+
 					// --dry-run short-circuits: skip pre-prime hooks (they may have side
 					// effects like Slack posts) and emit a JSON summary of which records
 					// would be primed under the same budget rules as a real run. Format
@@ -431,7 +442,7 @@ export function registerPrimeCommand(program: Command): void {
 							records,
 						}));
 						const keptByDomain = budgetEnabled
-							? applyBudget(allDomainRecords, budget, (record) => estimateRecordText(record)).kept
+							? applyBudget(allDomainRecords, budget, estimateRecordText, isAnchored).kept
 							: allDomainRecords;
 
 						const wouldPrime: DryRunRecordSummary[] = [];
@@ -525,9 +536,7 @@ export function registerPrimeCommand(program: Command): void {
 						let droppedDomainCount = 0;
 
 						if (budgetEnabled) {
-							const result = applyBudget(allDomainRecords, budget, (record) =>
-								estimateRecordText(record),
-							);
+							const result = applyBudget(allDomainRecords, budget, estimateRecordText, isAnchored);
 							domainRecordsToFormat = result.kept;
 							droppedCount = result.droppedCount;
 							droppedDomainCount = result.droppedDomainCount;
@@ -562,9 +571,7 @@ export function registerPrimeCommand(program: Command): void {
 									);
 									break;
 								case "compact":
-									domainSections.push(
-										formatDomainExpertiseCompact(domain, records, lastUpdated, annotations),
-									);
+									domainSections.push(formatDomainExpertiseCompact(domain, records, lastUpdated));
 									break;
 								default:
 									domainSections.push(
@@ -582,7 +589,10 @@ export function registerPrimeCommand(program: Command): void {
 							}
 						}
 
-						switch (format) {
+						switch (options.recordsOnly ? "records-only" : format) {
+							case "records-only":
+								output = domainSections.join("\n\n");
+								break;
 							case "xml":
 								output = formatPrimeOutputXml(domainSections);
 								break;
@@ -605,7 +615,8 @@ export function registerPrimeCommand(program: Command): void {
 						// Plain format is the spawn-injection contract — warren / other
 						// embedders handle session framing in their own dispatch, so the
 						// reminder would be redundant noise inside a system prompt.
-						if (format !== "plain") {
+						// --records-only (editor hooks) skips it for the same reason.
+						if (format !== "plain" && !options.recordsOnly) {
 							const reminder = getSessionEndReminder(format, config.prime?.session_close);
 							if (reminder.length > 0) output += `\n\n${reminder}`;
 						}
@@ -624,7 +635,7 @@ export function registerPrimeCommand(program: Command): void {
 					if (!jsonMode && !isQuiet()) {
 						console.log(`${brand("✓")} ${brand(`Exported to ${options.export}`)}`);
 					}
-				} else {
+				} else if (output.length > 0) {
 					console.log(output);
 				}
 			} catch (err) {

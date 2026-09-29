@@ -144,50 +144,63 @@ describe("budget utility", () => {
 			expect(result.kept[0]?.records.length).toBeLessThan(50);
 		});
 
-		it("prioritizes by type: convention > decision > pattern > guide > failure > reference", () => {
-			// One record of each type, all foundational
-			const convention = makeRecord("convention", "foundational", {
-				content: "conv",
-			});
+		it("ranks failures ahead of every other type", () => {
+			const convention = makeRecord("convention", "foundational", { content: "conv" });
 			const decision = makeRecord("decision", "foundational", {
 				title: "dec",
 				rationale: "rat",
 			});
-			const pattern = makeRecord("pattern", "foundational", {
-				name: "pat",
-				description: "desc",
-			});
-			const guide = makeRecord("guide", "foundational", {
-				name: "gui",
-				description: "desc",
-			});
-			const failure = makeRecord("failure", "foundational", {
+			const failure = makeRecord("failure", "observational", {
 				description: "fail",
 				resolution: "fix",
 			});
-			const reference = makeRecord("reference", "foundational", {
-				name: "ref",
-				description: "desc",
-			});
+			const domains: DomainRecords[] = [{ domain: "d1", records: [convention, decision, failure] }];
 
-			// Put them in reverse priority order
+			// Budget that fits exactly one record: the failure wins despite its
+			// lower classification.
+			const budget = estimateTokens(simpleEstimate(failure));
+			const result = applyBudget(domains, budget, simpleEstimate);
+			expect(result.kept[0]?.records.map((r) => r.type)).toEqual(["failure"]);
+		});
+
+		it("keeps anchored failures past the budget and ranks anchored records ahead of the rest", () => {
+			const anchoredFailure = makeRecord("failure", "foundational", {
+				description: "anchored failure",
+				resolution: "fix",
+				dir_anchors: ["src/a"],
+			});
+			const anchoredPattern = makeRecord("pattern", "tactical", {
+				name: "anchored",
+				description: "desc",
+				files: ["src/a/x.ts"],
+			});
+			const starredConvention = makeRecord("convention", "foundational", {
+				content: "broad convention",
+				outcomes: Array.from({ length: 5 }, () => makeOutcome("success")),
+			});
+			const looseFailure = makeRecord("failure", "foundational", {
+				description: "unanchored failure",
+				resolution: "fix",
+			});
 			const domains: DomainRecords[] = [
 				{
 					domain: "d1",
-					records: [reference, failure, guide, pattern, decision, convention],
+					records: [starredConvention, looseFailure, anchoredPattern, anchoredFailure],
 				},
 			];
+			const isAnchored = (r: ExpertiseRecord) => JSON.stringify(r).includes("src/a");
 
-			// Budget that fits 3 records
-			const costs = [convention, decision, pattern].map((r) => estimateTokens(simpleEstimate(r)));
-			const budget = costs.reduce((a, b) => a + b, 0) + 1;
+			// Zero budget: the anchored failure is still kept.
+			const pinned = applyBudget(domains, 0, simpleEstimate, isAnchored);
+			expect(pinned.kept[0]?.records).toEqual([anchoredFailure]);
 
-			const result = applyBudget(domains, budget, simpleEstimate);
-			const keptTypes = result.kept[0]?.records.map((r) => r.type);
-			// Convention, decision, and pattern should be kept (highest priority)
-			expect(keptTypes).toContain("convention");
-			expect(keptTypes).toContain("decision");
-			expect(keptTypes).toContain("pattern");
+			// Room for one more (pinned records still spend budget): the anchored
+			// pattern beats the unanchored failure and the starred convention.
+			const budget =
+				estimateTokens(simpleEstimate(anchoredFailure)) +
+				estimateTokens(simpleEstimate(anchoredPattern));
+			const next = applyBudget(domains, budget, simpleEstimate, isAnchored);
+			expect(next.kept[0]?.records).toEqual([anchoredPattern, anchoredFailure]);
 		});
 
 		it("prioritizes by classification within same type", () => {
@@ -382,7 +395,7 @@ describe("budget utility", () => {
 			expect(result.kept[0]?.records[0]).toMatchObject({ name: "one-success" });
 		});
 
-		it("type priority still takes precedence over confirmation score", () => {
+		it("confirmation score outranks type among non-failures", () => {
 			const highlyConfirmedReference = makeRecord("reference", "foundational", {
 				name: "popular ref",
 				description: "very well confirmed reference",
@@ -395,16 +408,17 @@ describe("budget utility", () => {
 			const domains: DomainRecords[] = [
 				{
 					domain: "d1",
-					records: [highlyConfirmedReference, unscoredConvention],
+					records: [unscoredConvention, highlyConfirmedReference],
 				},
 			];
 
-			const cost = estimateTokens(simpleEstimate(unscoredConvention));
-			const result = applyBudget(domains, cost + 1, simpleEstimate);
+			// Room for either record but not both.
+			const refCost = estimateTokens(simpleEstimate(highlyConfirmedReference));
+			const convCost = estimateTokens(simpleEstimate(unscoredConvention));
+			const result = applyBudget(domains, refCost + convCost - 1, simpleEstimate);
 
-			// Convention (type priority 0) beats reference (type priority 5) regardless of score
 			expect(result.kept[0]?.records).toHaveLength(1);
-			expect(result.kept[0]?.records[0]?.type).toBe("convention");
+			expect(result.kept[0]?.records[0]?.type).toBe("reference");
 		});
 	});
 

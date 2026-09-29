@@ -16,7 +16,6 @@ export interface TypeDefinition {
 	sectionTitle: string;
 	ajvSchema: Record<string, unknown>;
 	formatMarkdown: (records: ExpertiseRecord[], full: boolean) => string;
-	formatCompactLine: (record: ExpertiseRecord) => string;
 	formatXml: (record: ExpertiseRecord) => string[];
 	// Phase 3: canonical field name → legacy aliases. Only set on custom types.
 	aliases?: Readonly<Record<string, readonly string[]>>;

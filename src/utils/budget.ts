@@ -1,18 +1,7 @@
-import type { BuiltinRecordType, Classification, ExpertiseRecord } from "../schemas/record.ts";
+import type { Classification, ExpertiseRecord } from "../schemas/record.ts";
 import { computeConfirmationScore, type ScoredRecord } from "./scoring.ts";
 
 export const DEFAULT_BUDGET = 4000;
-
-// Priority order for built-in types only. Custom types (Phase 2) sort after
-// built-ins (indexOf returns -1, which sorts ahead — so use length when missing).
-const TYPE_PRIORITY: BuiltinRecordType[] = [
-	"convention",
-	"decision",
-	"pattern",
-	"guide",
-	"failure",
-	"reference",
-];
 
 /** Priority order for classifications (lower index = higher priority) */
 const CLASSIFICATION_PRIORITY: Classification[] = ["foundational", "tactical", "observational"];
@@ -32,23 +21,31 @@ export interface BudgetResult {
 }
 
 /**
- * Sort records by priority: type order, then classification, then confirmation score
- * (higher score = higher priority), then recency (newest first).
+ * Rank tier (lower = kept first). Records anchored to the requested paths
+ * lead, failures first within each group: anchored failures, other anchored
+ * records, unanchored failures, everything else. `isAnchored` is only passed
+ * when the caller scoped by file (`--files` / `--context`); without it the
+ * order reduces to failures, then the rest.
  */
-function recordSortKey(r: ScoredRecord): [number, number, number, number] {
-	const builtinIdx = TYPE_PRIORITY.indexOf(r.type as BuiltinRecordType);
-	// Custom types (-1 from indexOf) sort after all built-ins.
-	const typeIdx = builtinIdx === -1 ? TYPE_PRIORITY.length : builtinIdx;
+function rankTier(r: ScoredRecord, isAnchored?: (r: ExpertiseRecord) => boolean): number {
+	const failure = r.type === "failure";
+	const anchored = isAnchored ? isAnchored(r) : false;
+	if (anchored) return failure ? 0 : 1;
+	return failure ? 2 : 3;
+}
+
+/**
+ * Sort key: rank tier, then confirmation score (higher first), then
+ * classification, then recency (newest first).
+ */
+function recordSortKey(
+	r: ScoredRecord,
+	isAnchored?: (r: ExpertiseRecord) => boolean,
+): [number, number, number, number] {
 	const classIdx = CLASSIFICATION_PRIORITY.indexOf(r.classification);
 	const confirmationScore = computeConfirmationScore(r);
 	const time = r.recorded_at ? new Date(r.recorded_at).getTime() : 0;
-	return [typeIdx, classIdx, -confirmationScore, -time];
-}
-
-function compareRecords(a: ScoredRecord, b: ScoredRecord): number {
-	const [a0, a1, a2, a3] = recordSortKey(a);
-	const [b0, b1, b2, b3] = recordSortKey(b);
-	return a0 - b0 || a1 - b1 || a2 - b2 || a3 - b3;
+	return [rankTier(r, isAnchored), -confirmationScore, classIdx, -time];
 }
 
 /**
@@ -61,10 +58,11 @@ export function estimateTokens(text: string): number {
 /**
  * Apply a token budget to records across multiple domains.
  *
- * Records are prioritized by type (conventions first, then decisions, etc.),
- * then by classification (foundational > tactical > observational),
- * then by confirmation score (higher = higher priority),
- * then by recency (newest first).
+ * Records are ranked failures first, then by confirmation score (higher =
+ * higher priority), then classification (foundational > tactical >
+ * observational), then recency (newest first). When `isAnchored` is given,
+ * failures it matches are always kept (even past the budget) and other
+ * matching records rank ahead of every unmatched record.
  *
  * The formatRecord callback is used to estimate per-record token cost.
  */
@@ -72,15 +70,22 @@ export function applyBudget(
 	domains: DomainRecords[],
 	budget: number,
 	formatRecord: (record: ExpertiseRecord, domain: string) => string,
+	isAnchored?: (record: ExpertiseRecord) => boolean,
 ): BudgetResult {
 	// Flatten all records with their domain, then sort by priority
-	const tagged: Array<{ domain: string; record: ScoredRecord }> = [];
+	const tagged: Array<{ domain: string; record: ScoredRecord; key: number[] }> = [];
 	for (const d of domains) {
 		for (const r of d.records) {
-			tagged.push({ domain: d.domain, record: r });
+			tagged.push({ domain: d.domain, record: r, key: recordSortKey(r, isAnchored) });
 		}
 	}
-	tagged.sort((a, b) => compareRecords(a.record, b.record));
+	tagged.sort((a, b) => {
+		for (let i = 0; i < a.key.length; i++) {
+			const diff = (a.key[i] ?? 0) - (b.key[i] ?? 0);
+			if (diff !== 0) return diff;
+		}
+		return 0;
+	});
 
 	const totalRecords = tagged.length;
 	let usedTokens = 0;
@@ -89,7 +94,8 @@ export function applyBudget(
 	for (const [i, item] of tagged.entries()) {
 		const formatted = formatRecord(item.record, item.domain);
 		const cost = estimateTokens(formatted);
-		if (usedTokens + cost <= budget) {
+		const pinned = item.key[0] === 0;
+		if (pinned || usedTokens + cost <= budget) {
 			usedTokens += cost;
 			kept.add(i);
 		}
