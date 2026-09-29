@@ -125,6 +125,9 @@ async function runOne(
 	});
 
 	if (child.stdin) {
+		// A script that exits without reading stdin surfaces as an async EPIPE
+		// on the stream, which the try/catch below cannot see.
+		child.stdin.on("error", () => {});
 		try {
 			child.stdin.write(stdinJson);
 			child.stdin.end();
