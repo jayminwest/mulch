@@ -182,3 +182,19 @@ export function findStaleRecords(
 	}
 	return result;
 }
+
+/**
+ * Reasons `ml prime` (and the Claude hook) act on: git/anchor evidence only.
+ * `shelf_life` (old + never confirmed) flagged most real corpora wholesale, so
+ * it is reported by `ml stale` but never demotes or marks a primed record.
+ */
+const PRIME_STALE_KINDS: ReadonlySet<StaleKind> = new Set(["anchors_changed", "anchors_missing"]);
+
+/** Ids whose staleness rests on anchor evidence (see PRIME_STALE_KINDS). */
+export function primeStaleIds(stale: Map<string, StaleReason[]>): Set<string> {
+	const ids = new Set<string>();
+	for (const [id, reasons] of stale) {
+		if (reasons.some((r) => PRIME_STALE_KINDS.has(r.kind))) ids.add(id);
+	}
+	return ids;
+}

@@ -49,7 +49,7 @@ import {
 	resolveTierWeights,
 	sortByTrust,
 } from "../utils/prime-ranking.ts";
-import { findStaleRecords } from "../utils/staleness.ts";
+import { findStaleRecords, primeStaleIds } from "../utils/staleness.ts";
 import { collectSupersededIds } from "./prune.ts";
 
 interface PrimeOptions {
@@ -434,19 +434,20 @@ export function registerPrimeCommand(program: Command): void {
 
 					// Staleness (mulch-094a): stale records rank last within their
 					// budget tier and carry a "(stale?)" marker. Computed over the
-					// already-scoped records so the git pathspec stays small.
-					const staleIds = new Set(
-						jsonMode
-							? []
-							: findStaleRecords(
+					// already-scoped records so the git pathspec stays small. Only
+					// anchor/git reasons count here; shelf_life stays in `ml stale`.
+					const staleIds = jsonMode
+						? new Set<string>()
+						: primeStaleIds(
+								findStaleRecords(
 									loaded.flatMap((l) => l.records),
 									{
 										cwd: process.cwd(),
 										now: new Date(),
 										shelfLife: config.classification_defaults.shelf_life,
 									},
-								).keys(),
-					);
+								),
+							);
 					const isStale = (r: ExpertiseRecord) => !!(r.id && staleIds.has(r.id));
 
 					// --dry-run short-circuits: skip pre-prime hooks (they may have side

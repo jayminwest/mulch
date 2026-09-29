@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { missingMulchHooks, syncMulchHooks } from "../utils/claude-hooks.ts";
 import { getMulchDir, readConfig } from "../utils/config.ts";
 import { getSessionEndReminder } from "../utils/format.ts";
 import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
@@ -150,23 +151,7 @@ async function removeGitHook(cwd: string): Promise<RecipeResult> {
 // ────────────────────────────────────────────────────────────
 
 // ── Claude ──────────────────────────────────────────────────
-
-interface ClaudeHookEntry {
-	type: string;
-	command: string;
-}
-
-interface ClaudeHookGroup {
-	matcher: string;
-	hooks: ClaudeHookEntry[];
-}
-
-interface ClaudeSettings {
-	hooks?: {
-		[event: string]: ClaudeHookGroup[];
-	};
-	[key: string]: unknown;
-}
+// Hook specs and the settings merge live in utils/claude-hooks.ts.
 
 const CLAUDE_HOOK_COMMAND = "ml prime";
 
@@ -174,137 +159,66 @@ function claudeSettingsPath(cwd: string): string {
 	return join(cwd, ".claude", "settings.json");
 }
 
-function hasMulchHook(groups: ClaudeHookGroup[]): boolean {
-	return groups.some((g) => g.hooks.some((h) => h.command === CLAUDE_HOOK_COMMAND));
-}
-
-function removeMulchHookGroups(groups: ClaudeHookGroup[]): ClaudeHookGroup[] {
-	return groups.filter((g) => !g.hooks.some((h) => h.command === CLAUDE_HOOK_COMMAND));
-}
-
-function createMulchHookGroup(): ClaudeHookGroup {
-	return {
-		matcher: "",
-		hooks: [{ type: "command", command: CLAUDE_HOOK_COMMAND }],
-	};
-}
-
-function parseClaudeSettings(raw: string, settingsPath: string): ClaudeSettings {
+async function readClaudeSettings(settingsPath: string): Promise<Record<string, unknown> | null> {
+	if (!existsSync(settingsPath)) return null;
+	const raw = await readFile(settingsPath, "utf-8");
+	if (raw.trim() === "") return {};
+	let parsed: unknown;
 	try {
-		return JSON.parse(raw) as ClaudeSettings;
+		parsed = JSON.parse(raw);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		throw new Error(`Failed to parse Claude settings at ${settingsPath}: ${msg}`);
 	}
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+		throw new Error(`Claude settings at ${settingsPath} is not a JSON object`);
+	}
+	return parsed as Record<string, unknown>;
+}
+
+async function syncClaudeSettings(cwd: string, remove: boolean): Promise<boolean | null> {
+	const settingsPath = claudeSettingsPath(cwd);
+	const current = await readClaudeSettings(settingsPath);
+	if (current === null && remove) return null;
+	const result = syncMulchHooks(current ?? {}, remove);
+	if (result.changed) {
+		await mkdir(dirname(settingsPath), { recursive: true });
+		await writeFile(settingsPath, `${JSON.stringify(result.settings, null, 2)}\n`, "utf-8");
+	}
+	return result.changed;
 }
 
 const claudeRecipe: ProviderRecipe = {
 	async install(cwd) {
-		const settingsPath = claudeSettingsPath(cwd);
-		let settings: ClaudeSettings = {};
-
-		if (existsSync(settingsPath)) {
-			const raw = await readFile(settingsPath, "utf-8");
-			settings = parseClaudeSettings(raw, settingsPath);
-		}
-
-		if (!settings.hooks) {
-			settings.hooks = {};
-		}
-
-		// SessionStart with empty matcher already covers startup, resume, clear,
-		// and post-compact reload. PreCompact's stdout never reaches the model
-		// after compaction so registering there is dead weight.
-		const event = "SessionStart";
-		if (!settings.hooks[event]) {
-			settings.hooks[event] = [];
-		}
-		if (hasMulchHook(settings.hooks[event])) {
-			return { success: true, message: "Claude hooks already installed." };
-		}
-		settings.hooks[event].push(createMulchHookGroup());
-
-		await mkdir(dirname(settingsPath), { recursive: true });
-		await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
-
-		return {
-			success: true,
-			message: "Installed Claude SessionStart hook.",
-		};
+		const changed = await syncClaudeSettings(cwd, false);
+		return changed
+			? {
+					success: true,
+					message:
+						"Installed Claude hooks: SessionStart `ml prime`, PreToolUse `ml hook` (file-anchored records + .mulch/expertise guard).",
+				}
+			: { success: true, message: "Claude hooks already installed." };
 	},
 
 	async check(cwd) {
-		const settingsPath = claudeSettingsPath(cwd);
-		if (!existsSync(settingsPath)) {
+		const settings = await readClaudeSettings(claudeSettingsPath(cwd));
+		if (settings === null) {
 			return { success: false, message: "Claude settings.json not found." };
 		}
-
-		const raw = await readFile(settingsPath, "utf-8");
-		const settings = parseClaudeSettings(raw, settingsPath);
-
-		if (!settings.hooks) {
-			return {
-				success: false,
-				message: "No hooks configured in Claude settings.",
-			};
-		}
-
-		const event = "SessionStart";
-		if (!settings.hooks[event] || !hasMulchHook(settings.hooks[event])) {
-			return {
-				success: false,
-				message: `Missing hooks for: ${event}.`,
-			};
-		}
-		return {
-			success: true,
-			message: "Claude hooks are installed and correct.",
-		};
+		const missing = missingMulchHooks(settings);
+		return missing.length > 0
+			? { success: false, message: `Missing hooks for: ${missing.join(", ")}.` }
+			: { success: true, message: "Claude hooks are installed and correct." };
 	},
 
 	async remove(cwd) {
-		const settingsPath = claudeSettingsPath(cwd);
-		if (!existsSync(settingsPath)) {
-			return {
-				success: true,
-				message: "Claude settings.json not found; nothing to remove.",
-			};
+		const changed = await syncClaudeSettings(cwd, true);
+		if (changed === null) {
+			return { success: true, message: "Claude settings.json not found; nothing to remove." };
 		}
-
-		const raw = await readFile(settingsPath, "utf-8");
-		const settings = parseClaudeSettings(raw, settingsPath);
-
-		if (!settings.hooks) {
-			return {
-				success: true,
-				message: "No hooks in Claude settings; nothing to remove.",
-			};
-		}
-
-		let removed = false;
-		for (const event of Object.keys(settings.hooks)) {
-			const hookGroup = settings.hooks[event];
-			if (!hookGroup) continue;
-			const before = hookGroup.length;
-			const updated = removeMulchHookGroups(hookGroup);
-			settings.hooks[event] = updated;
-			if (updated.length < before) {
-				removed = true;
-			}
-			if (updated.length === 0) {
-				delete settings.hooks[event];
-			}
-		}
-
-		if (Object.keys(settings.hooks).length === 0) {
-			settings.hooks = undefined;
-		}
-
-		await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
-
 		return {
 			success: true,
-			message: removed
+			message: changed
 				? "Removed mulch hooks from Claude settings."
 				: "No mulch hooks found in Claude settings.",
 		};

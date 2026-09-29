@@ -26,7 +26,11 @@ import { runHooks } from "../utils/hooks.ts";
 import { outputJson, outputJsonError, reportCommandError } from "../utils/json-output.ts";
 import { withFileLock } from "../utils/lock.ts";
 import { brand, isQuiet } from "../utils/palette.ts";
-import { addCustomTypeFieldOptions, parseOutcomeFlags } from "../utils/record-flags.ts";
+import {
+	addCustomTypeFieldOptions,
+	applyDescriptionDefaults,
+	parseOutcomeFlags,
+} from "../utils/record-flags.ts";
 import {
 	checkRecordQuality,
 	DEFAULT_QUALITY_LEVEL,
@@ -625,6 +629,10 @@ Required fields per record type:
   reference    --name, --description (or [content])
   guide        --name, --description (or [content])
 
+--description alone works for every type except failure (needs --resolution):
+it fills convention content, a derived pattern/reference/guide name, and a
+decision title (first sentence) + rationale. Explicit flags win.
+
 Batch recording examples:
   ml record cli --batch records.json
   ml record cli --batch records.json --dry-run
@@ -830,7 +838,8 @@ Batch recording examples:
 				console.error(chalk.yellow(`Warning: ${disabledWarning}`));
 			}
 
-			const built = buildRecordFromOptions(def, content, options, {
+			const filled = applyDescriptionDefaults(def, content, options);
+			const built = buildRecordFromOptions(def, content, filled, {
 				classification,
 				recorded_at: recordedAt,
 				evidence,

@@ -119,4 +119,19 @@ describe("stale command (mulch-094a)", () => {
 		const full = await run(["prime", "--full", "--all"]);
 		expect(full.out).toContain("stale?");
 	});
+
+	it("prime does not mark shelf_life-only records (reported by ml stale only)", async () => {
+		const old = new Date(Date.now() - 60 * 86_400_000).toISOString();
+		await appendRecord(getExpertisePath("db", tmpDir), {
+			type: "convention",
+			content: "Old unconfirmed tactical rule",
+			classification: "tactical",
+			recorded_at: old,
+			id: "mx-5005",
+		});
+		expect((await run(["stale", "db"])).out).toContain("mx-5005");
+		const { out } = await run(["prime", "--records-only", "--all"]);
+		expect(out).toContain("mx-5005");
+		expect(out).not.toMatch(/mx-5005 .*\(stale\?\)/);
+	});
 });

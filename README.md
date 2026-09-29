@@ -85,6 +85,7 @@ Every command supports `--json` for structured output. Global flags: `-v`/`--ver
 | `ml validate` | Schema validation across all files |
 | `ml doctor` | Run health checks on expertise records (`--fix` to auto-fix) |
 | `ml setup [provider]` | Install provider-specific hooks (built-ins: claude, cursor, codex — or any name discovered via `.mulch/recipes/` or `mulch-recipe-*`; `--list` shows everything) |
+| `ml hook` | Claude Code PreToolUse handler installed by `ml setup claude` (reads hook JSON on stdin) |
 | `ml onboard` | Generate AGENTS.md/CLAUDE.md snippet |
 | `ml prune` | Soft-archive stale tactical/observational records to `.mulch/archive/`, plus tier-demote records superseded by another live record (`--hard` for true delete, `--aggressive` to collapse superseded records straight to archive, `--dry-run`) |
 | `ml archive <domain> [id]` | Soft-archive a specific record without waiting for `ml prune` (`--records` for bulk, `--reason` required, `--dry-run`) — symmetric to `ml restore` |
@@ -481,6 +482,21 @@ The hook returns either the full `{ event, payload }` envelope or just the inner
 ## Provider Recipes
 
 `ml setup <provider>` installs the wiring for an agent provider — Claude hooks, a Cursor rule, an `AGENTS.md` section plus a `.codex/config.toml` `SessionStart` hook, etc. Three providers ship in the box (`claude`, `cursor`, `codex`), but you can add your own without forking mulch.
+
+### Claude Code hooks
+
+`ml setup claude` writes two handlers into `.claude/settings.json` (idempotent; `--remove` strips only mulch's handlers and keeps everything else; malformed JSON is refused, never overwritten):
+
+- **SessionStart → `ml prime`**: the compact record index at startup, resume, clear, and compaction.
+- **PreToolUse → `ml hook`** (`Read|Edit|Write|MultiEdit|NotebookEdit|Bash`):
+  - When the agent touches a file, the records anchored to it (`files` / `dir_anchors`) arrive as `additionalContext`: failures first, ~500 tokens, each record at most once per session. Files with no anchored records produce no output.
+  - Hand edits of `.mulch/expertise/*.jsonl` (Write/Edit, and best effort for shell redirects, `tee`, `sed -i`, ...) are denied with a pointer to `ml record` / `ml edit` / `ml delete`. Reads and `ml` itself pass.
+
+Hook state lives in `.mulch/state/` (it gitignores itself). `sessions/<session_id>.txt` holds the ids already injected; `usage.jsonl` gets one line per injection, for ranking and dashboards (warren):
+
+```json
+{"ts":"2026-09-28T12:00:00.000Z","session":"<session_id or null>","tool":"Read","files":["src/a.ts"],"ids":["mx-1a2b3c"]}
+```
 
 ### Discovery order
 
