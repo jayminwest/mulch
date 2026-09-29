@@ -35,17 +35,20 @@ function rankTier(r: ScoredRecord, isAnchored?: (r: ExpertiseRecord) => boolean)
 }
 
 /**
- * Sort key: rank tier, then confirmation score (higher first), then
- * classification, then recency (newest first).
+ * Sort key: rank tier, then freshness (stale records last within a tier),
+ * then confirmation score (higher first), then classification, then recency
+ * (newest first).
  */
 function recordSortKey(
 	r: ScoredRecord,
 	isAnchored?: (r: ExpertiseRecord) => boolean,
-): [number, number, number, number] {
+	isStale?: (r: ExpertiseRecord) => boolean,
+): [number, number, number, number, number] {
 	const classIdx = CLASSIFICATION_PRIORITY.indexOf(r.classification);
 	const confirmationScore = computeConfirmationScore(r);
 	const time = r.recorded_at ? new Date(r.recorded_at).getTime() : 0;
-	return [rankTier(r, isAnchored), -confirmationScore, classIdx, -time];
+	const stale = isStale?.(r) ? 1 : 0;
+	return [rankTier(r, isAnchored), stale, -confirmationScore, classIdx, -time];
 }
 
 /**
@@ -62,7 +65,8 @@ export function estimateTokens(text: string): number {
  * higher priority), then classification (foundational > tactical >
  * observational), then recency (newest first). When `isAnchored` is given,
  * failures it matches are always kept (even past the budget) and other
- * matching records rank ahead of every unmatched record.
+ * matching records rank ahead of every unmatched record. When `isStale` is
+ * given, records it matches rank last within their tier (mulch-094a).
  *
  * The formatRecord callback is used to estimate per-record token cost.
  */
@@ -71,12 +75,13 @@ export function applyBudget(
 	budget: number,
 	formatRecord: (record: ExpertiseRecord, domain: string) => string,
 	isAnchored?: (record: ExpertiseRecord) => boolean,
+	isStale?: (record: ExpertiseRecord) => boolean,
 ): BudgetResult {
 	// Flatten all records with their domain, then sort by priority
 	const tagged: Array<{ domain: string; record: ScoredRecord; key: number[] }> = [];
 	for (const d of domains) {
 		for (const r of d.records) {
-			tagged.push({ domain: d.domain, record: r, key: recordSortKey(r, isAnchored) });
+			tagged.push({ domain: d.domain, record: r, key: recordSortKey(r, isAnchored, isStale) });
 		}
 	}
 	tagged.sort((a, b) => {
