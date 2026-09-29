@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Command } from "commander";
 import type { TypeRegistry } from "../registry/type-registry.ts";
 import type { Outcome } from "../schemas/record.ts";
@@ -70,6 +71,17 @@ export function deriveName(text: string): string {
 	return words.slice(0, 6).join("-").slice(0, 60).replace(/-+$/, "") || "record";
 }
 
+/**
+ * Name for a record whose --name was not passed: `deriveName` plus a short
+ * content hash (mulch-9f0f). Named types upsert by name, so a bare derived
+ * name would silently merge two distinct records sharing their first six
+ * words. Identical text still maps to the same name (idempotent re-record).
+ */
+export function deriveUniqueName(text: string): string {
+	const hash = createHash("sha256").update(text.trim()).digest("hex").slice(0, 6);
+	return `${deriveName(text).slice(0, 53).replace(/-+$/, "")}-${hash}`;
+}
+
 /** First sentence of `text`, capped at 80 chars (decision titles). */
 export function deriveTitle(text: string): string {
 	const first = (text.trim().split(/(?<=[.!?])\s/)[0] ?? "").trim();
@@ -81,7 +93,7 @@ export function deriveTitle(text: string): string {
  * text for every built-in type (mulch-7164). Type-specific required-flag errors
  * pushed agents to hand-edit the JSONL, so missing fields are filled instead:
  *   convention                  content  <- description
- *   pattern / reference / guide name     <- derived from description
+ *   pattern / reference / guide name     <- derived from description + hash
  *   decision                    title    <- first sentence; rationale <- description
  * Explicit flags always win. failure still needs --resolution (not derivable).
  */
@@ -101,7 +113,7 @@ export function applyDescriptionDefaults(
 	};
 	if (def.name === "convention" && content === undefined) fill("content", text);
 	if (def.name === "pattern" || def.name === "reference" || def.name === "guide") {
-		fill("name", deriveName(text));
+		fill("name", deriveUniqueName(text));
 	}
 	if (def.name === "decision") {
 		fill("title", deriveTitle(text));
