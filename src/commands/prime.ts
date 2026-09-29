@@ -49,6 +49,7 @@ import {
 	resolveTierWeights,
 	sortByTrust,
 } from "../utils/prime-ranking.ts";
+import { findStaleRecords } from "../utils/staleness.ts";
 import { collectSupersededIds } from "./prune.ts";
 
 interface PrimeOptions {
@@ -431,6 +432,23 @@ export function registerPrimeCommand(program: Command): void {
 						? (r: ExpertiseRecord) => matchesFileAnchors(r, scopeFiles)
 						: undefined;
 
+					// Staleness (mulch-094a): stale records rank last within their
+					// budget tier and carry a "(stale?)" marker. Computed over the
+					// already-scoped records so the git pathspec stays small.
+					const staleIds = new Set(
+						jsonMode
+							? []
+							: findStaleRecords(
+									loaded.flatMap((l) => l.records),
+									{
+										cwd: process.cwd(),
+										now: new Date(),
+										shelfLife: config.classification_defaults.shelf_life,
+									},
+								).keys(),
+					);
+					const isStale = (r: ExpertiseRecord) => !!(r.id && staleIds.has(r.id));
+
 					// --dry-run short-circuits: skip pre-prime hooks (they may have side
 					// effects like Slack posts) and emit a JSON summary of which records
 					// would be primed under the same budget rules as a real run. Format
@@ -442,7 +460,7 @@ export function registerPrimeCommand(program: Command): void {
 							records,
 						}));
 						const keptByDomain = budgetEnabled
-							? applyBudget(allDomainRecords, budget, estimateRecordText, isAnchored).kept
+							? applyBudget(allDomainRecords, budget, estimateRecordText, isAnchored, isStale).kept
 							: allDomainRecords;
 
 						const wouldPrime: DryRunRecordSummary[] = [];
@@ -536,7 +554,13 @@ export function registerPrimeCommand(program: Command): void {
 						let droppedDomainCount = 0;
 
 						if (budgetEnabled) {
-							const result = applyBudget(allDomainRecords, budget, estimateRecordText, isAnchored);
+							const result = applyBudget(
+								allDomainRecords,
+								budget,
+								estimateRecordText,
+								isAnchored,
+								isStale,
+							);
 							domainRecordsToFormat = result.kept;
 							droppedCount = result.droppedCount;
 							droppedDomainCount = result.droppedDomainCount;
@@ -550,7 +574,11 @@ export function registerPrimeCommand(program: Command): void {
 						// annotation work.
 						const annotationsByDomain = new Map<string, Map<string, string>>();
 						for (const { domain, records } of domainRecordsToFormat) {
-							annotationsByDomain.set(domain, buildSurfaceAnnotations(records, annotationContext));
+							const annotations = buildSurfaceAnnotations(records, annotationContext);
+							for (const [id, why] of annotations) {
+								if (staleIds.has(id)) annotations.set(id, `${why}; stale?`);
+							}
+							annotationsByDomain.set(domain, annotations);
 						}
 
 						// Format domain sections
@@ -571,7 +599,9 @@ export function registerPrimeCommand(program: Command): void {
 									);
 									break;
 								case "compact":
-									domainSections.push(formatDomainExpertiseCompact(domain, records, lastUpdated));
+									domainSections.push(
+										formatDomainExpertiseCompact(domain, records, lastUpdated, staleIds),
+									);
 									break;
 								default:
 									domainSections.push(

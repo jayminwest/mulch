@@ -56,7 +56,7 @@ function indexText(r: ExpertiseRecord): string {
  * One index line per record: id, type, truncated text, anchors, ★ score.
  * Also used as the token-cost estimate for index-mode budgeting.
  */
-export function formatIndexLine(r: ExpertiseRecord): string {
+export function formatIndexLine(r: ExpertiseRecord, stale = false): string {
 	const id = r.id ? `${r.id} ` : "";
 	const def = getRegistry().get(r.type);
 	const filesValue = (r as unknown as Record<string, unknown>)[def?.filesField ?? "files"];
@@ -70,17 +70,18 @@ export function formatIndexLine(r: ExpertiseRecord): string {
 	}
 	const score = computeConfirmationScore(r);
 	const stars = score > 0 ? ` ★${Number.isInteger(score) ? score : score.toFixed(1)}` : "";
-	return `- ${id}[${r.type}] ${indexText(r)}${anchorStr}${stars}`;
+	return `- ${id}[${r.type}] ${indexText(r)}${anchorStr}${stars}${stale ? " (stale?)" : ""}`;
 }
 
 export function formatDomainExpertiseCompact(
 	domain: string,
 	records: ExpertiseRecord[],
 	lastUpdated: Date | null,
+	staleIds?: ReadonlySet<string>,
 ): string {
 	const updatedStr = lastUpdated ? `, updated ${formatTimeAgo(lastUpdated)}` : "";
 	const lines: string[] = [`## ${domain} (${records.length} records${updatedStr})`];
-	for (const r of records) lines.push(formatIndexLine(r));
+	for (const r of records) lines.push(formatIndexLine(r, !!(r.id && staleIds?.has(r.id))));
 	return lines.join("\n");
 }
 
