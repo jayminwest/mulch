@@ -1,6 +1,6 @@
 {
   "name": "@os-eco/mulch-cli",
-  "version": "0.10.7",
+  "version": "0.11.0",
   "description": "Git-native expertise records for AI agents",
   "type": "module",
   "bin": {

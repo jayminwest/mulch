@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-29
+
 ### Added
 
 - **Claude Code hooks: file-triggered injection, JSONL guard, usage log** (mulch-7164): `ml setup claude` now also installs a PreToolUse `ml hook` handler. On Read/Edit/Write/MultiEdit/NotebookEdit it returns the records anchored to that file as `additionalContext` (failures first, ~500-token budget, stale last, each record once per session; silent when nothing is anchored). Write/Edit and best-effort Bash writes to `.mulch/expertise/*.jsonl` are denied with a pointer to `ml record` / `ml edit` / `ml delete`. Each injection appends `{ts, session, tool, files, ids}` to `.mulch/state/usage.jsonl` (self-gitignored). Install is idempotent, keeps unrelated hooks, and refuses malformed settings; `--remove` strips only mulch handlers.
@@ -843,7 +845,8 @@ Per-domain governance, lifecycle hooks, soft-archive prune, and pluggable provid
 - Prime output formats: `xml`, `plain`, `markdown`, `--mcp` (JSON)
 - Context-aware prime via `--context` (filters by git changed files)
 
-[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.10.7...HEAD
+[Unreleased]: https://github.com/jayminwest/mulch/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/jayminwest/mulch/compare/v0.10.7...v0.11.0
 [0.10.7]: https://github.com/jayminwest/mulch/compare/v0.10.6...v0.10.7
 [0.10.6]: https://github.com/jayminwest/mulch/compare/v0.10.5...v0.10.6
 [0.10.5]: https://github.com/jayminwest/mulch/compare/v0.10.4...v0.10.5
